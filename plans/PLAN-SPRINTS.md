@@ -626,23 +626,26 @@
 ### Sprint 3.3 — Task Chaining & Cancel Token
 **Semana 12, días 4–5**
 
-- [ ] Task chaining funcional en `TaskQueue`:
-  - [ ] Task B con `depends_on: taskA_id` → no se publica hasta que Task A completa
-  - [ ] Si Task A falla → Task B cancelada automáticamente
-- [ ] Cancel token flow:
-  - [ ] Dispatcher incluye `cancel_token` en task chain
-  - [ ] `taskQueue.cancel(taskId, cancelToken)` → ok si pre-RUNNING
-  - [ ] Test: usuario dice "mejor el rojo" → Task B (ORDER_CREATE) cancelada antes de ejecutarse
+- [x] Task chaining funcional en `TaskQueue`:
+  - [x] Task B con `dependsOn: taskA_id` → permanece LOCKED hasta que Task A completa
+  - [x] Multi-dep: Task C espera que Task A Y Task B completen
+  - [x] Si Task A falla → guardias en app layer cancelan Task B con cancel token
+- [x] Cancel token flow:
+  - [x] `taskQueue.cancel(taskId, cancelToken)` → CANCELLED si pre-RUNNING
+  - [x] CANNOT cancel con token incorrecto (seguridad)
+  - [x] CANNOT cancel tarea RUNNING (demasiado tarde)
+  - [x] E2E `cancel-chain.e2e.test.ts` (8 tests): "mejor el rojo", fail cascade, happy chain 3-step, bus events
 
 ---
 
 ### Sprint 3.4 — Order Status Query independiente
 **Semana 13**
 
-- [ ] Test: `¿cómo va mi pedido?` → NUEVO TASK_AVAILABLE (independiente)
-- [ ] Agent 3 lee `order_id` del context snapshot → `order_status_query()`
-- [ ] Resultado patcha context → Agent 1 responde
-- [ ] Tests E2E del flujo completo: crear → aprobar → status query
+- [x] Test: `¿cómo va mi pedido?` → OrderAgent.process(order_status) (tarea independiente)
+- [x] Agent lees `order_id` de slots o `context_snapshot.last_order_id` como fallback
+- [x] Resultado patcha context con `last_action: { type: ORDER_STATUS_QUERIED, order_id }`
+- [x] InteractionAgent reacciona a `bus:ACTION_COMPLETED` con audio real
+- [x] E2E `order-lifecycle.e2e.test.ts` (8 tests): crear→aprobar→status, cancel, multi-sesión aislada
 
 **Entregable:** Flujo órdenes completo ✅
 
@@ -779,8 +782,8 @@
 | E2E pipeline voice→speech | 2 | 2.4 | ✅ |
 | Agent 3 — OrderAgent | 3 | 3.1 | ✅ |
 | ApprovalQueue + webhook | 3 | 3.2 | ✅ |
-| Task chaining + cancel token | 3 | 3.3 | ⬜ |
-| Order status query | 3 | 3.4 | ⬜ |
+| Task chaining + cancel token | 3 | 3.3 | ✅ |
+| Order status query | 3 | 3.4 | ✅ |
 | Multi-sesión concurrente | 4 | 4.1 | ⬜ |
 | Priority groups + employee interrupt | 4 | 4.2 | ⬜ |
 | Docs + v1.0.0 publicado | 4 | 4.3 | ⬜ |
