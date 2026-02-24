@@ -88,3 +88,24 @@ export type {
   TaskAvailableEvent,
   CapabilityRouterDeps,
 } from './routing/types.js'
+
+// Audio Queue
+export { InMemoryAudioQueueService } from './audio/in-memory-audio-queue-service.js'
+export type {
+  IAudioQueueService,
+  AudioSegment,
+  PushResult,
+  PlaybackState,
+  OnSegmentReady,
+  AudioQueueServiceDeps,
+} from './audio/types.js'
+
+// Approval Queue
+export { InMemoryApprovalQueue } from './approval/in-memory-approval-queue.js'
+export { ApprovalNotFoundError, ApprovalAlreadyResolvedError } from './approval/types.js'
+export type {
+  IApprovalQueue,
+  ApprovalRecord,
+  ApprovalStatus,
+  ApprovalQueueDeps,
+} from './approval/types.js'

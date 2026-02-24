@@ -55,6 +55,12 @@ importers:
         specifier: ^4.19.3
         version: 4.21.0
 
+  examples/voice-retail:
+    dependencies:
+      fitalyagents:
+        specifier: workspace:*
+        version: link:../../packages/core
+
   packages/asynctools:
     dependencies:
       zod:

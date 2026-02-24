@@ -1,0 +1,12 @@
+{
+    "name": "voice-retail-example",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "vitest run --passWithNoTests",
+        "type-check": "tsc --noEmit"
+    },
+    "dependencies": {
+        "fitalyagents": "workspace:*"
+    }
+}

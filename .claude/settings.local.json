@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest run --reporter=verbose)",
+      "Bash(npx vitest run --reporter=verbose --root /d/GitHub/FitalyAgents/examples/voice-retail)",
+      "Bash(npx vitest run --reporter=verbose --root /d/GitHub/FitalyAgents/packages/core)"
+    ]
+  }
+}
