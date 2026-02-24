@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌟 Práctica de Matemáticas</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Fredoka+One&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blue: #3B82F6;
+    --purple: #8B5CF6;
+    --pink: #EC4899;
+    --green: #10B981;
+    --orange: #F59E0B;
+    --red: #EF4444;
+    --teal: #14B8A6;
+    --bg: #FFF7ED;
+    --card: #FFFFFF;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    background-image: radial-gradient(circle at 20% 20%, #FDE68A33 0%, transparent 50%),
+                      radial-gradient(circle at 80% 80%, #BFDBFE33 0%, transparent 50%);
+    min-height: 100vh;
+    padding: 20px;
+    color: #1F2937;
+  }
+
+  header {
+    text-align: center;
+    padding: 30px 20px 20px;
+    position: relative;
+  }
+
+  header h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    background: linear-gradient(135deg, #F59E0B, #EC4899, #8B5CF6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 1px;
+  }
+
+  header p {
+    color: #6B7280;
+    font-size: 1rem;
+    margin-top: 6px;
+    font-weight: 700;
+  }
+
+  .progress-bar {
+    max-width: 500px;
+    margin: 16px auto 0;
+    background: #E5E7EB;
+    border-radius: 20px;
+    height: 14px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #F59E0B, #EC4899, #8B5CF6);
+    border-radius: 20px;
+    width: 0%;
+    transition: width 0.6s ease;
+  }
+
+  .progress-label {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #9CA3AF;
+    margin-top: 4px;
+    font-weight: 700;
+  }
+
+  /* SECCIÓN */
+  .section {
+    max-width: 820px;
+    margin: 30px auto;
+    background: white;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 4px 30px rgba(0,0,0,0.08);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    position: relative;
+  }
+
+  .section::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 26px;
+    z-index: -1;
+    background: linear-gradient(135deg, var(--sec-a), var(--sec-b));
+  }
+
+  .section-header {
+    padding: 22px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: linear-gradient(135deg, var(--sec-a), var(--sec-b));
+    color: white;
+  }
+
+  .section-icon {
+    font-size: 2.4rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  }
+
+  .section-header h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.5rem;
+    letter-spacing: 0.5px;
+  }
+
+  .section-header p {
+    font-size: 0.85rem;
+    opacity: 0.9;
+    margin-top: 2px;
+  }
+
+  .section-body {
+    padding: 28px;
+  }
+
+  /* COLORES POR SECCIÓN */
+  .sec-esfera { --sec-a: #3B82F6; --sec-b: #8B5CF6; }
+  .sec-capacidad { --sec-a: #10B981; --sec-b: #14B8A6; }
+  .sec-probabilidad { --sec-a: #F59E0B; --sec-b: #EC4899; }
+
+  /* INFO BOX */
+  .info-box {
+    background: #F0F9FF;
+    border-left: 5px solid var(--blue);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 22px;
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .info-box.green { background: #F0FDF4; border-color: var(--green); }
+  .info-box.orange { background: #FFFBEB; border-color: var(--orange); }
+  .info-box.purple { background: #FAF5FF; border-color: var(--purple); }
+  .info-box.pink { background: #FDF2F8; border-color: var(--pink); }
+
+  .info-box strong { color: #1F2937; }
+
+  /* ESFERA DIAGRAM */
+  .sphere-diagram {
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+
+  .sphere-svg-wrap {
+    flex: 0 0 auto;
+  }
+
+  .sphere-legend {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+  }
+
+  .legend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* EJERCICIOS */
+  .exercise {
+    background: #FAFAFA;
+    border-radius: 16px;
+    padding: 20px 22px;
+    margin-bottom: 18px;
+    border: 2px solid #F3F4F6;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+
+  .exercise.correct { border-color: #10B981; background: #F0FDF4; }
+  .exercise.incorrect { border-color: #EF4444; background: #FFF5F5; }
+
+  .exercise-num {
+    font-family: 'Fredoka One', cursive;
+    font-size: 0.8rem;
+    color: white;
+    background: #94A3B8;
+    border-radius: 20px;
+    padding: 2px 10px;
+    display: inline-block;
+    margin-bottom: 10px;
+  }
+
+  .exercise h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+
+  .hint {
+    font-size: 0.8rem;
+    color: #9CA3AF;
+    margin-top: 6px;
+    font-style: italic;
+  }
+
+  .hint::before { content: "💡 Pista: "; font-style: normal; }
+
+  /* INPUTS */
+  input[type="text"], select {
+    border: 2px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    outline: none;
+    transition: border-color 0.3s;
+    background: white;
+  }
+
+  input[type="text"]:focus, select:focus {
+    border-color: var(--blue);
+  }
+
+  input[type="text"].correct-input { border-color: var(--green); background: #F0FDF4; color: var(--green); }
+  input[type="text"].wrong-input { border-color: var(--red); background: #FFF5F5; }
+
+  /* OPTIONS / RADIO */
+  .options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .option-btn {
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 2px solid #E5E7EB;
+    background: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+
+  .option-btn:hover { border-color: #93C5FD; background: #EFF6FF; transform: translateY(-1px); }
+  .option-btn.selected { border-color: var(--blue); background: #EFF6FF; color: var(--blue); }
+  .option-btn.correct-opt { border-color: var(--green); background: #F0FDF4; color: var(--green); }
+  .option-btn.wrong-opt { border-color: var(--red); background: #FFF5F5; color: var(--red); }
+
+  /* CHECKBOXES */
+  .check-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 2px solid #E5E7EB;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .check-item:hover { border-color: #A7F3D0; }
+  .check-item.checked { border-color: var(--green); background: #F0FDF4; }
+  .check-item.wrong-check { border-color: var(--red); background: #FFF5F5; }
+
+  .check-item input[type="checkbox"] { display: none; }
+
+  .check-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 2px solid #D1D5DB;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+    font-size: 0.8rem;
+  }
+
+  .check-item.checked .check-icon {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+
+  /* CHECK BUTTON */
+  .check-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 10px 22px;
+    border-radius: 50px;
+    border: none;
+    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    color: white;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+  }
+
+  .check-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(59,130,246,0.4); }
+  .check-btn:active { transform: translateY(0); }
+
+  .check-btn.green { background: linear-gradient(135deg, #10B981, #14B8A6); box-shadow: 0 4px 12px rgba(16,185,129,0.3); }
+  .check-btn.orange { background: linear-gradient(135deg, #F59E0B, #EC4899); box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
+
+  /* FEEDBACK */
+  .feedback {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .feedback.show { display: block; }
+  .feedback.correct-fb { background: #D1FAE5; color: #065F46; }
+  .feedback.wrong-fb { background: #FEE2E2; color: #991B1B; }
+
+  /* TABLA CLIMA */
+  .weather-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    font-size: 0.95rem;
+  }
+
+  .weather-table th {
+    background: linear-gradient(135deg, #F59E0B, #EC4899);
+    color: white;
+    padding: 10px 14px;
+    font-family: 'Fredoka One', cursive;
+    letter-spacing: 0.5px;
+  }
+
+  .weather-table td {
+    padding: 10px 14px;
+    text-align: center;
+    border-bottom: 1px solid #F3F4F6;
+  }
+
+  .weather-table tr:last-child td { border-bottom: none; }
+  .weather-table tr:nth-child(even) td { background: #FFFBEB; }
+
+  /* EJEMPLO RESUELTO */
+  .solved-example {
+    background: linear-gradient(135deg, #FFF7ED, #FDF4FF);
+    border: 2px dashed #F59E0B;
+    border-radius: 16px;
+    padding: 20px 22px;
+    margin-bottom: 22px;
+  }
+
+  .solved-example h4 {
+    font-family: 'Fredoka One', cursive;
+    color: #D97706;
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .solved-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 0.92rem;
+  }
+
+  .step-num {
+    background: #F59E0B;
+    color: white;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    font-weight: 900;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* COMPLETAR FRASES */
+  .fill-blank {
+    display: inline;
+  }
+
+  .blank-input {
+    display: inline-block;
+    width: 120px;
+    border: none;
+    border-bottom: 3px solid #93C5FD;
+    background: transparent;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    text-align: center;
+    outline: none;
+    padding: 2px 4px;
+    margin: 0 4px;
+  }
+
+  /* SCORE */
+  .score-display {
+    text-align: center;
+    padding: 20px;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.3rem;
+    color: #4B5563;
+  }
+
+  .score-display span {
+    font-size: 2.5rem;
+    background: linear-gradient(135deg, #F59E0B, #EC4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* MATCH EXERCISE */
+  .match-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .match-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .match-item {
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 2px solid #E5E7EB;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: white;
+    text-align: center;
+  }
+
+  .match-term { border-color: var(--blue); color: var(--blue); }
+  .match-def { border-color: #E5E7EB; cursor: pointer; }
+  .match-item:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+  .match-item.matched { border-color: var(--green); background: #F0FDF4; color: #065F46; }
+  .match-item.selected { border-color: var(--orange); background: #FFFBEB; }
+  .match-item.wrong-match { border-color: var(--red); background: #FFF5F5; }
+
+  /* NUMBER LINE */
+  .number-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  /* SECTION SEPARATOR */
+  .sub-title {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.2rem;
+    color: #374151;
+    margin: 24px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px dashed #E5E7EB;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  @media (max-width: 600px) {
+    .match-container { grid-template-columns: 1fr; }
+    .sphere-diagram { flex-direction: column; }
+  }
+
+  .stars { font-size: 1.5rem; }
+
+  .emoji-big { font-size: 3rem; }
+
+  /* Probability bar */
+  .prob-bar-wrap {
+    margin: 12px 0;
+  }
+  .prob-bar-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 4px;
+  }
+  .prob-bar-bg {
+    background: #E5E7EB;
+    border-radius: 20px;
+    height: 24px;
+    overflow: hidden;
+    position: relative;
+  }
+  .prob-bar-fill {
+    height: 100%;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    font-size: 0.75rem;
+    font-weight: 900;
+    color: white;
+    transition: width 1s ease;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌟 Práctica de Matemáticas</h1>
+  <p>3er Grado · Cuerpos Sólidos · Medidas de Capacidad · Probabilidad</p>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <p class="progress-label" id="progressLabel">0 ejercicios completados</p>
+</header>
+
+<!-- ===== SECCIÓN 1: ESFERA ===== -->
+<div class="section sec-esfera">
+  <div class="section-header">
+    <span class="section-icon">🔵</span>
+    <div>
+      <h2>Cuerpos Sólidos: La Esfera</h2>
+      <p>Aprende las partes de una esfera y sus características</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="info-box">
+      <strong>¿Qué es una esfera?</strong><br>
+      Una esfera es un cuerpo sólido <strong>perfectamente redondo</strong> en el que todos los puntos de su superficie están a la misma distancia del centro. 🏀 Una pelota de fútbol, un globo terráqueo, una naranja... ¡son ejemplos de esfera!
+    </div>
+
+    <!-- Diagrama -->
+    <div class="sphere-diagram">
+      <div class="sphere-svg-wrap">
+        <svg width="200" height="200" viewBox="0 0 200 200">
+          <defs>
+            <radialGradient id="sphereGrad" cx="35%" cy="35%">
+              <stop offset="0%" stop-color="#93C5FD"/>
+              <stop offset="100%" stop-color="#1D4ED8"/>
+            </radialGradient>
+          </defs>
+          <!-- Sphere -->
+          <circle cx="100" cy="100" r="85" fill="url(#sphereGrad)" opacity="0.9"/>
+          <!-- Equator ellipse -->
+          <ellipse cx="100" cy="100" rx="85" ry="22" fill="none" stroke="white" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.7"/>
+          <!-- Diameter line -->
+          <line x1="15" y1="100" x2="185" y2="100" stroke="#FCD34D" stroke-width="2.5"/>
+          <!-- Radius line -->
+          <line x1="100" y1="100" x2="185" y2="100" stroke="#F97316" stroke-width="2.5"/>
+          <!-- Center dot -->
+          <circle cx="100" cy="100" r="6" fill="#EF4444"/>
+          <!-- Labels -->
+          <text x="100" y="90" text-anchor="middle" fill="white" font-size="10" font-weight="bold" font-family="Nunito">Centro</text>
+          <text x="148" y="94" fill="#FCD34D" font-size="9" font-weight="bold" font-family="Nunito">Radio</text>
+          <text x="55" y="118" fill="#FCD34D" font-size="9" font-weight="bold" font-family="Nunito">Diámetro</text>
+          <!-- Arrow for surface -->
+          <circle cx="100" cy="15" r="4" fill="#A7F3D0"/>
+          <text x="105" y="12" fill="#A7F3D0" font-size="9" font-weight="bold" font-family="Nunito">Sup. curva</text>
+        </svg>
+      </div>
+      <div class="sphere-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div><div><strong>Centro:</strong> el punto del medio de la esfera</div></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#F97316"></div><div><strong>Radio:</strong> del centro a la superficie</div></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#FCD34D"></div><div><strong>Diámetro:</strong> de un lado al otro (radio × 2)</div></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#A7F3D0"></div><div><strong>Superficie curva:</strong> toda la piel exterior</div></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#93C5FD"></div><div><strong>Circunferencia:</strong> línea curva que rodea la esfera</div></div>
+      </div>
+    </div>
+
+    <!-- EJ 1: Une con flechas (matching) -->
+    <div class="exercise" id="ex-match">
+      <span class="exercise-num">Ejercicio 1</span>
+      <h3>🎯 Une cada palabra con su definición</h3>
+      <p style="font-size:0.85rem; color:#6B7280; margin-bottom:12px">Haz clic en una palabra de la izquierda y luego en su definición de la derecha.</p>
+      <div class="match-container">
+        <div class="match-col">
+          <div class="match-item match-term" onclick="selectTerm(this, 'radio')" id="t-radio">Radio</div>
+          <div class="match-item match-term" onclick="selectTerm(this, 'diametro')" id="t-diametro">Diámetro</div>
+          <div class="match-item match-term" onclick="selectTerm(this, 'centro')" id="t-centro">Centro</div>
+          <div class="match-item match-term" onclick="selectTerm(this, 'superficie')" id="t-superficie">Superficie curva</div>
+        </div>
+        <div class="match-col">
+          <div class="match-item match-def" onclick="matchDef(this, 'diametro')" id="d-diametro">Línea que pasa por el centro de lado a lado</div>
+          <div class="match-item match-def" onclick="matchDef(this, 'superficie')" id="d-superficie">La parte exterior de la esfera, no tiene lados planos</div>
+          <div class="match-item match-def" onclick="matchDef(this, 'radio')" id="d-radio">Línea del centro a la superficie</div>
+          <div class="match-item match-def" onclick="matchDef(this, 'centro')" id="d-centro">El punto exacto en el medio de la esfera</div>
+        </div>
+      </div>
+      <div class="feedback" id="fb-match"></div>
+    </div>
+
+    <!-- EJ 2: Verdadero/Falso -->
+    <div class="exercise" id="ex-vf">
+      <span class="exercise-num">Ejercicio 2</span>
+      <h3>✅ Verdadero o Falso</h3>
+      <div id="vf-container"></div>
+      <button class="check-btn" onclick="checkVF()">✔ Revisar respuestas</button>
+      <div class="feedback" id="fb-vf"></div>
+    </div>
+
+    <!-- EJ 3: Completar -->
+    <div class="exercise" id="ex-fill">
+      <span class="exercise-num">Ejercicio 3</span>
+      <h3>📝 Completa las oraciones</h3>
+      <p style="margin-bottom:14px; font-size:0.9rem; line-height:1.8">
+        El <input class="blank-input" id="b1" placeholder="?"> es el punto exacto del medio de la esfera.<br>
+        La línea del centro a la superficie se llama <input class="blank-input" id="b2" placeholder="?">.<br>
+        El diámetro es igual a 2 veces el <input class="blank-input" id="b3" placeholder="?">.<br>
+        La esfera no tiene caras planas, su exterior se llama <input class="blank-input" id="b4" placeholder="superficie ?">.<br>
+      </p>
+      <p class="hint">Las respuestas son: centro, radio, radio, curva</p>
+      <button class="check-btn" onclick="checkFill()">✔ Revisar</button>
+      <div class="feedback" id="fb-fill"></div>
+    </div>
+
+    <!-- EJ 4: Cálculo radio/diámetro -->
+    <div class="exercise" id="ex-calc">
+      <span class="exercise-num">Ejercicio 4</span>
+      <h3>🧮 Radio y Diámetro</h3>
+      <p style="font-size:0.85rem; color:#6B7280; margin-bottom:12px">Recuerda: <strong>Diámetro = Radio × 2</strong> &nbsp;|&nbsp; <strong>Radio = Diámetro ÷ 2</strong></p>
+      <div class="number-input-row">a) Si el radio de una pelota es <strong>5 cm</strong>, ¿cuánto mide el diámetro? <input type="text" id="c1" style="width:80px" placeholder="? cm"></div>
+      <div class="number-input-row">b) Si el diámetro de un globo es <strong>12 cm</strong>, ¿cuánto mide el radio? <input type="text" id="c2" style="width:80px" placeholder="? cm"></div>
+      <div class="number-input-row">c) Si el radio de una sandía es <strong>8 cm</strong>, ¿cuánto mide el diámetro? <input type="text" id="c3" style="width:80px" placeholder="? cm"></div>
+      <p class="hint">Multiplica o divide el radio según necesites</p>
+      <button class="check-btn" onclick="checkCalc()">✔ Revisar</button>
+      <div class="feedback" id="fb-calc"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 2: MEDIDAS DE CAPACIDAD ===== -->
+<div class="section sec-capacidad">
+  <div class="section-header">
+    <span class="section-icon">💧</span>
+    <div>
+      <h2>Medidas de Capacidad</h2>
+      <p>Litros, mililitros y todo lo que necesitas saber sobre los líquidos</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="info-box green">
+      <strong>Los líquidos se miden en LITROS (L) y MILILITROS (mL).</strong><br>
+      El litro es la unidad principal de capacidad. Para líquidos muy pequeños usamos mililitros.<br><br>
+      📏 <strong>1 litro = 1.000 mililitros</strong><br>
+      Una botella de agua grande suele tener 1 litro. Una cucharada de jarabe tiene como 5 mL.
+    </div>
+
+    <!-- EJ 5: Unidad de medida -->
+    <div class="exercise" id="ex-unit">
+      <span class="exercise-num">Ejercicio 5</span>
+      <h3>🔤 ¿En qué unidad se miden los líquidos?</h3>
+      <p style="margin-bottom:12px">Selecciona la respuesta correcta:</p>
+      <div class="options-grid">
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-unit', 'fb-unit')">📏 Kilómetros (km)</button>
+        <button class="option-btn" onclick="singleSelect(this, 'correct', 'ex-unit', 'fb-unit')">💧 Litros (L)</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-unit', 'fb-unit')">⚖️ Kilogramos (kg)</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-unit', 'fb-unit')">📐 Metros (m)</button>
+      </div>
+      <div class="feedback" id="fb-unit"></div>
+    </div>
+
+    <!-- EJ 6: ¿Cuál almacena líquidos? -->
+    <div class="exercise" id="ex-liquid">
+      <span class="exercise-num">Ejercicio 6</span>
+      <h3>🫙 ¿Cuáles de estos objetos pueden almacenar líquidos? Selecciona todos los correctos.</h3>
+      <div class="check-grid" id="liquid-checks"></div>
+      <p class="hint">Piensa: ¿se puede echar agua adentro?</p>
+      <button class="check-btn green" onclick="checkLiquid()">✔ Revisar</button>
+      <div class="feedback" id="fb-liquid"></div>
+    </div>
+
+    <!-- EJ 7: Conversiones -->
+    <div class="exercise" id="ex-conv">
+      <span class="exercise-num">Ejercicio 7</span>
+      <h3>🔄 Conversiones de medida</h3>
+      <div class="info-box orange" style="margin-bottom:16px; padding:12px 16px">
+        📌 <strong>Para convertir:</strong><br>
+        Litros → mL: <strong>multiplica × 1000</strong><br>
+        mL → Litros: <strong>divide ÷ 1000</strong>
+      </div>
+      <div class="number-input-row">a) 2 L = <input type="text" id="cv1" style="width:90px" placeholder="? mL"> mL</div>
+      <div class="number-input-row">b) 3000 mL = <input type="text" id="cv2" style="width:90px" placeholder="? L"> L</div>
+      <div class="number-input-row">c) 500 mL = <input type="text" id="cv3" style="width:90px" placeholder="? L"> L</div>
+      <div class="number-input-row">d) ½ L = <input type="text" id="cv4" style="width:90px" placeholder="? mL"> mL</div>
+      <p class="hint">a) 2 × 1000 = ?</p>
+      <button class="check-btn green" onclick="checkConv()">✔ Revisar</button>
+      <div class="feedback" id="fb-conv"></div>
+    </div>
+
+    <!-- EJ 8: Comparar capacidades -->
+    <div class="exercise" id="ex-compare">
+      <span class="exercise-num">Ejercicio 8</span>
+      <h3>⚖️ Compara y elige el símbolo correcto: &lt;, &gt; o =</h3>
+      <div class="number-input-row">a) 1 L &nbsp; <input type="text" id="cmp1" style="width:60px; text-align:center" placeholder="?"> &nbsp; 1000 mL</div>
+      <div class="number-input-row">b) 2 L &nbsp; <input type="text" id="cmp2" style="width:60px; text-align:center" placeholder="?"> &nbsp; 1500 mL</div>
+      <div class="number-input-row">c) 250 mL &nbsp; <input type="text" id="cmp3" style="width:60px; text-align:center" placeholder="?"> &nbsp; ¼ L</div>
+      <p class="hint">Convierte todo a mL antes de comparar. ¼ L = 250 mL</p>
+      <button class="check-btn green" onclick="checkCompare()">✔ Revisar</button>
+      <div class="feedback" id="fb-compare"></div>
+    </div>
+
+    <!-- EJ 9: Problema -->
+    <div class="exercise" id="ex-prob-cap">
+      <span class="exercise-num">Ejercicio 9</span>
+      <h3>📖 Problema de capacidad</h3>
+      <p style="line-height:1.7; margin-bottom:12px">
+        Mamá tiene una jarra que contiene <strong>2 litros</strong> de jugo de naranja. Ella sirve 3 vasos de 250 mL cada uno.<br>
+        ¿Cuántos mL quedan en la jarra?
+      </p>
+      <div class="number-input-row">Respuesta: <input type="text" id="prob-cap" style="width:100px" placeholder="? mL"> mL</div>
+      <p class="hint">Primero convierte 2L a mL. Luego calcula lo que se sirve (3 × 250). Resta.</p>
+      <button class="check-btn green" onclick="checkProbCap()">✔ Revisar</button>
+      <div class="feedback" id="fb-prob-cap"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== SECCIÓN 3: PROBABILIDAD ===== -->
+<div class="section sec-probabilidad">
+  <div class="section-header">
+    <span class="section-icon">🎲</span>
+    <div>
+      <h2>Probabilidad</h2>
+      <p>¿Qué tan posible es que algo ocurra?</p>
+    </div>
+  </div>
+  <div class="section-body">
+
+    <div class="info-box purple">
+      <strong>¿Qué es la probabilidad?</strong><br>
+      La probabilidad nos dice <em>qué tan probable</em> es que algo suceda. Va desde <strong>imposible</strong> (nunca pasa) hasta <strong>seguro</strong> (siempre pasa).
+      <div class="prob-bar-wrap" style="margin-top:12px">
+        <div class="prob-bar-label">Imposible → Poco probable → Probable → Muy probable → Seguro</div>
+        <div style="display:flex; gap:4px">
+          <div style="flex:1; height:16px; border-radius:4px; background:#EF4444"></div>
+          <div style="flex:1; height:16px; border-radius:4px; background:#F97316"></div>
+          <div style="flex:1; height:16px; border-radius:4px; background:#F59E0B"></div>
+          <div style="flex:1; height:16px; border-radius:4px; background:#10B981"></div>
+          <div style="flex:1; height:16px; border-radius:4px; background:#3B82F6"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:#6B7280; margin-top:3px">
+          <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROBABILIDAD LÓGICA -->
+    <div class="sub-title">🌤️ Parte A – Probabilidad Lógica (sin matemáticas)</div>
+
+    <div class="info-box orange">
+      <strong>El clima de la semana pasada:</strong>
+    </div>
+
+    <table class="weather-table">
+      <thead>
+        <tr>
+          <th>Día</th>
+          <th>Clima</th>
+          <th>¿Llovió?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Lunes</td><td>⛅ Nublado</td><td>Sí ☔</td></tr>
+        <tr><td>Martes</td><td>☀️ Soleado</td><td>No</td></tr>
+        <tr><td>Miércoles</td><td>⛈️ Tormenta</td><td>Sí ☔</td></tr>
+        <tr><td>Jueves</td><td>☀️ Soleado</td><td>No</td></tr>
+        <tr><td>Viernes</td><td>⛅ Nublado</td><td>Sí ☔</td></tr>
+        <tr><td>Sábado</td><td>⛅ Nublado</td><td>???</td></tr>
+        <tr><td>Domingo</td><td>☀️ Soleado</td><td>No</td></tr>
+      </tbody>
+    </table>
+
+    <!-- EJ 10: Probabilidad lógica -->
+    <div class="exercise" id="ex-logic1">
+      <span class="exercise-num">Ejercicio 10</span>
+      <h3>🌧️ Mirando la tabla, ¿qué tan probable es que el sábado (nublado) llueva?</h3>
+      <div class="options-grid">
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic1', 'fb-logic1')">😊 Imposible, nunca llueve</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic1', 'fb-logic1')">🌞 Poco probable</button>
+        <button class="option-btn" onclick="singleSelect(this, 'correct', 'ex-logic1', 'fb-logic1')">⛅ Probable – los días nublados llovieron</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic1', 'fb-logic1')">🌀 Totalmente seguro</button>
+      </div>
+      <div class="feedback" id="fb-logic1"></div>
+    </div>
+
+    <div class="exercise" id="ex-logic2">
+      <span class="exercise-num">Ejercicio 11</span>
+      <h3>☀️ ¿Qué tan probable es que el domingo (soleado) llueva?</h3>
+      <div class="options-grid">
+        <button class="option-btn" onclick="singleSelect(this, 'correct', 'ex-logic2', 'fb-logic2')">😊 Muy poco probable – los días soleados no llovieron</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic2', 'fb-logic2')">⛅ Probable</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic2', 'fb-logic2')">🌧️ Seguro que llueve</button>
+      </div>
+      <div class="feedback" id="fb-logic2"></div>
+    </div>
+
+    <div class="exercise" id="ex-logic3">
+      <span class="exercise-num">Ejercicio 12</span>
+      <h3>📊 De los 7 días de la semana, ¿en cuántos días llovió?</h3>
+      <div class="options-grid">
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic3', 'fb-logic3')">1 día</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic3', 'fb-logic3')">2 días</button>
+        <button class="option-btn" onclick="singleSelect(this, 'correct', 'ex-logic3', 'fb-logic3')">3 días</button>
+        <button class="option-btn" onclick="singleSelect(this, 'wrong', 'ex-logic3', 'fb-logic3')">5 días</button>
+      </div>
+      <div class="feedback" id="fb-logic3"></div>
+    </div>
+
+    <!-- PROBABILIDAD MATEMÁTICA -->
+    <div class="sub-title">🎯 Parte B – Probabilidad con Matemáticas</div>
+
+    <div class="info-box purple">
+      <strong>Fórmula de la probabilidad:</strong><br><br>
+      <div style="text-align:center; font-size:1.1rem; padding:8px; background:white; border-radius:8px; border:2px solid #8B5CF6">
+        Probabilidad = <strong>Casos favorables</strong> ÷ <strong>Casos posibles en total</strong>
+      </div>
+      <br>
+      Se puede escribir como fracción, por ejemplo: 3/7 significa "de 7 posibles, 3 son favorables"
+    </div>
+
+    <!-- EJEMPLO RESUELTO 1 -->
+    <div class="solved-example">
+      <h4>⭐ Ejemplo Resuelto 1 – La bolsa de canicas</h4>
+      <p style="margin-bottom:12px; font-size:0.9rem">En una bolsa hay <strong>4 canicas rojas</strong> y <strong>6 canicas azules</strong>. ¿Cuál es la probabilidad de sacar una canica roja sin mirar?</p>
+      <div class="solved-step"><div class="step-num">1</div><div>Total de canicas = 4 rojas + 6 azules = <strong>10 canicas</strong></div></div>
+      <div class="solved-step"><div class="step-num">2</div><div>Casos favorables (rojas) = <strong>4</strong></div></div>
+      <div class="solved-step"><div class="step-num">3</div><div>Probabilidad = 4 ÷ 10 = <strong>4/10</strong> (o sea, 4 de cada 10 veces)</div></div>
+      <div style="margin-top:10px; padding:8px 12px; background:white; border-radius:8px; font-size:0.85rem">✅ Respuesta: la probabilidad es <strong>4/10</strong>. Esto se puede simplificar a <strong>2/5</strong>.</div>
+    </div>
+
+    <!-- EJEMPLO RESUELTO 2 -->
+    <div class="solved-example">
+      <h4>⭐ Ejemplo Resuelto 2 – El dado</h4>
+      <p style="margin-bottom:12px; font-size:0.9rem">Lanzo un dado de 6 caras (números del 1 al 6). ¿Cuál es la probabilidad de sacar el número 3?</p>
+      <div class="solved-step"><div class="step-num">1</div><div>Total de resultados posibles = <strong>6</strong> (puede salir 1, 2, 3, 4, 5 o 6)</div></div>
+      <div class="solved-step"><div class="step-num">2</div><div>Casos favorables (sacar 3) = <strong>1</strong></div></div>
+      <div class="solved-step"><div class="step-num">3</div><div>Probabilidad = 1 ÷ 6 = <strong>1/6</strong></div></div>
+      <div style="margin-top:10px; padding:8px 12px; background:white; border-radius:8px; font-size:0.85rem">✅ Respuesta: la probabilidad de sacar un 3 es <strong>1/6</strong>.</div>
+    </div>
+
+    <!-- EJ 13 -->
+    <div class="exercise" id="ex-prob1">
+      <span class="exercise-num">Ejercicio 13</span>
+      <h3>🎱 En una bolsa hay 3 pelotas amarillas y 7 pelotas verdes. ¿Cuál es la probabilidad de sacar una pelota amarilla?</h3>
+      <div class="number-input-row">Probabilidad = <input type="text" id="p1" style="width:70px" placeholder="?"> / <input type="text" id="p1t" style="width:70px" placeholder="?"></div>
+      <p class="hint">Paso 1: ¿cuántas pelotas hay en total? Paso 2: ¿cuántas amarillas hay?</p>
+      <button class="check-btn orange" onclick="checkProb1()">✔ Revisar</button>
+      <div class="feedback" id="fb-prob1"></div>
+    </div>
+
+    <!-- EJ 14 -->
+    <div class="exercise" id="ex-prob2">
+      <span class="exercise-num">Ejercicio 14</span>
+      <h3>🎲 Lanzo un dado de 6 caras. ¿Cuál es la probabilidad de sacar un número par (2, 4 o 6)?</h3>
+      <div class="number-input-row">Probabilidad = <input type="text" id="p2" style="width:70px" placeholder="?"> / <input type="text" id="p2t" style="width:70px" placeholder="?"></div>
+      <p class="hint">¿Cuántos números pares hay entre el 1 y el 6? (son 3: el 2, el 4 y el 6)</p>
+      <button class="check-btn orange" onclick="checkProb2()">✔ Revisar</button>
+      <div class="feedback" id="fb-prob2"></div>
+    </div>
+
+    <!-- EJ 15 -->
+    <div class="exercise" id="ex-prob3">
+      <span class="exercise-num">Ejercicio 15</span>
+      <h3>🃏 En una caja hay 5 tarjetas con los números del 1 al 5. ¿Cuál es la probabilidad de sacar el número 4?</h3>
+      <div class="number-input-row">Probabilidad = <input type="text" id="p3" style="width:70px" placeholder="?"> / <input type="text" id="p3t" style="width:70px" placeholder="?"></div>
+      <button class="check-btn orange" onclick="checkProb3()">✔ Revisar</button>
+      <div class="feedback" id="fb-prob3"></div>
+    </div>
+
+    <!-- EJ 16 -->
+    <div class="exercise" id="ex-prob4">
+      <span class="exercise-num">Ejercicio 16</span>
+      <h3>🎠 En un carrusel hay 8 asientos: 2 son caballos blancos y 6 son caballos café. Si te sientas en uno al azar, ¿cuál es la probabilidad de que sea blanco?</h3>
+      <div class="number-input-row">Probabilidad = <input type="text" id="p4" style="width:70px" placeholder="?"> / <input type="text" id="p4t" style="width:70px" placeholder="?"></div>
+      <p class="hint">Casos favorables = caballos blancos. Total = todos los asientos.</p>
+      <button class="check-btn orange" onclick="checkProb4()">✔ Revisar</button>
+      <div class="feedback" id="fb-prob4"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SCORE FINAL -->
+<div class="section" style="--sec-a:#F59E0B; --sec-b:#EC4899; max-width:820px; margin:30px auto 60px;">
+  <div class="section-header">
+    <span class="section-icon">🏆</span>
+    <div><h2>Tu Puntaje</h2><p>¡Sigue así, campeón!</p></div>
+  </div>
+  <div class="section-body">
+    <div class="score-display">
+      ¡Completaste <span id="scoreNum">0</span> de 16 ejercicios! <br>
+      <div class="stars" id="starsRow">⭐⭐⭐</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let totalCompleted = 0;
+const TOTAL = 16;
+
+function updateProgress(delta) {
+  totalCompleted = Math.min(totalCompleted + delta, TOTAL);
+  const pct = (totalCompleted / TOTAL) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = totalCompleted + ' ejercicios completados';
+  document.getElementById('scoreNum').textContent = totalCompleted;
+  const stars = totalCompleted < 5 ? '⭐' : totalCompleted < 10 ? '⭐⭐' : totalCompleted < 14 ? '⭐⭐⭐' : '⭐⭐⭐🏅';
+  document.getElementById('starsRow').textContent = stars;
+}
+
+// --- MATCHING ---
+let selectedTerm = null;
+let matched = {};
+
+function selectTerm(el, key) {
+  if (matched[key]) return;
+  document.querySelectorAll('.match-term').forEach(e => {
+    if (!e.classList.contains('matched')) e.classList.remove('selected');
+  });
+  el.classList.add('selected');
+  selectedTerm = key;
+}
+
+function matchDef(el, key) {
+  if (!selectedTerm) return;
+  if (matched[key] || matched[selectedTerm]) { selectedTerm = null; return; }
+  
+  const termEl = document.getElementById('t-' + selectedTerm);
+  if (selectedTerm === key) {
+    el.classList.add('matched');
+    termEl.classList.remove('selected');
+    termEl.classList.add('matched');
+    matched[key] = true;
+    matched[selectedTerm] = true;
+  } else {
+    el.classList.add('wrong-match');
+    termEl.classList.add('wrong-match');
+    setTimeout(() => {
+      el.classList.remove('wrong-match');
+      termEl.classList.remove('wrong-match', 'selected');
+    }, 800);
+  }
+  selectedTerm = null;
+  
+  if (Object.keys(matched).length === 8) {
+    showFeedback('fb-match', true, '¡Perfecto! Uniste todas las palabras correctamente 🎉');
+    document.getElementById('ex-match').classList.add('correct');
+    updateProgress(1);
+  }
+}
+
+// --- VF ---
+const vfData = [
+  { q: "La esfera tiene caras planas.", ans: false },
+  { q: "El radio va desde el centro hasta la superficie.", ans: true },
+  { q: "El diámetro es la mitad del radio.", ans: false },
+  { q: "Una pelota de fútbol es un ejemplo de esfera.", ans: true },
+  { q: "La circunferencia de una esfera es una línea recta.", ans: false },
+];
+
+(function buildVF() {
+  const c = document.getElementById('vf-container');
+  vfData.forEach((item, i) => {
+    c.innerHTML += `
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap">
+        <span style="font-size:0.9rem; flex:1; min-width:220px">${i+1}. ${item.q}</span>
+        <div style="display:flex; gap:8px">
+          <button class="option-btn" id="vf-v-${i}" onclick="selectVF(${i}, true)" style="padding:7px 16px">✅ Verdadero</button>
+          <button class="option-btn" id="vf-f-${i}" onclick="selectVF(${i}, false)" style="padding:7px 16px">❌ Falso</button>
+        </div>
+      </div>`;
+  });
+})();
+
+let vfAnswers = {};
+function selectVF(i, val) {
+  vfAnswers[i] = val;
+  document.getElementById('vf-v-'+i).classList.toggle('selected', val === true);
+  document.getElementById('vf-f-'+i).classList.toggle('selected', val === false);
+}
+
+function checkVF() {
+  if (Object.keys(vfAnswers).length < vfData.length) {
+    showFeedback('fb-vf', false, 'Responde todas las preguntas primero.');
+    return;
+  }
+  let ok = 0;
+  vfData.forEach((item, i) => {
+    const correct = vfAnswers[i] === item.ans;
+    if (correct) ok++;
+    const vBtn = document.getElementById('vf-v-'+i);
+    const fBtn = document.getElementById('vf-f-'+i);
+    if (item.ans === true) { vBtn.classList.add('correct-opt'); fBtn.classList.add('wrong-opt'); }
+    else { fBtn.classList.add('correct-opt'); vBtn.classList.add('wrong-opt'); }
+  });
+  const allOk = ok === vfData.length;
+  showFeedback('fb-vf', allOk, allOk ? `¡Excelente! ${ok}/${vfData.length} correctas 🎉` : `${ok}/${vfData.length} correctas. Revisa las marcadas en rojo 🔍`);
+  document.getElementById('ex-vf').classList.add(allOk ? 'correct' : 'incorrect');
+  if (allOk) updateProgress(1);
+}
+
+// --- FILL BLANKS ---
+function checkFill() {
+  const ans = [
+    {id:'b1', correct:['centro']},
+    {id:'b2', correct:['radio']},
+    {id:'b3', correct:['radio']},
+    {id:'b4', correct:['curva','superficie curva']},
+  ];
+  let ok = 0;
+  ans.forEach(a => {
+    const v = document.getElementById(a.id).value.trim().toLowerCase();
+    if (a.correct.includes(v)) { ok++; document.getElementById(a.id).classList.add('correct-input'); }
+    else document.getElementById(a.id).classList.add('wrong-input');
+  });
+  const allOk = ok === ans.length;
+  showFeedback('fb-fill', allOk, allOk ? '¡Todo correcto! 🎉' : `${ok}/4 correctas. Las respuestas son: centro, radio, radio, curva`);
+  document.getElementById('ex-fill').classList.add(allOk ? 'correct' : 'incorrect');
+  if (allOk) updateProgress(1);
+}
+
+// --- CALC ---
+function checkCalc() {
+  const answers = [{id:'c1', ans:'10'},{id:'c2', ans:'6'},{id:'c3', ans:'16'}];
+  let ok = 0;
+  answers.forEach(a => {
+    const v = document.getElementById(a.id).value.trim();
+    if (v === a.ans) { ok++; document.getElementById(a.id).classList.add('correct-input'); }
+    else document.getElementById(a.id).classList.add('wrong-input');
+  });
+  const allOk = ok === 3;
+  showFeedback('fb-calc', allOk, allOk ? '¡Perfecto! a)10cm b)6cm c)16cm 🎉' : `Respuestas: a)10cm b)6cm c)16cm`);
+  document.getElementById('ex-calc').classList.add(allOk ? 'correct' : 'incorrect');
+  if (allOk) updateProgress(1);
+}
+
+// --- UNIT ---
+function singleSelect(el, type, exId, fbId) {
+  const ex = document.getElementById(exId);
+  if (ex.classList.contains('correct')) return;
+  const btns = el.parentElement.querySelectorAll('.option-btn');
+  btns.forEach(b => b.classList.remove('selected', 'correct-opt', 'wrong-opt'));
+  if (type === 'correct') {
+    el.classList.add('correct-opt');
+    showFeedback(fbId, true, '¡Correcto! ✅');
+    ex.classList.add('correct');
+    updateProgress(1);
+  } else {
+    el.classList.add('wrong-opt');
+    showFeedback(fbId, false, 'Incorrecto. Intenta de nuevo 🔍');
+  }
+}
+
+// --- LIQUID ---
+const liquidItems = [
+  {name:'🥛 Jarra', correct: true},
+  {name:'📦 Caja de cartón', correct: false},
+  {name:'🪣 Balde', correct: true},
+  {name:'📚 Libro', correct: false},
+  {name:'🧴 Botella', correct: true},
+  {name:'🪑 Silla', correct: false},
+  {name:'🥤 Vaso', correct: true},
+  {name:'🖊️ Lápiz', correct: false},
+  {name:'🍶 Termo', correct: true},
+  {name:'👟 Zapato', correct: false},
+];
+
+(function buildLiquid() {
+  const c = document.getElementById('liquid-checks');
+  liquidItems.forEach((item, i) => {
+    c.innerHTML += `
+      <div class="check-item" id="liq-${i}" onclick="toggleCheck(${i})">
+        <div class="check-icon" id="chk-${i}"></div>
+        ${item.name}
+      </div>`;
+  });
+})();
+
+let liquidChecked = {};
+function toggleCheck(i) {
+  liquidChecked[i] = !liquidChecked[i];
+  const el = document.getElementById('liq-'+i);
+  const icon = document.getElementById('chk-'+i);
+  el.classList.toggle('checked', liquidChecked[i]);
+  icon.textContent = liquidChecked[i] ? '✓' : '';
+}
+
+function checkLiquid() {
+  let ok = true;
+  liquidItems.forEach((item, i) => {
+    const checked = !!liquidChecked[i];
+    const el = document.getElementById('liq-'+i);
+    el.classList.remove('checked', 'wrong-check');
+    if (checked === item.correct) {
+      if (item.correct) el.classList.add('checked');
+    } else {
+      ok = false;
+      el.classList.add('wrong-check');
+    }
+  });
+  showFeedback('fb-liquid', ok, ok ? '¡Excelente! Identificaste todos correctamente 🎉' : 'Algunos están incorrectos. Las que almacenan líquidos son: jarra, balde, botella, vaso y termo.');
+  document.getElementById('ex-liquid').classList.add(ok ? 'correct' : 'incorrect');
+  if (ok) updateProgress(1);
+}
+
+// --- CONV ---
+function checkConv() {
+  const ans = [{id:'cv1',ans:'2000'},{id:'cv2',ans:'3'},{id:'cv3',ans:'0.5'},{id:'cv4',ans:'500'}];
+  let ok = 0;
+  ans.forEach(a => {
+    const v = document.getElementById(a.id).value.trim();
+    if (v === a.ans) { ok++; document.getElementById(a.id).classList.add('correct-input'); }
+    else document.getElementById(a.id).classList.add('wrong-input');
+  });
+  const allOk = ok === 4;
+  showFeedback('fb-conv', allOk, allOk ? '¡Perfecto! a)2000mL b)3L c)0.5L d)500mL 🎉' : `Respuestas: a)2000 b)3 c)0.5 d)500`);
+  document.getElementById('ex-conv').classList.add(allOk ? 'correct' : 'incorrect');
+  if (allOk) updateProgress(1);
+}
+
+// --- COMPARE ---
+function checkCompare() {
+  const ans = [{id:'cmp1',ans:'='},{id:'cmp2',ans:'>'},{id:'cmp3',ans:'='}];
+  let ok = 0;
+  ans.forEach(a => {
+    const v = document.getElementById(a.id).value.trim();
+    if (v === a.ans) { ok++; document.getElementById(a.id).classList.add('correct-input'); }
+    else document.getElementById(a.id).classList.add('wrong-input');
+  });
+  const allOk = ok === 3;
+  showFeedback('fb-compare', allOk, allOk ? '¡Muy bien! a)= b)> c)= 🎉' : 'Respuestas: a)= b)> c)=');
+  document.getElementById('ex-compare').classList.add(allOk ? 'correct' : 'incorrect');
+  if (allOk) updateProgress(1);
+}
+
+// --- PROB CAP ---
+function checkProbCap() {
+  const v = document.getElementById('prob-cap').value.trim();
+  const ok = v === '1250';
+  showFeedback('fb-prob-cap', ok, ok ? '¡Correcto! 2000mL − 750mL = 1250mL 🎉' : 'Pista: 2L=2000mL, 3 vasos × 250mL=750mL, 2000−750=?');
+  document.getElementById('ex-prob-cap').classList.add(ok ? 'correct' : 'incorrect');
+  if (ok) updateProgress(1);
+}
+
+// --- LOGIC 1,2,3 ---
+// handled by singleSelect
+
+// --- PROB 1 ---
+function checkProb1() {
+  const n = document.getElementById('p1').value.trim();
+  const d = document.getElementById('p1t').value.trim();
+  const ok = n === '3' && d === '10';
+  showFeedback('fb-prob1', ok, ok ? '¡Correcto! 3 amarillas de 10 en total = 3/10 🎉' : 'Respuesta: 3/10 (3 amarillas ÷ 10 pelotas total)');
+  document.getElementById('ex-prob1').classList.add(ok ? 'correct' : 'incorrect');
+  if (ok) updateProgress(1);
+}
+
+// --- PROB 2 ---
+function checkProb2() {
+  const n = document.getElementById('p2').value.trim();
+  const d = document.getElementById('p2t').value.trim();
+  const ok = n === '3' && d === '6';
+  showFeedback('fb-prob2', ok, ok ? '¡Correcto! 3 números pares de 6 posibles = 3/6 🎉' : 'Respuesta: 3/6 (los pares son 2, 4 y 6 = 3 casos)');
+  document.getElementById('ex-prob2').classList.add(ok ? 'correct' : 'incorrect');
+  if (ok) updateProgress(1);
+}
+
+// --- PROB 3 ---
+function checkProb3() {
+  const n = document.getElementById('p3').value.trim();
+  const d = document.getElementById('p3t').value.trim();
+  const ok = n === '1' && d === '5';
+  showFeedback('fb-prob3', ok, ok ? '¡Correcto! 1 tarjeta con el 4 de 5 posibles = 1/5 🎉' : 'Respuesta: 1/5');
+  document.getElementById('ex-prob3').classList.add(ok ? 'correct' : 'incorrect');
+  if (ok) updateProgress(1);
+}
+
+// --- PROB 4 ---
+function checkProb4() {
+  const n = document.getElementById('p4').value.trim();
+  const d = document.getElementById('p4t').value.trim();
+  const ok = n === '2' && d === '8';
+  showFeedback('fb-prob4', ok, ok ? '¡Correcto! 2 blancos de 8 asientos = 2/8 🎉' : 'Respuesta: 2/8 (2 blancos de 8 asientos totales)');
+  document.getElementById('ex-prob4').classList.add(ok ? 'correct' : 'incorrect');
+  if (ok) updateProgress(1);
+}
+
+// --- HELPER ---
+function showFeedback(id, correct, msg) {
+  const el = document.getElementById(id);
+  el.className = 'feedback show ' + (correct ? 'correct-fb' : 'wrong-fb');
+  el.textContent = (correct ? '✅ ' : '❌ ') + msg;
+}
+</script>
+
+</body>
+</html>

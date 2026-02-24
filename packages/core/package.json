@@ -1,0 +1,48 @@
+{
+    "name": "fitalyagents",
+    "version": "0.0.1",
+    "description": "SDK for async parallel tool orchestration and intelligent agent dispatch",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.cjs"
+        },
+        "./asynctools": {
+            "import": "../asynctools/dist/index.mjs",
+            "require": "../asynctools/dist/index.cjs",
+            "types": "../asynctools/dist/index.d.ts"
+        },
+        "./dispatcher": {
+            "import": "../dispatcher/dist/index.mjs",
+            "require": "../dispatcher/dist/index.cjs",
+            "types": "../dispatcher/dist/index.d.ts"
+        }
+    },
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "test": "vitest run --passWithNoTests",
+        "lint": "eslint src/",
+        "type-check": "tsc --noEmit"
+    },
+    "keywords": [
+        "agents",
+        "async",
+        "tools",
+        "orchestration",
+        "llm",
+        "ai"
+    ],
+    "license": "MIT",
+    "dependencies": {
+        "ioredis": "^5.4.2",
+        "zod": "^3.24.2"
+    }
+}

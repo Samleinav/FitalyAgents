@@ -1,0 +1,38 @@
+{
+    "name": "@fitalyagents/dispatcher",
+    "version": "0.0.1",
+    "description": "Intelligent task dispatcher with embedding classifier and LLM fallback",
+    "type": "module",
+    "exports": {
+        ".": {
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.cjs",
+            "types": "./dist/index.d.ts"
+        }
+    },
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "test": "vitest run --passWithNoTests",
+        "lint": "eslint src/",
+        "type-check": "tsc --noEmit"
+    },
+    "keywords": [
+        "agents",
+        "dispatcher",
+        "classifier",
+        "intent",
+        "embedding"
+    ],
+    "license": "MIT",
+    "dependencies": {
+        "fitalyagents": "workspace:*",
+        "ioredis": "^5.4.2",
+        "zod": "^3.24.2"
+    }
+}

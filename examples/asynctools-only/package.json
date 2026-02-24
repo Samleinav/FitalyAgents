@@ -1,0 +1,15 @@
+{
+    "name": "asynctools-only-example",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "run": "tsx run.ts"
+    },
+    "dependencies": {
+        "@fitalyagents/asynctools": "workspace:*"
+    },
+    "devDependencies": {
+        "tsx": "^4.19.3"
+    }
+}

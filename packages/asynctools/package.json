@@ -1,0 +1,39 @@
+{
+    "name": "@fitalyagents/asynctools",
+    "version": "0.0.1",
+    "description": "Standalone async parallel tool execution for any LLM agent",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.cjs"
+        }
+    },
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "test": "vitest run",
+        "lint": "eslint src/",
+        "type-check": "tsc --noEmit"
+    },
+    "keywords": [
+        "agents",
+        "async",
+        "tools",
+        "parallel",
+        "llm"
+    ],
+    "license": "MIT",
+    "dependencies": {
+        "zod": "^3.24.2"
+    },
+    "devDependencies": {
+        "@types/node": "^25.3.0"
+    }
+}
