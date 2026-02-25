@@ -1,9 +1,10 @@
-import type { ISessionManager, Session, OnSessionTerminated } from './types.js'
+import type { ISessionManager, Session, OnSessionTerminated, PriorityGroup } from './types.js'
 
 /**
  * In-memory implementation of ISessionManager.
  *
- * Tracks sessions in a Map with support for groups, termination hooks,
+ * Tracks sessions in a Map with support for groups, priority groups,
+ * pause/resume for employee interrupt protocol, termination hooks,
  * and listing active sessions. Suitable for testing and single-node use.
  *
  * @example
@@ -11,6 +12,9 @@ import type { ISessionManager, Session, OnSessionTerminated } from './types.js'
  * const manager = new InMemorySessionManager()
  * const session = await manager.createSession('sess_1', { user: 'Ana' })
  * await manager.assignGroup('sess_1', 'vip')
+ * await manager.setPriorityGroup('sess_1', 2) // employee
+ * await manager.pauseSession('sess_customer', 'sess_employee')
+ * await manager.resumeSession('sess_customer')
  * await manager.terminateSession('sess_1')
  * ```
  */
@@ -27,6 +31,7 @@ export class InMemorySessionManager implements ISessionManager {
       sessionId,
       createdAt: Date.now(),
       status: 'active',
+      priorityGroup: 1, // default: individual client
       metadata,
     }
 
@@ -44,6 +49,40 @@ export class InMemorySessionManager implements ISessionManager {
       throw new Error(`Session not found: "${sessionId}"`)
     }
     session.group = group
+  }
+
+  async setPriorityGroup(sessionId: string, priorityGroup: PriorityGroup): Promise<void> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error(`Session not found: "${sessionId}"`)
+    }
+    session.priorityGroup = priorityGroup
+  }
+
+  async pauseSession(sessionId: string, pausedBy?: string): Promise<void> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error(`Session not found: "${sessionId}"`)
+    }
+    if (session.status !== 'active') {
+      throw new Error(`Cannot pause session "${sessionId}": expected active, got ${session.status}`)
+    }
+    session.status = 'paused'
+    session.pausedBy = pausedBy
+  }
+
+  async resumeSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error(`Session not found: "${sessionId}"`)
+    }
+    if (session.status !== 'paused') {
+      throw new Error(
+        `Cannot resume session "${sessionId}": expected paused, got ${session.status}`,
+      )
+    }
+    session.status = 'active'
+    session.pausedBy = undefined
   }
 
   async terminateSession(sessionId: string): Promise<void> {
@@ -75,6 +114,16 @@ export class InMemorySessionManager implements ISessionManager {
       }
     }
     return active
+  }
+
+  async listByPriorityGroup(priorityGroup: PriorityGroup): Promise<string[]> {
+    const result: string[] = []
+    for (const session of this.sessions.values()) {
+      if (session.priorityGroup === priorityGroup && session.status !== 'terminated') {
+        result.push(session.sessionId)
+      }
+    }
+    return result
   }
 
   onTerminated(callback: OnSessionTerminated): void {

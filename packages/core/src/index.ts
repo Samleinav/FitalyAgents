@@ -73,7 +73,12 @@ export type { ILockManager, LockValue, OnLockExpired } from './locks/types.js'
 
 // Session
 export { InMemorySessionManager } from './session/in-memory-session-manager.js'
-export type { ISessionManager, Session, OnSessionTerminated } from './session/types.js'
+export type {
+  ISessionManager,
+  Session,
+  PriorityGroup,
+  OnSessionTerminated,
+} from './session/types.js'
 
 // Tasks
 export { InMemoryTaskQueue } from './tasks/in-memory-task-queue.js'

@@ -9,6 +9,7 @@
     "type-check": "turbo run type-check",
     "format": "prettier --write \"packages/*/src/**/*.ts\"",
     "format:check": "prettier --check \"packages/*/src/**/*.ts\"",
+    "docs": "typedoc",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -22,6 +23,7 @@
     "prettier": "^3.5.2",
     "tsup": "^8.3.6",
     "turbo": "^2.4.2",
+    "typedoc": "^0.28.17",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
   },

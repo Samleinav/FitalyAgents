@@ -1,0 +1,35 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "packages/core/src/index.ts",
+    "packages/asynctools/src/index.ts"
+  ],
+  "entryPointStrategy": "resolve",
+  "tsconfig": "./tsconfig.typedoc.json",
+  "out": "docs/api",
+  "name": "FitalyAgents API",
+  "readme": "README.md",
+  "includeVersion": true,
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeExternals": true,
+  "plugin": [],
+  "navigationLinks": {
+    "Getting Started": "https://github.com/your-org/fitalyagents/blob/main/docs/guides/getting-started.md",
+    "GitHub": "https://github.com/your-org/fitalyagents"
+  },
+  "categoryOrder": [
+    "Bus",
+    "Agent",
+    "Registry",
+    "Context",
+    "Session",
+    "Locks",
+    "Tasks",
+    "Routing",
+    "Audio",
+    "Approval",
+    "Types",
+    "*"
+  ]
+}
