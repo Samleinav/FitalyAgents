@@ -57,6 +57,8 @@ export { RedisBus, createBus } from './bus/redis-bus.js'
 // Agent
 export { NexusAgent } from './agent/nexus-agent.js'
 export type { NexusAgentOptions } from './agent/nexus-agent.js'
+export { AgentBundle } from './agent/agent-bundle.js'
+export type { AgentBundleOptions, Disposable } from './agent/agent-bundle.js'
 
 // Registry
 export { AgentRegistry } from './registry/agent-registry.js'
@@ -93,6 +95,8 @@ export type {
   TaskAvailableEvent,
   CapabilityRouterDeps,
 } from './routing/types.js'
+export { SimpleRouter } from './routing/simple-router.js'
+export type { SimpleRouterOptions } from './routing/simple-router.js'
 
 // Audio Queue
 export { InMemoryAudioQueueService } from './audio/in-memory-audio-queue-service.js'

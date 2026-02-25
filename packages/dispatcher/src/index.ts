@@ -18,6 +18,7 @@ export type { NodeDispatcherDeps } from './node/node-dispatcher.js'
 
 // Classifier
 export { InMemoryEmbeddingClassifier } from './node/classifier/in-memory-embedding-classifier.js'
+export { LLMDirectClassifier } from './node/classifier/llm-direct-classifier.js'
 
 // Fallback
 export { InMemoryLLMFallbackAgent } from './node/fallback/in-memory-llm-fallback-agent.js'
@@ -25,6 +26,14 @@ export type { FallbackResolver } from './node/fallback/in-memory-llm-fallback-ag
 
 // Intent Library
 export { InMemoryIntentLibrary } from './node/intent-library/in-memory-intent-library.js'
+
+// Bootstrapper
+export { DispatcherBootstrapper } from './node/bootstrapper/dispatcher-bootstrapper.js'
+export type { BootstrapOptions } from './node/bootstrapper/dispatcher-bootstrapper.js'
+
+// LLM
+export type { LLMProvider } from './llm/types.js'
+export { ClaudeLLMProvider } from './llm/claude-llm-provider.js'
 
 // Types
 export type {

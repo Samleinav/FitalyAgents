@@ -221,12 +221,113 @@ Sample debug output:
 
 ---
 
+---
+
+## Auto-Bootstrap from Agent Manifests
+
+Instead of writing intent examples by hand, `DispatcherBootstrapper` reads your agent manifests and calls an LLM to generate training examples automatically.
+
+```typescript
+import { DispatcherBootstrapper, ClaudeLLMProvider } from 'fitalyagents/dispatcher'
+
+const bootstrapper = new DispatcherBootstrapper({
+  intentLibrary,
+  llm: new ClaudeLLMProvider(), // uses ANTHROPIC_API_KEY env var
+  examplesPerCapability: 8,     // default
+})
+
+// Option A: explicit manifests
+await bootstrapper.bootstrapFromManifests([
+  {
+    agent_id: 'work-agent',
+    capabilities: ['PRODUCT_SEARCH', 'PRICE_QUERY'],
+    scope: 'commerce',
+    domain: 'customer_facing',
+    description: 'Handles product search and price queries',
+    // ...other manifest fields
+  },
+])
+
+// Option B: read from AgentRegistry (all registered agents)
+await bootstrapper.bootstrapFromRegistry(registry)
+```
+
+**What it does:**
+1. For each capability (`PRODUCT_SEARCH` → intent `product_search`), calls the LLM with the agent's context
+2. LLM generates 8 realistic example utterances
+3. If the intent already exists, **adds** new examples (never overwrites)
+4. Publishes `bus:INTENT_UPDATED` so a running dispatcher hot-reloads
+
+**Result:** Full intent library from zero, in one `await` call. No hand-written JSON.
+
+### Bring your own LLM
+
+`LLMProvider` is a minimal interface — you can wrap any LLM:
+
+```typescript
+import type { LLMProvider } from 'fitalyagents/dispatcher'
+
+const myLLM: LLMProvider = {
+  async complete(system: string, user: string): Promise<string> {
+    // call OpenAI, Gemini, local Ollama, etc.
+    return await myClient.chat(system, user)
+  },
+}
+
+const bootstrapper = new DispatcherBootstrapper({ intentLibrary, llm: myLLM })
+```
+
+---
+
+## LLMDirectClassifier — Classify Without Embeddings
+
+As an alternative to the embedding-based classifier, `LLMDirectClassifier` asks the LLM to classify every utterance directly. Drop-in replacement for `InMemoryEmbeddingClassifier`.
+
+```typescript
+import { LLMDirectClassifier, ClaudeLLMProvider } from 'fitalyagents/dispatcher'
+
+const classifier = new LLMDirectClassifier({
+  llm: new ClaudeLLMProvider(),
+  intentLibrary,
+})
+
+await classifier.init() // loads intent metas (no embedding computation)
+
+const result = await classifier.classify("I want Nike shoes size 42")
+// → { type: 'confident', intent_id: 'product_search', confidence: 0.93, ... }
+```
+
+Use it in `NodeDispatcher` the same way:
+
+```typescript
+const dispatcher = new NodeDispatcher({
+  bus,
+  classifier,      // ← swap in LLMDirectClassifier here
+  fallbackAgent,
+  intentLibrary,
+})
+```
+
+### When to use which classifier
+
+| | `InMemoryEmbeddingClassifier` | `LLMDirectClassifier` |
+|---|---|---|
+| Latency | ~1ms | ~200–500ms |
+| Setup | Needs training examples | Works with intent descriptions only |
+| Multilingual | Depends on model | Works out of the box |
+| Cost | Free (local embeddings) | Per-call API cost |
+| Best for | Production at scale | Prototyping, low volume, complex intents |
+
+---
+
 ## Compatibility
 
 | Component | Node Dispatcher | Rust Dispatcher (Phase 5) |
 |---|---|---|
 | Intent file format | JSON ✓ | JSON ✓ |
 | Embedding model | OpenAI / local | `all-MiniLM-L6-v2` (candle) |
+| LLM classifier | `LLMDirectClassifier` ✓ | planned |
+| Auto-bootstrap | `DispatcherBootstrapper` ✓ | reads same library |
 | Hot reload | `bus:INTENT_UPDATED` | `bus:INTENT_UPDATED` |
 | Redis required | No (InMemory) | Yes |
-| Latency | ~5–15ms | ~0.5–2ms |
+| Latency | ~1–15ms | ~0.5–2ms |

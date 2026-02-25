@@ -29,7 +29,7 @@
         "parallel",
         "llm"
     ],
-    "license": "MIT",
+    "license": "SEE LICENSE IN LICENSE",
     "dependencies": {
         "zod": "^3.24.2"
     },

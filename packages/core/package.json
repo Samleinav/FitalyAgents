@@ -40,7 +40,7 @@
         "llm",
         "ai"
     ],
-    "license": "MIT",
+    "license": "SEE LICENSE IN LICENSE",
     "dependencies": {
         "ioredis": "^5.4.2",
         "zod": "^3.24.2"

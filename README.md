@@ -56,7 +56,14 @@ import { NodeDispatcher } from 'fitalyagents/dispatcher'
 │  ┌─────────────────────────────────────────────────┐   │
 │  │  DISPATCHER — fitalyagents/dispatcher           │   │
 │  │  NodeDispatcher · EmbeddingClassifier            │   │
+│  │  LLMDirectClassifier · DispatcherBootstrapper   │   │
 │  │  LLMFallbackAgent · IntentLibrary               │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  DX UTILITIES                                   │   │
+│  │  SimpleRouter · AgentBundle                     │   │
+│  │  ClaudeLLMProvider                              │   │
 │  └─────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -94,4 +101,4 @@ pnpm run type-check
 
 ## Licencia
 
-MIT
+Apache 2.0 + Commons Clause

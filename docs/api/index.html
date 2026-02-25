@@ -1,77 +1,248 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>FitalyAgents API</title><meta name="description" content="Documentation for FitalyAgents API"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar"><div class="tsd-toolbar-contents container"><a href="index.html" class="title">FitalyAgents API</a><div id="tsd-toolbar-links"><a href="https://github.com/your-org/fitalyagents/blob/main/docs/guides/getting-started.md">Getting Started</a><a href="https://github.com/your-org/fitalyagents">GitHub</a></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/><ul role="listbox" id="tsd-search-results"></ul><div id="tsd-search-status" aria-live="polite" aria-atomic="true"><div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-menu"></use></svg></a></div></header><div class="container container-main"><div class="col-content"><div class="tsd-page-title"><h1>FitalyAgents API</h1></div><div class="tsd-panel tsd-typography"><h1 id="fitalyagents" class="tsd-anchor-link">FitalyAgents<a href="#fitalyagents" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
-<p><a href="https://github.com/your-org/fitalyagents/actions/workflows/ci.yml"><img src="https://github.com/your-org/fitalyagents/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
-<blockquote>
-<p><em>Así como FITALY pone las letras donde los dedos ya están, FitalyAgents pone los resultados donde el agente los necesita — sin esperar.</em></p>
-</blockquote>
-<p>SDK TypeScript para orquestación de agentes con herramientas asíncronas paralelas y despacho inteligente de tareas.</p>
-<h2 id="instalación" class="tsd-anchor-link">Instalación<a href="#instalación" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><span class="hl-1"> </span><span class="hl-2">fitalyagents</span>
+<!DOCTYPE html>
+<html class="default" lang="en" data-base="./">
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="IE=edge" />
+    <title>FitalyAgents API</title>
+    <meta name="description" content="Documentation for FitalyAgents API" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="assets/style.css" />
+    <link rel="stylesheet" href="assets/highlight.css" />
+    <script defer src="assets/main.js"></script>
+    <script async src="assets/icons.js" id="tsd-icons-script"></script>
+    <script async src="assets/search.js" id="tsd-search-script"></script>
+    <script async src="assets/navigation.js" id="tsd-nav-script"></script>
+    <script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script>
+</head>
+
+<body>
+    <script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os"; document.body.style.display = "none"; setTimeout(() => window.app ? app.showPage() : document.body.style.removeProperty("display"), 500)</script>
+    <header class="tsd-page-toolbar">
+        <div class="tsd-toolbar-contents container"><a href="index.html" class="title">FitalyAgents API</a>
+            <div id="tsd-toolbar-links"><a
+                    href="https://github.com/your-org/fitalyagents/blob/main/docs/guides/getting-started.md">Getting
+                    Started</a><a href="https://github.com/your-org/fitalyagents">GitHub</a></div><button
+                id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16"
+                    viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <use href="assets/icons.svg#icon-search"></use>
+                </svg></button>
+            <dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input"
+                    aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true"
+                    autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100" />
+                <ul role="listbox" id="tsd-search-results"></ul>
+                <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+                    <div>Preparing search index...</div>
+                </div>
+            </dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu"
+                aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <use href="assets/icons.svg#icon-menu"></use>
+                </svg></a>
+        </div>
+    </header>
+    <div class="container container-main">
+        <div class="col-content">
+            <div class="tsd-page-title">
+                <h1>FitalyAgents API</h1>
+            </div>
+            <div class="tsd-panel tsd-typography">
+                <h1 id="fitalyagents" class="tsd-anchor-link">FitalyAgents<a href="#fitalyagents" aria-label="Permalink"
+                        class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h1>
+                <p><a href="https://github.com/your-org/fitalyagents/actions/workflows/ci.yml"><img
+                            src="https://github.com/your-org/fitalyagents/actions/workflows/ci.yml/badge.svg"
+                            alt="CI"></a></p>
+                <blockquote>
+                    <p><em>Así como FITALY pone las letras donde los dedos ya están, FitalyAgents pone los resultados
+                            donde el agente los necesita — sin esperar.</em></p>
+                </blockquote>
+                <p>SDK TypeScript para orquestación de agentes con herramientas asíncronas paralelas y despacho
+                    inteligente de tareas.</p>
+                <h2 id="instalación" class="tsd-anchor-link">Instalación<a href="#instalación" aria-label="Permalink"
+                        class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h2>
+                <pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><span class="hl-1"> </span><span class="hl-2">fitalyagents</span>
 </code><button type="button">Copy</button></pre>
 
-<h2 id="uso-rápido" class="tsd-anchor-link">Uso rápido<a href="#uso-rápido" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<h3 id="layer-2-async-tools-standalone-sin-bus" class="tsd-anchor-link">Layer 2 — Async Tools (standalone, sin bus)<a href="#layer-2-async-tools-standalone-sin-bus" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">ToolRegistry</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;fitalyagents/asynctools&#39;</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">registry</span><span class="hl-1"> = </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">ToolRegistry</span><span class="hl-1">()</span><br/><span class="hl-4">registry</span><span class="hl-1">.</span><span class="hl-0">register</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">tool_id:</span><span class="hl-1"> </span><span class="hl-2">&#39;product_search&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">executor:</span><span class="hl-1"> { </span><span class="hl-4">type:</span><span class="hl-1"> </span><span class="hl-2">&#39;http&#39;</span><span class="hl-1">, </span><span class="hl-4">url:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://api.store.com/search&#39;</span><span class="hl-1">, </span><span class="hl-4">method:</span><span class="hl-1"> </span><span class="hl-2">&#39;POST&#39;</span><span class="hl-1"> },</span><br/><span class="hl-1">  </span><span class="hl-4">execution_mode:</span><span class="hl-1"> </span><span class="hl-2">&#39;async&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">timeout_ms:</span><span class="hl-1"> </span><span class="hl-7">5000</span><span class="hl-1">,</span><br/><span class="hl-1">})</span>
+                <h2 id="uso-rápido" class="tsd-anchor-link">Uso rápido<a href="#uso-rápido" aria-label="Permalink"
+                        class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h2>
+                <h3 id="layer-2-async-tools-standalone-sin-bus" class="tsd-anchor-link">Layer 2 — Async Tools
+                    (standalone, sin bus)<a href="#layer-2-async-tools-standalone-sin-bus" aria-label="Permalink"
+                        class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h3>
+                <pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">ToolRegistry</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;fitalyagents/asynctools&#39;</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">registry</span><span class="hl-1"> = </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-0">ToolRegistry</span><span class="hl-1">()</span><br/><span class="hl-4">registry</span><span class="hl-1">.</span><span class="hl-0">register</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-4">tool_id:</span><span class="hl-1"> </span><span class="hl-2">&#39;product_search&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">executor:</span><span class="hl-1"> { </span><span class="hl-4">type:</span><span class="hl-1"> </span><span class="hl-2">&#39;http&#39;</span><span class="hl-1">, </span><span class="hl-4">url:</span><span class="hl-1"> </span><span class="hl-2">&#39;https://api.store.com/search&#39;</span><span class="hl-1">, </span><span class="hl-4">method:</span><span class="hl-1"> </span><span class="hl-2">&#39;POST&#39;</span><span class="hl-1"> },</span><br/><span class="hl-1">  </span><span class="hl-4">execution_mode:</span><span class="hl-1"> </span><span class="hl-2">&#39;async&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">timeout_ms:</span><span class="hl-1"> </span><span class="hl-7">5000</span><span class="hl-1">,</span><br/><span class="hl-1">})</span>
 </code><button type="button">Copy</button></pre>
 
-<h3 id="layer-1-full-sdk-con-bus-redis" class="tsd-anchor-link">Layer 1 — Full SDK con bus Redis<a href="#layer-1-full-sdk-con-bus-redis" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">NexusAgent</span><span class="hl-1">, </span><span class="hl-4">createBus</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;fitalyagents&#39;</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">NodeDispatcher</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;fitalyagents/dispatcher&#39;</span>
+                <h3 id="layer-1-full-sdk-con-bus-redis" class="tsd-anchor-link">Layer 1 — Full SDK con bus Redis<a
+                        href="#layer-1-full-sdk-con-bus-redis" aria-label="Permalink" class="tsd-anchor-icon"><svg
+                            viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h3>
+                <pre><code class="typescript"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">NexusAgent</span><span class="hl-1">, </span><span class="hl-4">createBus</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;fitalyagents&#39;</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">NodeDispatcher</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;fitalyagents/dispatcher&#39;</span>
 </code><button type="button">Copy</button></pre>
 
-<h2 id="arquitectura" class="tsd-anchor-link">Arquitectura<a href="#arquitectura" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<pre><code><span class="hl-1">┌─────────────────────────────────────────────────────────┐</span><br/><span class="hl-1">│                  </span><span class="hl-0">fitalyagents</span><span class="hl-1"> (</span><span class="hl-4">npm</span><span class="hl-1">)                     │</span><br/><span class="hl-1">│                                                         │</span><br/><span class="hl-1">│  ┌─────────────────────────────────────────────────┐   │</span><br/><span class="hl-1">│  │  </span><span class="hl-6">LAYER</span><span class="hl-1"> </span><span class="hl-7">1</span><span class="hl-1"> — </span><span class="hl-4">Agent</span><span class="hl-1"> </span><span class="hl-4">Middleware</span><span class="hl-1"> </span><span class="hl-4">Bus</span><span class="hl-1">                 │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">AgentRegistry</span><span class="hl-1"> · </span><span class="hl-4">ContextStore</span><span class="hl-1"> · </span><span class="hl-4">LockManager</span><span class="hl-1">     │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">CapabilityRouter</span><span class="hl-1"> · </span><span class="hl-4">SessionManager</span><span class="hl-1"> · </span><span class="hl-4">TaskQueue</span><span class="hl-1">  │   │</span><br/><span class="hl-1">│  └──────────────────────┬──────────────────────────┘   │</span><br/><span class="hl-1">│                         │ </span><span class="hl-4">usa</span><span class="hl-1">                           │</span><br/><span class="hl-1">│  ┌──────────────────────▼──────────────────────────┐   │</span><br/><span class="hl-1">│  │  </span><span class="hl-6">LAYER</span><span class="hl-1"> </span><span class="hl-7">2</span><span class="hl-1"> — </span><span class="hl-4">fitalyagents</span><span class="hl-1">/</span><span class="hl-0">asynctools</span><span class="hl-1"> (</span><span class="hl-4">standalone</span><span class="hl-1">) │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">ToolRegistry</span><span class="hl-1"> · </span><span class="hl-4">ExecutorPool</span><span class="hl-1"> · </span><span class="hl-4">InjectionManager</span><span class="hl-1">  │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">AsyncAgent</span><span class="hl-1"> </span><span class="hl-4">wrapper</span><span class="hl-1"> · </span><span class="hl-4">PendingStateTracker</span><span class="hl-1">        │   │</span><br/><span class="hl-1">│  └─────────────────────────────────────────────────┘   │</span><br/><span class="hl-1">│                                                         │</span><br/><span class="hl-1">│  ┌─────────────────────────────────────────────────┐   │</span><br/><span class="hl-1">│  │  </span><span class="hl-6">DISPATCHER</span><span class="hl-1"> — </span><span class="hl-4">fitalyagents</span><span class="hl-1">/</span><span class="hl-4">dispatcher</span><span class="hl-1">           │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">NodeDispatcher</span><span class="hl-1"> · </span><span class="hl-4">EmbeddingClassifier</span><span class="hl-1">            │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">LLMFallbackAgent</span><span class="hl-1"> · </span><span class="hl-4">IntentLibrary</span><span class="hl-1">               │   │</span><br/><span class="hl-1">│  └─────────────────────────────────────────────────┘   │</span><br/><span class="hl-1">└─────────────────────────────────────────────────────────┘</span>
+                <h2 id="arquitectura" class="tsd-anchor-link">Arquitectura<a href="#arquitectura" aria-label="Permalink"
+                        class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h2>
+                <pre><code><span class="hl-1">┌─────────────────────────────────────────────────────────┐</span><br/><span class="hl-1">│                  </span><span class="hl-0">fitalyagents</span><span class="hl-1"> (</span><span class="hl-4">npm</span><span class="hl-1">)                     │</span><br/><span class="hl-1">│                                                         │</span><br/><span class="hl-1">│  ┌─────────────────────────────────────────────────┐   │</span><br/><span class="hl-1">│  │  </span><span class="hl-6">LAYER</span><span class="hl-1"> </span><span class="hl-7">1</span><span class="hl-1"> — </span><span class="hl-4">Agent</span><span class="hl-1"> </span><span class="hl-4">Middleware</span><span class="hl-1"> </span><span class="hl-4">Bus</span><span class="hl-1">                 │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">AgentRegistry</span><span class="hl-1"> · </span><span class="hl-4">ContextStore</span><span class="hl-1"> · </span><span class="hl-4">LockManager</span><span class="hl-1">     │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">CapabilityRouter</span><span class="hl-1"> · </span><span class="hl-4">SessionManager</span><span class="hl-1"> · </span><span class="hl-4">TaskQueue</span><span class="hl-1">  │   │</span><br/><span class="hl-1">│  └──────────────────────┬──────────────────────────┘   │</span><br/><span class="hl-1">│                         │ </span><span class="hl-4">usa</span><span class="hl-1">                           │</span><br/><span class="hl-1">│  ┌──────────────────────▼──────────────────────────┐   │</span><br/><span class="hl-1">│  │  </span><span class="hl-6">LAYER</span><span class="hl-1"> </span><span class="hl-7">2</span><span class="hl-1"> — </span><span class="hl-4">fitalyagents</span><span class="hl-1">/</span><span class="hl-0">asynctools</span><span class="hl-1"> (</span><span class="hl-4">standalone</span><span class="hl-1">) │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">ToolRegistry</span><span class="hl-1"> · </span><span class="hl-4">ExecutorPool</span><span class="hl-1"> · </span><span class="hl-4">InjectionManager</span><span class="hl-1">  │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">AsyncAgent</span><span class="hl-1"> </span><span class="hl-4">wrapper</span><span class="hl-1"> · </span><span class="hl-4">PendingStateTracker</span><span class="hl-1">        │   │</span><br/><span class="hl-1">│  └─────────────────────────────────────────────────┘   │</span><br/><span class="hl-1">│                                                         │</span><br/><span class="hl-1">│  ┌─────────────────────────────────────────────────┐   │</span><br/><span class="hl-1">│  │  </span><span class="hl-6">DISPATCHER</span><span class="hl-1"> — </span><span class="hl-4">fitalyagents</span><span class="hl-1">/</span><span class="hl-4">dispatcher</span><span class="hl-1">           │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">NodeDispatcher</span><span class="hl-1"> · </span><span class="hl-4">EmbeddingClassifier</span><span class="hl-1">            │   │</span><br/><span class="hl-1">│  │  </span><span class="hl-4">LLMFallbackAgent</span><span class="hl-1"> · </span><span class="hl-4">IntentLibrary</span><span class="hl-1">               │   │</span><br/><span class="hl-1">│  └─────────────────────────────────────────────────┘   │</span><br/><span class="hl-1">└─────────────────────────────────────────────────────────┘</span>
 </code><button>Copy</button></pre>
 
-<h2 id="desarrollo" class="tsd-anchor-link">Desarrollo<a href="#desarrollo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<pre><code class="bash"><span class="hl-8"># Instalar dependencias</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">install</span><br/><br/><span class="hl-8"># Build de todos los paquetes</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">build</span><br/><br/><span class="hl-8"># Tests</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test</span><br/><br/><span class="hl-8"># Lint</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">lint</span><br/><br/><span class="hl-8"># Type check</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">type-check</span>
+                <h2 id="desarrollo" class="tsd-anchor-link">Desarrollo<a href="#desarrollo" aria-label="Permalink"
+                        class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h2>
+                <pre><code class="bash"><span class="hl-8"># Instalar dependencias</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">install</span><br/><br/><span class="hl-8"># Build de todos los paquetes</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">build</span><br/><br/><span class="hl-8"># Tests</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test</span><br/><br/><span class="hl-8"># Lint</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">lint</span><br/><br/><span class="hl-8"># Type check</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">type-check</span>
 </code><button type="button">Copy</button></pre>
 
-<h2 id="stack-técnico" class="tsd-anchor-link">Stack Técnico<a href="#stack-técnico" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<table>
-<thead>
-<tr>
-<th>Decisión</th>
-<th>Elección</th>
-<th>Razón</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Lenguaje SDK</td>
-<td>TypeScript 5.x strict</td>
-<td>Tipos completos, mejor DX</td>
-</tr>
-<tr>
-<td>Monorepo</td>
-<td>pnpm workspaces + turbo</td>
-<td>Build incremental</td>
-</tr>
-<tr>
-<td>Bus transport</td>
-<td>Redis Pub/Sub</td>
-<td>Sub-ms latencia, simple ops</td>
-</tr>
-<tr>
-<td>Context store</td>
-<td>Redis JSON (RedisJSON)</td>
-<td>Atomic partial updates, TTL nativo</td>
-</tr>
-<tr>
-<td>Validación schemas</td>
-<td>Zod</td>
-<td>Runtime + tipos en uno</td>
-</tr>
-<tr>
-<td>Testing</td>
-<td>vitest</td>
-<td>Rápido, compatible con ESM</td>
-</tr>
-<tr>
-<td>Build</td>
-<td>tsup</td>
-<td>ESM + CJS, tipos incluidos</td>
-</tr>
-</tbody>
-</table>
-<h2 id="licencia" class="tsd-anchor-link">Licencia<a href="#licencia" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>MIT</p>
-</div></div><div class="col-sidebar"><div class="page-menu"><div class="tsd-navigation settings"><details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>Settings</h3></summary><div class="tsd-accordion-details"><div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span><ul id="tsd-filter-options"><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li></ul></div><div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div><details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>On This Page</h3></summary><div class="tsd-accordion-details"><a href="#fitalyagents"><span>Fitaly<wbr/>Agents</span></a><ul><li><a href="#instalación"><span>Instalación</span></a></li><li><a href="#uso-rápido"><span>Uso rápido</span></a></li><li><ul><li><a href="#layer-2-async-tools-standalone-sin-bus"><span>Layer 2 — <wbr/>Async <wbr/>Tools (standalone, sin bus)</span></a></li><li><a href="#layer-1-full-sdk-con-bus-redis"><span>Layer 1 — <wbr/>Full <wbr/>SDK con bus <wbr/>Redis</span></a></li></ul></li><li><a href="#arquitectura"><span>Arquitectura</span></a></li><li><a href="#desarrollo"><span>Desarrollo</span></a></li><li><a href="#stack-técnico"><span>Stack <wbr/>Técnico</span></a></li><li><a href="#licencia"><span>Licencia</span></a></li></ul></div></details></div><div class="site-menu"><nav id="tsd-sidebar-links" class="tsd-navigation"><a href="https://github.com/your-org/fitalyagents/blob/main/docs/guides/getting-started.md" class="tsd-nav-link">Getting Started</a><a href="https://github.com/your-org/fitalyagents" class="tsd-nav-link">GitHub</a></nav><nav class="tsd-navigation"><a href="modules.html">FitalyAgents API</a><ul class="tsd-small-nested-navigation" id="tsd-nav-container"><li>Loading...</li></ul></nav></div></div></div><footer><p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer><div class="overlay"></div></body></html>
+                <h2 id="stack-técnico" class="tsd-anchor-link">Stack Técnico<a href="#stack-técnico"
+                        aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Decisión</th>
+                            <th>Elección</th>
+                            <th>Razón</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Lenguaje SDK</td>
+                            <td>TypeScript 5.x strict</td>
+                            <td>Tipos completos, mejor DX</td>
+                        </tr>
+                        <tr>
+                            <td>Monorepo</td>
+                            <td>pnpm workspaces + turbo</td>
+                            <td>Build incremental</td>
+                        </tr>
+                        <tr>
+                            <td>Bus transport</td>
+                            <td>Redis Pub/Sub</td>
+                            <td>Sub-ms latencia, simple ops</td>
+                        </tr>
+                        <tr>
+                            <td>Context store</td>
+                            <td>Redis JSON (RedisJSON)</td>
+                            <td>Atomic partial updates, TTL nativo</td>
+                        </tr>
+                        <tr>
+                            <td>Validación schemas</td>
+                            <td>Zod</td>
+                            <td>Runtime + tipos en uno</td>
+                        </tr>
+                        <tr>
+                            <td>Testing</td>
+                            <td>vitest</td>
+                            <td>Rápido, compatible con ESM</td>
+                        </tr>
+                        <tr>
+                            <td>Build</td>
+                            <td>tsup</td>
+                            <td>ESM + CJS, tipos incluidos</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <h2 id="licencia" class="tsd-anchor-link">Licencia<a href="#licencia" aria-label="Permalink"
+                        class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true">
+                            <use href="assets/icons.svg#icon-anchor"></use>
+                        </svg></a></h2>
+                <p>Apache 2.0 + Commons Clause</p>
+            </div>
+        </div>
+        <div class="col-sidebar">
+            <div class="page-menu">
+                <div class="tsd-navigation settings">
+                    <details class="tsd-accordion">
+                        <summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24"
+                                fill="none" aria-hidden="true">
+                                <use href="assets/icons.svg#icon-chevronDown"></use>
+                            </svg>
+                            <h3>Settings</h3>
+                        </summary>
+                        <div class="tsd-accordion-details">
+                            <div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+                                <ul id="tsd-filter-options">
+                                    <li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox"
+                                                id="tsd-filter-protected" name="protected" /><svg width="32" height="32"
+                                                viewBox="0 0 32 32" aria-hidden="true">
+                                                <rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1"
+                                                    rx="6" fill="none"></rect>
+                                                <path class="tsd-checkbox-checkmark"
+                                                    d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none"
+                                                    stroke-width="3.5" stroke-linejoin="round" fill="none"></path>
+                                            </svg><span>Protected</span></label></li>
+                                    <li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox"
+                                                id="tsd-filter-inherited" name="inherited" checked /><svg width="32"
+                                                height="32" viewBox="0 0 32 32" aria-hidden="true">
+                                                <rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1"
+                                                    rx="6" fill="none"></rect>
+                                                <path class="tsd-checkbox-checkmark"
+                                                    d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none"
+                                                    stroke-width="3.5" stroke-linejoin="round" fill="none"></path>
+                                            </svg><span>Inherited</span></label></li>
+                                </ul>
+                            </div>
+                            <div class="tsd-theme-toggle"><label class="settings-label"
+                                    for="tsd-theme">Theme</label><select id="tsd-theme">
+                                    <option value="os">OS</option>
+                                    <option value="light">Light</option>
+                                    <option value="dark">Dark</option>
+                                </select></div>
+                        </div>
+                    </details>
+                </div>
+                <details open class="tsd-accordion tsd-page-navigation">
+                    <summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            aria-hidden="true">
+                            <use href="assets/icons.svg#icon-chevronDown"></use>
+                        </svg>
+                        <h3>On This Page</h3>
+                    </summary>
+                    <div class="tsd-accordion-details"><a href="#fitalyagents"><span>Fitaly<wbr/>Agents</span></a>
+                        <ul>
+                            <li><a href="#instalación"><span>Instalación</span></a></li>
+                            <li><a href="#uso-rápido"><span>Uso rápido</span></a></li>
+                            <li>
+                                <ul>
+                                    <li><a href="#layer-2-async-tools-standalone-sin-bus"><span>Layer 2 — <wbr/>Async
+                                                <wbr/>Tools (standalone, sin bus)</span></a></li>
+                                    <li><a href="#layer-1-full-sdk-con-bus-redis"><span>Layer 1 — <wbr/>Full <wbr/>SDK con bus
+                                                <wbr/>Redis</span></a></li>
+                                </ul>
+                            </li>
+                            <li><a href="#arquitectura"><span>Arquitectura</span></a></li>
+                            <li><a href="#desarrollo"><span>Desarrollo</span></a></li>
+                            <li><a href="#stack-técnico"><span>Stack <wbr/>Técnico</span></a></li>
+                            <li><a href="#licencia"><span>Licencia</span></a></li>
+                        </ul>
+                    </div>
+                </details>
+            </div>
+            <div class="site-menu">
+                <nav id="tsd-sidebar-links" class="tsd-navigation"><a
+                        href="https://github.com/your-org/fitalyagents/blob/main/docs/guides/getting-started.md"
+                        class="tsd-nav-link">Getting Started</a><a href="https://github.com/your-org/fitalyagents"
+                        class="tsd-nav-link">GitHub</a></nav>
+                <nav class="tsd-navigation"><a href="modules.html">FitalyAgents API</a>
+                    <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+                        <li>Loading...</li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+    <footer>
+        <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p>
+    </footer>
+    <div class="overlay"></div>
+</body>
+
+</html>

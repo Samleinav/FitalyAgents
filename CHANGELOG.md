@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] — 2026-02-24
+
+### Added
+
+#### License
+- Changed from MIT to **Apache 2.0 + Commons Clause** — source-available, use freely to build products, cannot sell the SDK itself
+
+#### Core (`fitalyagents`) — DX utilities
+
+**SimpleRouter**
+- `SimpleRouter` — subscribes to `bus:TASK_AVAILABLE` and routes to `queue:<agent-id>:inbox` via `bus.lpush`
+- `routes: Record<string, string>` — maps `intent_id` → `agent_id`
+- `alwaysNotify?: string[]` — agents that always receive a copy (e.g. InteractionAgent for filler audio)
+- Replaces the manually-written `createSimpleRouter()` pattern that was re-implemented across every E2E test
+
+**AgentBundle**
+- `AgentBundle` — lifecycle manager for a group of `NexusAgent` instances and disposable resources
+- `start()` — starts all agents in registration order
+- `shutdown()` — shuts down all agents in reverse order
+- `dispose()` — calls `dispose()` on all registered disposables (audio queues, context stores, etc.)
+
+#### Dispatcher (`fitalyagents/dispatcher`) — LLM enhancements
+
+**LLMProvider interface**
+- `LLMProvider` — minimal `complete(system, user): Promise<string>` interface; wraps any LLM backend
+
+**ClaudeLLMProvider**
+- `ClaudeLLMProvider` — wraps `@anthropic-ai/sdk`; reads `ANTHROPIC_API_KEY` from env
+- Defaults to `claude-haiku-4-5-20251001` (fast + cheap for classification tasks)
+- Optional: configure `apiKey`, `model`, `maxTokens`
+
+**DispatcherBootstrapper**
+- `DispatcherBootstrapper` — generates intent training examples from agent manifests using an LLM
+- `bootstrapFromManifests(manifests)` — reads capabilities/scope/domain, calls LLM, populates intent library
+- `bootstrapFromRegistry(registry)` — reads all registered agent manifests from `AgentRegistry`
+- Idempotent: enriches existing intents rather than overwriting them
+- Capability naming: `PRODUCT_SEARCH` → intent `product_search` (automatic `UPPER_CASE` → `snake_case`)
+- Publishes `bus:INTENT_UPDATED` after each intent for hot-reload
+
+**LLMDirectClassifier**
+- `LLMDirectClassifier` — drop-in `IEmbeddingClassifier` replacement that classifies via LLM
+- `init()` — loads intent metadata (no embeddings computed)
+- `classify(text)` — sends intent list + utterance to LLM, returns `ClassifyResult`
+- `reloadIntent(intentId)` — hot-reloads a single intent's metadata
+- Parses markdown-fenced JSON from LLM responses transparently
+
+### Changed
+
+- `DispatcherBootstrapper.bootstrapFromManifests()` now published to `bus:INTENT_UPDATED` for each intent if `bus` is provided
+- Updated `docs/guides/training-the-dispatcher.md` with new Auto-Bootstrap and LLMDirectClassifier sections
+
+### Test Coverage
+
+| Package | Tests |
+|---|---|
+| `packages/core` | **212** (+19 SimpleRouter + AgentBundle) |
+| `packages/dispatcher` | **40** (+24 Bootstrapper + LLMDirectClassifier) |
+| `examples/voice-retail` | **73** (no regressions) |
+| **Total** | **325** |
+
+---
+
 ## [1.0.0] — 2026-02-24
 
 ### Added
