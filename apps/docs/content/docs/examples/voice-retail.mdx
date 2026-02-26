@@ -1,0 +1,128 @@
+---
+title: Voice Retail Pipeline
+description: Full walkthrough of a multi-agent voice pipeline with parallel tools, audio, and human approval.
+---
+
+The `examples/voice-retail` directory contains a complete multi-agent voice pipeline for a retail scenario. It demonstrates every feature of FitalyAgents working together.
+
+## Agents
+
+| Agent | Capabilities | What it does |
+|---|---|---|
+| `InteractionAgent` | — | TEN Framework voice interface; plays filler audio while tools run; reacts to ACTION_COMPLETED |
+| `WorkAgent` | PRODUCT_SEARCH, PRICE_QUERY | Runs product_search + price_check **in parallel** |
+| `OrderAgent` | ORDER_CREATE, ORDER_STATUS, ORDER_CANCEL, REFUND_CREATE | Order lifecycle; requires human approval for creates/refunds |
+
+## The parallel tools flow
+
+```
+User: "I want Nike shoes size 42"
+  │
+  ├─ InteractionAgent receives TASK_AVAILABLE
+  │   → plays filler audio: "¡Déjame buscar eso para ti!"
+  │   → displays 'thinking' gesture
+  │
+  └─ WorkAgent receives TASK_AVAILABLE (via SimpleRouter)
+      ├─ product_search({ brand: 'Nike', size: 42 }) ──┐
+      └─ price_check({ brand: 'Nike' })  ───────────────┤ parallel
+                                                        ↓ ~20ms total
+                  WorkAgent publishes bus:ACTION_COMPLETED
+                       ↓
+  InteractionAgent reacts:
+      ├─ interrupts filler audio
+      ├─ generates real response text
+      ├─ plays response segment
+      └─ displays 'happy' gesture
+```
+
+## Key source files
+
+```
+examples/voice-retail/src/
+├── agents/
+│   ├── interaction/
+│   │   ├── interaction-agent.ts      # TEN Framework voice agent
+│   │   └── mock-ten-client.ts        # Mockeable ITENClient
+│   ├── work/
+│   │   ├── work-agent.ts             # Parallel tool execution
+│   │   └── mock-tool-executor.ts     # Mockeable IToolExecutor
+│   └── order/
+│       ├── order-agent.ts            # Human approval flow
+│       └── mock-order-service.ts
+├── approval/
+│   └── webhook-handler.ts            # Express/Hono webhook
+└── e2e/
+    ├── pipeline.e2e.test.ts          # Full pipeline (5 tests)
+    ├── order-approval.e2e.test.ts    # Approval flow (4 tests)
+    ├── order-lifecycle.e2e.test.ts   # Order CRUD (7 tests)
+    ├── cancel-chain.e2e.test.ts      # Task chaining & cancel (7 tests)
+    └── multi-session.e2e.test.ts     # Concurrency (17 tests)
+```
+
+## Running the example
+
+```bash
+# From repo root
+pnpm install
+pnpm build
+
+# Run all E2E tests
+npx vitest run --root examples/voice-retail
+```
+
+## Test coverage
+
+73 tests, all passing:
+
+| Suite | Tests | What it covers |
+|---|---|---|
+| `pipeline.e2e.test.ts` | 5 | Full speech→classify→work→audio pipeline, barge-in, latency |
+| `order-approval.e2e.test.ts` | 4 | Approve, reject, timeout, refund approval |
+| `order-lifecycle.e2e.test.ts` | 7 | Create, status, cancel, multi-session isolation |
+| `cancel-chain.e2e.test.ts` | 7 | Task chains, cancel before run, failure propagation |
+| `multi-session.e2e.test.ts` | 17 | 10 concurrent sessions, latency scaling, context isolation |
+| `interaction-agent.test.ts` | 9 | Unit tests for InteractionAgent |
+| `work-agent.test.ts` | 12 | Unit tests for WorkAgent |
+| `order-agent.test.ts` | 12 | Unit tests for OrderAgent |
+
+## The SimpleRouter setup
+
+The example uses `SimpleRouter` to route tasks without manual wiring:
+
+```typescript
+const router = new SimpleRouter({
+  bus,
+  routes: {
+    product_search:            'work-agent',
+    product_search_with_price: 'work-agent',
+    price_query:               'work-agent',
+    order_query:               'work-agent',
+  },
+  alwaysNotify: ['interaction-agent'],  // IA gets a copy for filler audio
+})
+```
+
+## Injecting dependencies
+
+All external services are injected via interfaces — the agents are 100% decoupled:
+
+```typescript
+// In tests
+const workAgent = new WorkAgent({ bus, toolExecutor: new MockToolExecutor() })
+
+// In production
+const workAgent = new WorkAgent({ bus, toolExecutor: new LangChainToolExecutor() })
+```
+
+Same pattern for `ITENClient` (InteractionAgent) and `IOrderService` (OrderAgent).
+
+## Performance
+
+With mock tools (20ms simulated latency each):
+
+| Metric | Value |
+|---|---|
+| p50 latency (10 iterations) | ~30ms |
+| p95 latency | ~40ms |
+| 10 concurrent sessions | ~15ms total |
+| Full pipeline (speech→audio) | ~500ms |

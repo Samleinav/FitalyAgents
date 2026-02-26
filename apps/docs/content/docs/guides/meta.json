@@ -1,0 +1,11 @@
+{
+  "title": "Guides",
+  "pages": [
+    "first-agent",
+    "async-tools",
+    "simple-router",
+    "intent-training",
+    "human-approval",
+    "session-management"
+  ]
+}

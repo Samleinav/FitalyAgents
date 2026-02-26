@@ -1,7 +1,7 @@
 {
     "name": "fitalyagents",
     "version": "1.0.0",
-    "description": "SDK for async parallel tool orchestration and intelligent agent dispatch",
+    "description": "Multi-agent framework for async parallel tool orchestration and intelligent task dispatch",
     "type": "module",
     "exports": {
         ".": {

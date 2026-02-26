@@ -1,0 +1,109 @@
+---
+title: Changelog
+description: All notable changes to FitalyAgents, newest first.
+full: true
+---
+
+## v1.1.0 — 2026-02-24
+
+### License
+
+Changed from MIT to **Apache 2.0 + Commons Clause** — source-available, use freely to build products, cannot sell the framework itself as a product.
+
+### New — DX utilities (core)
+
+**`SimpleRouter`**
+Subscribes to `bus:TASK_AVAILABLE` and routes to `queue:<agent-id>:inbox` automatically. Replaces the manually-written `createSimpleRouter()` pattern that every project had to re-implement.
+
+```typescript
+const router = new SimpleRouter({
+  bus,
+  routes: { product_search: 'work-agent', order_create: 'order-agent' },
+  alwaysNotify: ['interaction-agent'],
+})
+router.start()
+```
+
+**`AgentBundle`**
+Lifecycle manager for multiple agents and disposables.
+
+```typescript
+const bundle = new AgentBundle({ agents: [ia, wa, oa], disposables: [audioQueue] })
+await bundle.start()
+await bundle.shutdown()
+bundle.dispose()
+```
+
+### New — LLM enhancements (dispatcher)
+
+**`LLMProvider` interface** — `complete(system, user): Promise<string>` — wraps any LLM backend.
+
+**`ClaudeLLMProvider`** — wraps `@anthropic-ai/sdk`, defaults to `claude-haiku-4-5-20251001`.
+
+**`DispatcherBootstrapper`** — generates intent training examples from agent manifests using an LLM. Idempotent: enriches existing intents, never overwrites.
+
+```typescript
+const bootstrapper = new DispatcherBootstrapper({ intentLibrary, llm: new ClaudeLLMProvider() })
+await bootstrapper.bootstrapFromManifests([agentManifest])
+```
+
+**`LLMDirectClassifier`** — drop-in `IEmbeddingClassifier` replacement. No embeddings; classifies via LLM directly.
+
+```typescript
+const classifier = new LLMDirectClassifier({ llm: new ClaudeLLMProvider(), intentLibrary })
+await classifier.init()
+```
+
+### Test coverage
+
+| Package | Tests |
+|---|---|
+| `packages/core` | 212 (+19) |
+| `packages/dispatcher` | 40 (+24) |
+| `examples/voice-retail` | 73 |
+| **Total** | **325** |
+
+---
+
+## v1.0.0 — 2026-02-24
+
+Initial public release. Full agent framework with:
+
+### Core (`fitalyagents`)
+
+- **`InMemoryBus` / `RedisBus`** — event bus with pub/sub and Redis-style queues
+- **`NexusAgent`** — base class for all agents; `process()` lifecycle
+- **`AgentRegistry`** — register and query agents by scope, capability, domain
+- **`InMemoryContextStore`** — session-scoped key/value store with access control
+- **`InMemoryLockManager`** — distributed-style locks with TTL
+- **`InMemorySessionManager`** — full session lifecycle; priority groups; pause/resume
+- **`InMemoryTaskQueue`** — task submission, claim, priority ordering
+- **`CapabilityRouter`** — routes tasks by capability match
+- **`InMemoryAudioQueueService`** — priority audio queue with barge-in support
+- **`InMemoryApprovalQueue`** — human-in-the-loop with timeout and webhook support
+
+### Async Tools (`@fitalyagents/asynctools`)
+
+- **`ToolRegistry`** — type-safe tool registration with Zod validation
+- **`ExecutorPool`** — parallel tool execution with injection strategies
+- **`AsyncAgent`** — wraps any LLM to add async parallel tool execution
+- Execution modes: `sync`, `async`, `fire_forget`, `deferred`
+- Injection strategies: `inject_when_all`, `inject_when_ready`, `inject_on_timeout`
+
+### Dispatcher (`fitalyagents/dispatcher`)
+
+- **`NodeDispatcher`** — classifies speech events and publishes `TASK_AVAILABLE`
+- **`InMemoryEmbeddingClassifier`** — embedding-based cosine similarity classifier
+- **`InMemoryLLMFallbackAgent`** — LLM-powered fallback for low-confidence classifications
+- **`InMemoryIntentLibrary`** — intent definitions and example storage
+
+### Voice Retail example
+
+- `InteractionAgent`, `WorkAgent`, `OrderAgent` — full production-grade agents
+- `createApprovalWebhookHandler` — Express/Hono webhook for approval decisions
+- 73 E2E tests covering full pipeline, order lifecycle, multi-session, cancel chains
+
+### Documentation
+
+- 5 guides: getting-started, asynctools, add-new-agent, training-the-dispatcher, rust-dispatcher
+- TypeDoc API reference (`pnpm typedoc`)

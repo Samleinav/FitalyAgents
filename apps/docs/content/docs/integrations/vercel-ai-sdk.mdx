@@ -1,0 +1,198 @@
+---
+title: Vercel AI SDK
+description: Use the Vercel AI SDK as the LLM backend and tool layer for FitalyAgents.
+---
+
+The [Vercel AI SDK](https://sdk.vercel.ai) (`ai` package) provides a unified interface over multiple LLM providers (OpenAI, Anthropic, Google, Mistral, and more) with first-class streaming support. You can use it as the **LLM backend for the Dispatcher** or to power individual agents.
+
+## Install
+
+```bash
+pnpm add ai
+# plus one provider package:
+pnpm add @ai-sdk/openai        # OpenAI / Azure
+pnpm add @ai-sdk/anthropic     # Claude
+pnpm add @ai-sdk/google        # Gemini
+```
+
+## LLM provider for the Dispatcher
+
+Implement `LLMProvider` using `generateText`:
+
+```typescript
+import { type LLMProvider, type ClassificationResult } from 'fitalyagents/dispatcher'
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
+
+export class VercelAIProvider implements LLMProvider {
+  constructor(private model = openai('gpt-4o-mini')) {}
+
+  async classify(utterance: string, agentManifests: string): Promise<ClassificationResult> {
+    const { text } = await generateText({
+      model: this.model,
+      system: `You are an intent classifier. Return only JSON:
+        { "agent_id": "...", "intent_id": "...", "confidence": 0.0-1.0 }
+        Available agents:\n${agentManifests}`,
+      prompt: utterance,
+    })
+
+    return JSON.parse(text)
+  }
+}
+```
+
+Swap the model at construction time to change providers without touching the rest of your code:
+
+```typescript
+import { anthropic } from '@ai-sdk/anthropic'
+import { google } from '@ai-sdk/google'
+
+// Claude
+new VercelAIProvider(anthropic('claude-3-5-haiku-20241022'))
+
+// Gemini
+new VercelAIProvider(google('gemini-2.0-flash'))
+```
+
+Register with `DispatcherBootstrapper`:
+
+```typescript
+import { DispatcherBootstrapper } from 'fitalyagents/dispatcher'
+
+const dispatcher = new DispatcherBootstrapper({
+  bus,
+  llmProvider: new VercelAIProvider(),
+  agents: [interactionAgent, workAgent, orderAgent],
+})
+
+dispatcher.start()
+```
+
+## Use `tool()` definitions as async tools
+
+The AI SDK `tool()` schema is compatible with FitalyAgents' `AsyncTool`. Wrap them with a thin adapter:
+
+```typescript
+import { tool } from 'ai'
+import { z } from 'zod'
+import { type AsyncTool } from 'fitalyagents'
+
+const getWeather = tool({
+  description: 'Get current weather for a city',
+  parameters: z.object({ city: z.string() }),
+  execute: async ({ city }) => {
+    const res = await fetch(`https://wttr.in/${city}?format=j1`)
+    const data = await res.json()
+    return { temperature: data.current_condition[0].temp_C }
+  },
+})
+
+function fromAISDKTool(name: string, t: ReturnType<typeof tool>): AsyncTool {
+  return {
+    name,
+    async execute(input: unknown) {
+      return t.execute!(input as never, { messages: [], toolCallId: name })
+    },
+  }
+}
+
+class WeatherAgent extends NexusAgent {
+  manifest = { agent_id: 'weather-agent', capabilities: ['WEATHER'], /* ... */ }
+
+  protected asyncTools = [fromAISDKTool('get_weather', getWeather)]
+}
+```
+
+## Streaming responses through the bus
+
+For long-running responses, stream partial text events to the bus so subscribers can display incremental output:
+
+```typescript
+import { streamText } from 'ai'
+import { openai } from '@ai-sdk/openai'
+
+class StreamingAgent extends NexusAgent {
+  manifest = { agent_id: 'streaming-agent', capabilities: ['CHAT'], /* ... */ }
+
+  async process(task) {
+    const { textStream } = streamText({
+      model: openai('gpt-4o-mini'),
+      prompt: task.slots.message as string,
+    })
+
+    let fullText = ''
+
+    for await (const chunk of textStream) {
+      fullText += chunk
+      // Emit partial updates for real-time UI
+      await this.bus.publish('bus:AGENT_STREAM_CHUNK', {
+        session_id: task.session_id,
+        agent_id: this.manifest.agent_id,
+        chunk,
+      })
+    }
+
+    return { status: 'success', result: { text: fullText } }
+  }
+}
+```
+
+Subscribe on the client or interaction layer:
+
+```typescript
+bus.subscribe('bus:AGENT_STREAM_CHUNK', ({ session_id, chunk }) => {
+  // Push to WebSocket, SSE, or TTS pipeline
+  ttsStream.write(chunk)
+})
+```
+
+## Structured output with `generateObject`
+
+Use `generateObject` to get typed, schema-validated results from an LLM inside an agent:
+
+```typescript
+import { generateObject } from 'ai'
+import { openai } from '@ai-sdk/openai'
+import { z } from 'zod'
+
+const OrderSchema = z.object({
+  items: z.array(z.object({ sku: z.string(), qty: z.number() })),
+  delivery_date: z.string().optional(),
+})
+
+class ParseAgent extends NexusAgent {
+  manifest = { agent_id: 'parse-agent', capabilities: ['ORDER_PARSE'], /* ... */ }
+
+  async process(task) {
+    const { object } = await generateObject({
+      model: openai('gpt-4o'),
+      schema: OrderSchema,
+      prompt: `Extract order details from: "${task.slots.utterance}"`,
+    })
+
+    return { status: 'success', result: object }
+  }
+}
+```
+
+## Provider-agnostic agent
+
+Because `LanguageModelV1` is the common interface, you can inject the model at bootstrap time:
+
+```typescript
+import { type LanguageModelV1 } from 'ai'
+
+class FlexibleAgent extends NexusAgent {
+  constructor(private model: LanguageModelV1, bus: InMemoryBus) {
+    super(bus)
+  }
+
+  async process(task) {
+    const { text } = await generateText({ model: this.model, prompt: task.slots.query as string })
+    return { status: 'success', result: { text } }
+  }
+}
+
+// At startup — swap without touching agent code:
+const agent = new FlexibleAgent(anthropic('claude-3-5-sonnet-20241022'), bus)
+```

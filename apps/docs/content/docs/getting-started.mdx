@@ -1,0 +1,149 @@
+---
+title: Quick Start
+description: Get a full multi-agent pipeline running in 10 minutes.
+---
+
+## Install
+
+```bash
+npm install fitalyagents
+```
+
+For the intent dispatcher:
+
+```bash
+npm install fitalyagents           # core framework
+# @fitalyagents/dispatcher is re-exported via fitalyagents/dispatcher
+```
+
+## Step 1 — Create the bus
+
+The bus is the backbone. All agents and the dispatcher communicate through it.
+
+```typescript
+import { InMemoryBus } from 'fitalyagents'
+
+// In-memory for development and tests
+const bus = new InMemoryBus()
+
+// For production use Redis:
+// import { createBus } from 'fitalyagents'
+// const bus = await createBus({ redisUrl: process.env.REDIS_URL })
+```
+
+## Step 2 — Define an agent
+
+Extend `NexusAgent` and implement `process()`. The framework calls your method when a task arrives.
+
+```typescript
+import { NexusAgent } from 'fitalyagents'
+import type { TaskPayloadEvent, TaskResultEvent } from 'fitalyagents'
+
+class ProductAgent extends NexusAgent {
+  manifest = {
+    agent_id: 'product-agent',
+    description: 'Searches products and checks prices',
+    capabilities: ['PRODUCT_SEARCH', 'PRICE_QUERY'],
+    scope: 'commerce',
+    domain: 'customer_facing',
+    // ...other manifest fields
+  }
+
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    const { intent_id, slots, session_id } = task
+
+    if (intent_id === 'product_search') {
+      const results = await this.searchProducts(slots)
+      return { status: 'completed', session_id, result: results }
+    }
+
+    return { status: 'failed', session_id, error: 'Unknown intent' }
+  }
+}
+```
+
+## Step 3 — Wire it with SimpleRouter
+
+`SimpleRouter` routes `bus:TASK_AVAILABLE` events to the correct agent inbox automatically.
+
+```typescript
+import { SimpleRouter, AgentBundle } from 'fitalyagents'
+
+const agent = new ProductAgent({ bus })
+const router = new SimpleRouter({
+  bus,
+  routes: {
+    product_search: 'product-agent',
+    price_query: 'product-agent',
+  },
+})
+
+const bundle = new AgentBundle({ agents: [agent] })
+
+// Start everything
+router.start()
+await bundle.start()
+```
+
+## Step 4 — Add the dispatcher
+
+The dispatcher classifies raw user utterances and publishes `bus:TASK_AVAILABLE`.
+
+```typescript
+import { NodeDispatcher, InMemoryEmbeddingClassifier, InMemoryIntentLibrary } from 'fitalyagents/dispatcher'
+
+const intentLibrary = new InMemoryIntentLibrary()
+
+// Add intent examples manually...
+await intentLibrary.createIntent({
+  intent_id: 'product_search',
+  domain_required: 'customer_facing',
+  scope_hint: 'commerce',
+  capabilities_required: ['PRODUCT_SEARCH'],
+  initial_examples: [
+    'find Nike shoes',
+    'search for red sneakers',
+    'show me running shoes',
+  ],
+})
+
+// ...or auto-generate them from your agent manifest with an LLM:
+// import { DispatcherBootstrapper, ClaudeLLMProvider } from 'fitalyagents/dispatcher'
+// const bootstrapper = new DispatcherBootstrapper({ intentLibrary, llm: new ClaudeLLMProvider() })
+// await bootstrapper.bootstrapFromManifests([agent.manifest])
+
+const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
+await classifier.init()
+
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
+await dispatcher.start()
+```
+
+## Step 5 — Send a message
+
+```typescript
+// Simulate a user utterance (normally from your STT or chat input)
+await bus.publish('bus:SPEECH_FINAL', {
+  event: 'SPEECH_FINAL',
+  session_id: 'user_session_1',
+  text: 'I want to find Nike shoes size 42',
+  timestamp: Date.now(),
+})
+```
+
+The pipeline runs automatically:
+1. Dispatcher classifies → `product_search`
+2. SimpleRouter routes to `product-agent` inbox
+3. `ProductAgent.process()` executes
+4. Result published on `bus:ACTION_COMPLETED`
+
+## Full example
+
+See the [Voice Retail example](/docs/examples/voice-retail) for a complete multi-agent pipeline with parallel tools, audio, and human approval.
+
+## Next steps
+
+- [Building your first agent](/docs/guides/first-agent) — detailed agent creation guide
+- [Async tools](/docs/guides/async-tools) — run tools in parallel
+- [Training the dispatcher](/docs/guides/intent-training) — intent classification in depth
+- [Human approval flows](/docs/guides/human-approval) — orders and sensitive actions

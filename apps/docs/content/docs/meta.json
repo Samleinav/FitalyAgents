@@ -1,0 +1,12 @@
+{
+  "title": "FitalyAgents",
+  "pages": [
+    "index",
+    "getting-started",
+    "architecture",
+    "guides",
+    "integrations",
+    "examples",
+    "changelog"
+  ]
+}

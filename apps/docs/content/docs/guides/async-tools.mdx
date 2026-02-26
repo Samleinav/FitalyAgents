@@ -1,0 +1,158 @@
+---
+title: Async Parallel Tools
+description: Execute multiple tools simultaneously and inject results as they arrive.
+---
+
+`@fitalyagents/asynctools` (Layer 2) solves the fundamental problem with LLM tool calling: by default, tools run one at a time. FitalyAgents runs them **all at once**.
+
+## Installation (standalone)
+
+```bash
+npm install @fitalyagents/asynctools
+# or use via the main package:
+import { ... } from 'fitalyagents/asynctools'
+```
+
+## Define tools
+
+```typescript
+import { ToolRegistry } from 'fitalyagents/asynctools'
+
+const registry = new ToolRegistry()
+
+registry.register({
+  tool_id: 'product_search',
+  description: 'Search product catalog',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string' },
+      max_price: { type: 'number' },
+    },
+    required: ['query'],
+  },
+  executor: {
+    type: 'function',
+    fn: async (input) => {
+      // your real implementation
+      return { results: [{ name: 'Nike Air Max', price: 129.99 }] }
+    },
+  },
+  execution_mode: 'async',
+  injection_strategy: 'inject_when_all',
+  timeout_ms: 5000,
+})
+
+registry.register({
+  tool_id: 'price_check',
+  description: 'Get current price with discounts',
+  executor: {
+    type: 'function',
+    fn: async (input) => ({ base_price: 129.99, discount: 15, final_price: 110.49 }),
+  },
+  execution_mode: 'async',
+  injection_strategy: 'inject_when_all',
+  timeout_ms: 5000,
+})
+```
+
+## Execute in parallel
+
+```typescript
+import { ExecutorPool } from 'fitalyagents/asynctools'
+
+const pool = new ExecutorPool({ registry })
+
+// Both tools fire simultaneously
+const results = await pool.executeAll([
+  { tool_id: 'product_search', input: { query: 'Nike shoes' } },
+  { tool_id: 'price_check', input: { brand: 'Nike' } },
+])
+
+// results.product_search → { results: [...] }
+// results.price_check    → { base_price: ..., final_price: ... }
+```
+
+## Execution modes
+
+### `async` — fire and collect
+
+Tool fires immediately. With `inject_when_all`, waits for all tools in the batch before returning.
+
+```typescript
+// Tool A (200ms) + Tool B (300ms) = ~300ms total (not 500ms)
+```
+
+### `inject_when_ready` — stream results
+
+Each tool injects its result as soon as it completes:
+
+```typescript
+const stream = pool.executeStream([
+  { tool_id: 'product_search', input: { query: 'Nike' } },
+  { tool_id: 'price_check', input: { brand: 'Nike' } },
+])
+
+for await (const { tool_id, result } of stream) {
+  console.log(`${tool_id} done:`, result)
+}
+```
+
+### `inject_on_timeout` — partial results are acceptable
+
+```typescript
+registry.register({
+  tool_id: 'slow_enrichment',
+  execution_mode: 'async',
+  injection_strategy: 'inject_on_timeout',
+  timeout_ms: 2000,  // return whatever we have after 2s
+  // ...
+})
+```
+
+## Wrap any LLM agent
+
+`AsyncAgent` adds parallel tool execution to any LLM:
+
+```typescript
+import { AsyncAgent } from 'fitalyagents/asynctools'
+
+const agent = new AsyncAgent({
+  registry,
+  // inner: any object with run(messages) → ToolCallRequest[]
+  inner: {
+    async run(messages) {
+      // call your LLM (OpenAI, Claude, Gemini...)
+      const response = await openai.chat.completions.create({ messages })
+      return extractToolCalls(response)
+    },
+  },
+})
+
+const result = await agent.run([
+  { role: 'user', content: 'Find Nike shoes and check the price' },
+])
+// Both tools ran in parallel automatically
+```
+
+## Use within a NexusAgent
+
+```typescript
+class WorkAgent extends NexusAgent {
+  private pool: ExecutorPool
+
+  constructor(options: { bus: IEventBus; registry: ToolRegistry }) {
+    super(options)
+    this.pool = new ExecutorPool({ registry: options.registry })
+  }
+
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    const results = await this.pool.executeAll([
+      { tool_id: 'product_search', input: task.slots },
+      { tool_id: 'price_check', input: { brand: task.slots?.brand } },
+    ])
+
+    return { status: 'completed', result: results, /* ... */ }
+  }
+}
+```

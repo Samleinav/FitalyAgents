@@ -1,7 +1,7 @@
 /**
  * @module fitalyagents
  *
- * SDK for async parallel tool orchestration and intelligent agent dispatch.
+ * Multi-agent framework for async parallel tool orchestration and intelligent task dispatch.
  *
  * @example
  * ```typescript

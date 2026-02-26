@@ -1,0 +1,179 @@
+---
+title: Training the Dispatcher
+description: Intent classification, training examples, auto-bootstrap with LLM, and the LLMDirectClassifier.
+---
+
+The dispatcher converts raw user text into structured `TASK_AVAILABLE` events. It uses an intent library to decide which agent handles each utterance.
+
+## How classification works
+
+```
+User: "Where's my order?"
+  ↓
+Dispatcher: embed("Where's my order?")
+  ↓
+Cosine similarity against known intents:
+  order_status:    0.92 ✓  → route to OrderAgent
+  product_search:  0.31
+  refund_create:   0.41
+```
+
+## Define intents manually
+
+```typescript
+import { InMemoryIntentLibrary } from 'fitalyagents/dispatcher'
+
+const intentLibrary = new InMemoryIntentLibrary()
+
+await intentLibrary.createIntent({
+  intent_id: 'order_status',
+  domain_required: 'customer_facing',
+  scope_hint: 'orders',
+  capabilities_required: ['ORDER_STATUS'],
+  initial_examples: [
+    "Where is my order?",
+    "What's the status of my package?",
+    "Has my order shipped yet?",
+    "When will my order arrive?",
+    "Track my delivery",
+    "Did my order go through?",
+    "Check my order status",
+    "I want to know about my shipment",
+  ],
+})
+```
+
+### Writing good examples
+
+**Do:**
+- Cover different phrasings of the same intent
+- Include short and long utterances
+- Include questions and statements
+- Use domain vocabulary ("refund", "tracking", "SKU")
+
+**Don't:**
+- Use generic phrases that apply to any intent ("help me", "I need something")
+- Duplicate examples across different intents — this confuses the classifier
+- Use fewer than 5 examples per intent
+
+---
+
+## Auto-bootstrap with LLM
+
+Instead of writing examples by hand, `DispatcherBootstrapper` generates them from your agent manifests.
+
+```typescript
+import { DispatcherBootstrapper, ClaudeLLMProvider } from 'fitalyagents/dispatcher'
+
+const bootstrapper = new DispatcherBootstrapper({
+  intentLibrary,
+  llm: new ClaudeLLMProvider(), // reads ANTHROPIC_API_KEY from env
+  examplesPerCapability: 8,     // default
+})
+
+// From explicit manifests
+await bootstrapper.bootstrapFromManifests([
+  {
+    agent_id: 'order-agent',
+    capabilities: ['ORDER_CREATE', 'ORDER_STATUS', 'ORDER_CANCEL'],
+    scope: 'orders',
+    domain: 'customer_facing',
+    description: 'Manages order lifecycle',
+    // ...
+  },
+])
+
+// Or from AgentRegistry (reads all registered agents)
+await bootstrapper.bootstrapFromRegistry(registry)
+```
+
+The bootstrapper:
+1. Converts `ORDER_STATUS` → intent ID `order_status`
+2. Calls the LLM with the agent's context (description, scope, domain)
+3. LLM generates 8 realistic example utterances
+4. If the intent already exists, **enriches** it (never overwrites)
+5. Publishes `bus:INTENT_UPDATED` for hot-reload
+
+### Bring your own LLM
+
+```typescript
+import type { LLMProvider } from 'fitalyagents/dispatcher'
+
+const myLLM: LLMProvider = {
+  async complete(system: string, user: string): Promise<string> {
+    // OpenAI, Gemini, local Ollama, etc.
+    return await myClient.chat(system, user)
+  },
+}
+
+const bootstrapper = new DispatcherBootstrapper({ intentLibrary, llm: myLLM })
+```
+
+---
+
+## LLMDirectClassifier
+
+An alternative classifier that asks the LLM to classify every utterance directly. No embeddings required.
+
+```typescript
+import { LLMDirectClassifier, ClaudeLLMProvider } from 'fitalyagents/dispatcher'
+
+const classifier = new LLMDirectClassifier({
+  llm: new ClaudeLLMProvider(),
+  intentLibrary,
+})
+
+await classifier.init() // loads intent metas — no embedding computation
+
+const result = await classifier.classify("I want Nike shoes size 42")
+// → { type: 'confident', intent_id: 'product_search', confidence: 0.93, ... }
+```
+
+Use it in `NodeDispatcher` exactly like the embedding classifier:
+
+```typescript
+const dispatcher = new NodeDispatcher({
+  bus,
+  classifier,   // ← LLMDirectClassifier or InMemoryEmbeddingClassifier, same interface
+  fallbackAgent,
+  intentLibrary,
+})
+```
+
+### Which classifier to use
+
+| | `InMemoryEmbeddingClassifier` | `LLMDirectClassifier` |
+|---|---|---|
+| Latency | ~1ms | ~200–500ms |
+| Setup | Needs training examples | Works with intent descriptions only |
+| Multilingual | Depends on model | Works out of the box |
+| Cost | Free (local) | Per-call API cost |
+| Best for | Production at scale | Prototyping, low volume, edge cases |
+
+---
+
+## Hot reload
+
+The classifier subscribes to `bus:INTENT_UPDATED` and reloads intents without restarting:
+
+```typescript
+await bus.publish('bus:INTENT_UPDATED', {
+  event: 'INTENT_UPDATED',
+  intent_id: 'order_status',
+  examples: [...newExamples],
+})
+// Dispatcher re-embeds and updates routing table automatically
+```
+
+`DispatcherBootstrapper` publishes this event automatically after every bootstrap.
+
+---
+
+## Confidence thresholds
+
+| Confidence | Behavior |
+|---|---|
+| ≥ 0.85 | Route directly to agent (`type: 'confident'`) |
+| < 0.85 | Fall through to `LLMFallbackAgent` (`type: 'fallback'`) |
+
+The fallback agent receives the raw text, tries to resolve it with an LLM, and either publishes a new `TASK_AVAILABLE` (with an updated intent + `INTENT_UPDATED` for future training) or asks the user to clarify.

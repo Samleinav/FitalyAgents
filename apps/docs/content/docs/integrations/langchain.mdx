@@ -1,0 +1,181 @@
+---
+title: LangChain
+description: Use LangChain tools, chains, and chat models inside FitalyAgents.
+---
+
+[LangChain](https://js.langchain.com) provides a rich ecosystem of tools, retrievers, memory, and chain primitives. FitalyAgents integrates with it at three layers: **tools**, **LLM provider**, and **memory**.
+
+## Install
+
+```bash
+pnpm add langchain @langchain/core @langchain/openai
+# or for Anthropic models
+pnpm add @langchain/anthropic
+```
+
+## Use LangChain tools as async tools
+
+Any LangChain `StructuredTool` or `DynamicStructuredTool` can be wrapped and passed to `asyncTools` in a NexusAgent.
+
+```typescript
+import { NexusAgent, type AsyncTool } from 'fitalyagents'
+import { TavilySearchResults } from '@langchain/community/tools/tavily_search'
+import { Calculator } from '@langchain/community/tools/calculator'
+
+function wrapLangChainTool(lcTool: { name: string; invoke(input: unknown): Promise<string> }): AsyncTool {
+  return {
+    name: lcTool.name,
+    async execute(input: unknown) {
+      const result = await lcTool.invoke(input)
+      return { result }
+    },
+  }
+}
+
+class ResearchAgent extends NexusAgent {
+  manifest = {
+    agent_id: 'research-agent',
+    capabilities: ['SEARCH', 'CALCULATE'],
+    requires_human_approval: false,
+    priority_group: 1,
+  }
+
+  protected asyncTools = [
+    wrapLangChainTool(new TavilySearchResults({ maxResults: 3 })),
+    wrapLangChainTool(new Calculator()),
+  ]
+}
+```
+
+Tools run in parallel automatically via `asyncTools` — each invocation is independent and non-blocking.
+
+## LangChain as the Dispatcher LLM provider
+
+Implement the `LLMProvider` interface using any LangChain chat model:
+
+```typescript
+import { type LLMProvider, type ClassificationResult } from 'fitalyagents/dispatcher'
+import { ChatOpenAI } from '@langchain/openai'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
+
+export class LangChainLLMProvider implements LLMProvider {
+  private model: ChatOpenAI
+
+  constructor(modelName = 'gpt-4o-mini') {
+    this.model = new ChatOpenAI({ model: modelName, temperature: 0 })
+  }
+
+  async classify(utterance: string, agentManifests: string): Promise<ClassificationResult> {
+    const response = await this.model.invoke([
+      new SystemMessage(
+        `You are an intent classifier. Given this utterance, return JSON:
+        { "agent_id": "...", "intent_id": "...", "confidence": 0.0-1.0 }
+        Available agents: ${agentManifests}`
+      ),
+      new HumanMessage(utterance),
+    ])
+
+    return JSON.parse(response.content as string)
+  }
+}
+```
+
+Register it with `DispatcherBootstrapper`:
+
+```typescript
+import { DispatcherBootstrapper } from 'fitalyagents/dispatcher'
+
+const dispatcher = new DispatcherBootstrapper({
+  bus,
+  llmProvider: new LangChainLLMProvider('gpt-4o'),
+  agents: [researchAgent, orderAgent],
+})
+
+dispatcher.start()
+```
+
+## Use LangChain memory with session context
+
+Bind a `BufferMemory` per session using `InMemorySessionManager`:
+
+```typescript
+import { BufferMemory } from 'langchain/memory'
+import { InMemorySessionManager } from 'fitalyagents'
+
+const sessionManager = new InMemorySessionManager()
+const memories = new Map<string, BufferMemory>()
+
+function getMemory(sessionId: string): BufferMemory {
+  if (!memories.has(sessionId)) {
+    memories.set(sessionId, new BufferMemory({ returnMessages: true }))
+  }
+  return memories.get(sessionId)!
+}
+
+// Inside an agent's process():
+async process(task) {
+  const session = await sessionManager.getSession(task.session_id)
+  const memory = getMemory(task.session_id)
+
+  const history = await memory.loadMemoryVariables({})
+
+  // Use history.history in your LangChain chain...
+  const chain = new LLMChain({ llm: model, memory })
+  const result = await chain.call({ input: task.slots.query })
+
+  return { status: 'success', result: { answer: result.text } }
+}
+```
+
+## Use a LangChain LCEL chain inside an agent
+
+For complex multi-step pipelines, compose a chain with LCEL and call it from `process()`:
+
+```typescript
+import { ChatPromptTemplate } from '@langchain/core/prompts'
+import { StringOutputParser } from '@langchain/core/output_parsers'
+import { ChatAnthropic } from '@langchain/anthropic'
+
+const model = new ChatAnthropic({ model: 'claude-3-5-haiku-20241022' })
+
+const chain = ChatPromptTemplate.fromMessages([
+  ['system', 'You are a helpful assistant for a retail store.'],
+  ['human', '{question}'],
+])
+  .pipe(model)
+  .pipe(new StringOutputParser())
+
+class SupportAgent extends NexusAgent {
+  manifest = { agent_id: 'support-agent', capabilities: ['FAQ'], /* ... */ }
+
+  async process(task) {
+    const answer = await chain.invoke({ question: task.slots.question })
+    return { status: 'success', result: { answer } }
+  }
+}
+```
+
+## RAG with a LangChain retriever
+
+Plug a vector store retriever into an agent's async tools:
+
+```typescript
+import { MemoryVectorStore } from 'langchain/vectorstores/memory'
+import { OpenAIEmbeddings } from '@langchain/openai'
+import { Document } from '@langchain/core/documents'
+
+const vectorStore = await MemoryVectorStore.fromDocuments(
+  [new Document({ pageContent: 'Return policy: 30 days.' })],
+  new OpenAIEmbeddings()
+)
+
+const retrieverTool: AsyncTool = {
+  name: 'knowledge_base',
+  async execute({ query }: { query: string }) {
+    const docs = await vectorStore.similaritySearch(query, 3)
+    return { documents: docs.map(d => d.pageContent) }
+  },
+}
+```
+
+Pass `retrieverTool` to `asyncTools` as shown in the first section.

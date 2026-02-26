@@ -1,0 +1,116 @@
+---
+title: Session Management
+description: Track concurrent user sessions with priority groups, pause/resume, and context isolation.
+---
+
+`InMemorySessionManager` tracks all active sessions and provides priority-based management — critical for multi-user or multi-tenant deployments.
+
+## Create and manage sessions
+
+```typescript
+import { InMemorySessionManager } from 'fitalyagents'
+
+const sessions = new InMemorySessionManager()
+
+// Create a session
+await sessions.createSession('sess_001', { userId: 'user_42' })
+
+// Get session info
+const session = await sessions.getSession('sess_001')
+// → { session_id: 'sess_001', status: 'active', priority_group: 1, ... }
+
+// Terminate
+await sessions.terminateSession('sess_001')
+```
+
+## Priority groups
+
+Sessions are assigned to priority groups that affect scheduling:
+
+| Group | Value | Who |
+|---|---|---|
+| Social / group | `0` | Shared public terminals, kiosks |
+| Individual | `1` | Default — regular users |
+| Employee | `2` | Staff, managers, internal tools |
+
+```typescript
+// Assign a priority group
+await sessions.setPriorityGroup('sess_emp', 2) // employee
+
+// List all sessions in a group (non-terminated, including paused)
+const empSessions = await sessions.listByPriorityGroup(2)
+```
+
+## Employee interrupt protocol
+
+Higher-priority sessions can pause lower-priority ones:
+
+```typescript
+// Manager needs to take over (pauses current session gracefully)
+await sessions.pauseSession('sess_customer', 'sess_manager')
+
+// Conversation with manager completes
+await sessions.resumeSession('sess_customer')
+```
+
+During a paused session, the agent skips processing tasks for that session.
+
+## Context isolation
+
+Each session has its own `ContextStore` — no data leaks between sessions:
+
+```typescript
+import { InMemoryContextStore } from 'fitalyagents'
+
+const contextStore = new InMemoryContextStore()
+
+// Session A writes
+await contextStore.set('sess_A', 'cart', { items: ['shoe_42'] })
+
+// Session B cannot see it
+const cartB = await contextStore.get('sess_B', 'cart')
+// → null
+```
+
+### Access control
+
+Define what each agent can read/write via the manifest:
+
+```typescript
+manifest = {
+  context_access: {
+    read: ['*'],                   // can read all keys
+    write: ['last_action'],        // can only write 'last_action'
+    forbidden: ['payment_info'],   // never allowed
+  },
+}
+```
+
+```typescript
+import { enforceAccess } from 'fitalyagents'
+
+// Throws AccessDeniedError if the agent tries to write 'payment_info'
+enforceAccess(manifest.context_access, 'write', 'payment_info')
+```
+
+## Cleanup hooks
+
+```typescript
+const sessions = new InMemorySessionManager({
+  onTerminated: async (sessionId) => {
+    // Clean up resources for this session
+    await contextStore.deleteSession(sessionId)
+    await audioQueue.clearSession(sessionId)
+  },
+})
+```
+
+## List active sessions
+
+```typescript
+// Only sessions with status: 'active' (excludes paused and terminated)
+const active = await sessions.listActiveSessions()
+
+// All non-terminated sessions (includes paused) by priority group
+const employees = await sessions.listByPriorityGroup(2)
+```

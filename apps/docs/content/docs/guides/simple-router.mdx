@@ -1,0 +1,161 @@
+---
+title: SimpleRouter & AgentBundle
+description: Wire up agents and routing without boilerplate.
+---
+
+`SimpleRouter` and `AgentBundle` replace 50+ lines of manual wiring that every project previously had to implement.
+
+## SimpleRouter
+
+Listens to `bus:TASK_AVAILABLE` and routes tasks to the correct agent's inbox.
+
+```typescript
+import { SimpleRouter } from 'fitalyagents'
+
+const router = new SimpleRouter({
+  bus,
+  // intent_id → agent_id
+  routes: {
+    product_search:            'work-agent',
+    price_query:               'work-agent',
+    order_create:              'order-agent',
+    order_status:              'order-agent',
+    catalog_search:            'catalog-agent',
+  },
+  // agents that ALWAYS receive a copy of every task (e.g. for filler audio)
+  alwaysNotify: ['interaction-agent'],
+})
+
+const unsubscribe = router.start()
+```
+
+Under the hood, it converts:
+```
+bus:TASK_AVAILABLE { intent_id: 'product_search', ... }
+  ↓
+bus.lpush('queue:work-agent:inbox', TaskPayloadEvent)
+```
+
+### alwaysNotify
+
+Useful for interaction agents that need to react to every task (e.g. start playing filler audio):
+
+```typescript
+const router = new SimpleRouter({
+  bus,
+  routes: { product_search: 'work-agent' },
+  alwaysNotify: ['interaction-agent'],  // receives a copy with a unique task_id
+})
+```
+
+### Stop routing
+
+```typescript
+const unsubscribe = router.start()
+// later...
+unsubscribe()
+```
+
+---
+
+## AgentBundle
+
+Groups multiple agents and disposable resources under one lifecycle manager.
+
+```typescript
+import { AgentBundle } from 'fitalyagents'
+
+const bundle = new AgentBundle({
+  agents: [interactionAgent, workAgent, orderAgent],
+  disposables: [audioQueue, contextStore],  // anything with dispose()
+})
+
+// Start all agents in order
+await bundle.start()
+
+// Shut down all agents in reverse order
+await bundle.shutdown()
+
+// Dispose all resources
+bundle.dispose()
+```
+
+### Full setup example
+
+```typescript
+import {
+  InMemoryBus,
+  InMemoryAudioQueueService,
+  SimpleRouter,
+  AgentBundle,
+} from 'fitalyagents'
+
+const bus = new InMemoryBus()
+
+// Audio
+const audioQueue = new InMemoryAudioQueueService({
+  bus,
+  onSegmentReady: async (sessionId, segment) => {
+    await tts.play(segment.text)
+  },
+})
+const audioUnsub = audioQueue.start()
+
+// Agents
+const ia = new InteractionAgent({ bus, tenClient, audioQueue })
+const wa = new WorkAgent({ bus, toolExecutor })
+const oa = new OrderAgent({ bus, orderService, approvalQueue })
+
+// Router
+const router = new SimpleRouter({
+  bus,
+  routes: {
+    product_search:  'work-agent',
+    order_create:    'order-agent',
+    order_status:    'order-agent',
+  },
+  alwaysNotify: ['interaction-agent'],
+})
+
+// Bundle
+const bundle = new AgentBundle({
+  agents: [ia, wa, oa],
+  disposables: [audioQueue],
+})
+
+// Single start/stop
+const routerUnsub = router.start()
+await bundle.start()
+
+// On shutdown
+routerUnsub()
+audioUnsub()
+await bundle.shutdown()
+bundle.dispose()
+```
+
+### Without AgentBundle (before)
+
+```typescript
+// What you had to write manually:
+await ia.start()
+await wa.start()
+await oa.start()
+
+// ...in afterEach:
+await ia.shutdown()
+await wa.shutdown()
+await oa.shutdown()
+audioQueue.dispose()
+contextStore.dispose()
+```
+
+### With AgentBundle (after)
+
+```typescript
+const bundle = new AgentBundle({ agents: [ia, wa, oa], disposables: [audioQueue] })
+await bundle.start()
+// ...
+await bundle.shutdown()
+bundle.dispose()
+```

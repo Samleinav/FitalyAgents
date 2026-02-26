@@ -1,0 +1,179 @@
+---
+title: Architecture
+description: How FitalyAgents layers fit together — bus, agents, dispatcher, and utilities.
+---
+
+## Overview
+
+FitalyAgents is organized into three layers plus utilities. You can use any layer independently.
+
+```
+┌────────────────────────────────────────────────────┐
+│  LAYER 1 — Agent Middleware (fitalyagents)         │
+│  NexusAgent · AgentRegistry · ContextStore         │
+│  SessionManager · ApprovalQueue · LockManager      │
+│  TaskQueue · CapabilityRouter · AudioQueueService  │
+├────────────────────────────────────────────────────┤
+│  LAYER 2 — Async Tools (fitalyagents/asynctools)   │
+│  ToolRegistry · ExecutorPool · AsyncAgent          │
+│  PendingStateTracker · InjectionManager            │
+├────────────────────────────────────────────────────┤
+│  DISPATCHER (fitalyagents/dispatcher)              │
+│  NodeDispatcher · InMemoryEmbeddingClassifier      │
+│  LLMDirectClassifier · DispatcherBootstrapper      │
+│  InMemoryIntentLibrary · LLMFallbackAgent          │
+├────────────────────────────────────────────────────┤
+│  DX UTILITIES                                      │
+│  SimpleRouter · AgentBundle · ClaudeLLMProvider    │
+└────────────────────────────────────────────────────┘
+```
+
+---
+
+## Layer 1 — Agent Middleware
+
+The core of the framework. Provides:
+
+### Bus
+
+Two implementations — swap with zero code changes:
+
+| Bus | When to use |
+|---|---|
+| `InMemoryBus` | Development, tests, single-process deployment |
+| `RedisBus` | Production, multi-process, multi-server |
+
+```typescript
+// Dev
+const bus = new InMemoryBus()
+// Prod
+const bus = await createBus({ redisUrl: process.env.REDIS_URL })
+```
+
+### NexusAgent
+
+Base class for all agents. Handles:
+- Inbox listening via `brpop` (Redis queue semantics, works in-memory too)
+- Start / shutdown lifecycle with `AGENT_REGISTERED` / `AGENT_DEREGISTERED` events
+- Manifest registration with `AgentRegistry`
+
+You extend it and implement `process(task: TaskPayloadEvent): Promise<TaskResultEvent>`.
+
+### Inversion of Control
+
+The framework calls your code — not the other way around:
+
+```
+bus.lpush('queue:my-agent:inbox', task)
+        ↓
+NexusAgent.listenInbox() picks it up
+        ↓
+Your process(task) runs
+        ↓
+TaskResultEvent returned → bus:ACTION_COMPLETED published
+```
+
+### SessionManager
+
+Tracks active sessions with:
+- Priority groups: `0` (social/group), `1` (individual, default), `2` (employee/system)
+- `pauseSession()` / `resumeSession()` — employee interrupt protocol
+- Session-scoped `ContextStore` isolation
+
+### ApprovalQueue
+
+Human-in-the-loop for sensitive actions:
+```
+OrderAgent creates draft → bus:ORDER_PENDING_APPROVAL
+     ↓
+ApprovalQueue stores it with timeout
+     ↓
+Human approves via webhook → bus:ORDER_APPROVED + bus:ACTION_COMPLETED
+     OR rejects → bus:ORDER_APPROVAL_REJECTED + bus:ACTION_COMPLETED
+     OR timeout → bus:ORDER_APPROVAL_TIMEOUT + bus:ACTION_COMPLETED
+```
+
+---
+
+## Layer 2 — Async Tools
+
+The problem: LLM tool calling is sequential and synchronous by default. FitalyAgents makes it parallel and async.
+
+### Execution modes
+
+| Mode | Behavior |
+|---|---|
+| `async` | Fire immediately, inject result when ready |
+| `sync` | Wait for result before continuing |
+| `fire_forget` | Fire and ignore result |
+| `deferred` | Wait until explicitly triggered |
+
+### Injection strategies
+
+| Strategy | When result injects |
+|---|---|
+| `inject_when_all` | Wait for ALL parallel tools to finish |
+| `inject_when_ready` | Inject each result as it arrives |
+| `inject_on_timeout` | Inject after timeout with partial results |
+
+---
+
+## Dispatcher
+
+Converts raw user text into structured `TASK_AVAILABLE` events.
+
+```
+User text → Classifier → ClassifyResult → TASK_AVAILABLE event
+                ↓ if fallback
+          LLMFallbackAgent → tries to resolve → TASK_AVAILABLE
+                           or asks user for clarification
+```
+
+### Classifier options
+
+| Classifier | Latency | Setup | Best for |
+|---|---|---|---|
+| `InMemoryEmbeddingClassifier` | ~1ms | Training examples required | Production |
+| `LLMDirectClassifier` | ~200-500ms | Works with descriptions only | Prototyping |
+
+### DispatcherBootstrapper
+
+Auto-generates training examples from agent manifests:
+
+```typescript
+const bootstrapper = new DispatcherBootstrapper({
+  intentLibrary,
+  llm: new ClaudeLLMProvider(),
+})
+await bootstrapper.bootstrapFromRegistry(registry)
+// Done — intent library populated with LLM-generated examples
+```
+
+---
+
+## Bus channels
+
+| Channel | Direction | Publisher | Subscribers |
+|---|---|---|---|
+| `bus:SPEECH_FINAL` | pub/sub | STT / test | Dispatcher |
+| `bus:TASK_AVAILABLE` | pub/sub | Dispatcher | Router / CapabilityRouter |
+| `queue:<agent-id>:inbox` | queue (lpush/brpop) | Router | NexusAgent |
+| `bus:ACTION_COMPLETED` | pub/sub | NexusAgent | InteractionAgent, UI |
+| `bus:BARGE_IN` | pub/sub | STT | AudioQueueService |
+| `bus:INTENT_UPDATED` | pub/sub | Bootstrapper, FallbackAgent | Classifier |
+| `bus:ORDER_PENDING_APPROVAL` | pub/sub | OrderAgent | ApprovalQueue |
+| `bus:ORDER_APPROVED` | pub/sub | ApprovalQueue | OrderAgent |
+
+---
+
+## In-memory vs Redis
+
+Every component has an `InMemory*` implementation. For production, swap to the Redis-backed version — the interfaces are identical:
+
+```typescript
+// Same interface, different backend
+const bus: IEventBus = new InMemoryBus()           // dev
+const bus: IEventBus = await createBus(redisOpts)  // prod
+```
+
+This makes the entire framework testable with zero infrastructure.

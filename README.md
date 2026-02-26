@@ -4,7 +4,7 @@
 
 > *Así como FITALY pone las letras donde los dedos ya están, FitalyAgents pone los resultados donde el agente los necesita — sin esperar.*
 
-SDK TypeScript para orquestación de agentes con herramientas asíncronas paralelas y despacho inteligente de tareas.
+Multi-agent framework for async parallel tool orchestration and intelligent task dispatch.
 
 ## Instalación
 

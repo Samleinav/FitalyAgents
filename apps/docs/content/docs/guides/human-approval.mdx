@@ -1,0 +1,131 @@
+---
+title: Human Approval Flows
+description: Build agents that require human sign-off before executing sensitive actions.
+---
+
+Some actions — orders, refunds, account deletions — need human review before execution. FitalyAgents models this with `ApprovalQueue`.
+
+## How it works
+
+```
+OrderAgent creates draft
+  ↓
+bus:ORDER_PENDING_APPROVAL { draft_id, session_id, intent_id, ... }
+  ↓
+ApprovalQueue stores it (with configurable timeout)
+  ↓
+Human approves via webhook
+  ↓
+bus:ORDER_APPROVED + bus:ACTION_COMPLETED
+```
+
+## Setup
+
+```typescript
+import { InMemoryApprovalQueue } from 'fitalyagents'
+
+const approvalQueue = new InMemoryApprovalQueue({
+  bus,
+  approval_timeout_ms: 300_000, // 5 minutes default
+  onApprovalNeeded: async (record) => {
+    // Notify a human: send Slack message, email, push notification...
+    await slack.send(`Order ${record.draft_id} needs approval`)
+  },
+})
+
+approvalQueue.start()
+```
+
+## Build an agent that requires approval
+
+Set `requires_human_approval: true` in the manifest:
+
+```typescript
+class OrderAgent extends NexusAgent {
+  manifest = {
+    agent_id: 'order-agent',
+    requires_human_approval: true,
+    capabilities: ['ORDER_CREATE', 'ORDER_CANCEL', 'REFUND_CREATE'],
+    // ...
+  }
+
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    if (task.intent_id === 'order_create') {
+      // 1. Create draft (no side effects yet)
+      const draft = await this.createOrderDraft(task.slots)
+
+      // 2. Submit for approval — blocks until approved/rejected/timeout
+      await bus.publish('bus:ORDER_PENDING_APPROVAL', {
+        event: 'ORDER_PENDING_APPROVAL',
+        draft_id: draft.id,
+        session_id: task.session_id,
+        intent_id: task.intent_id,
+        payload: draft,
+        requested_at: Date.now(),
+      })
+
+      // 3. Return waiting_approval — agent is done for now
+      return {
+        status: 'waiting_approval',
+        result: { draft_id: draft.id },
+        // ...
+      }
+    }
+  }
+}
+```
+
+## Webhook handler
+
+```typescript
+import { createApprovalWebhookHandler } from 'examples/voice-retail/src/approval/webhook-handler'
+
+// Express / Hono compatible
+app.post('/webhooks/approval', createApprovalWebhookHandler(approvalQueue))
+```
+
+The webhook accepts:
+```json
+{ "draft_id": "draft_001", "decision": "approve", "approver_id": "mgr_42" }
+{ "draft_id": "draft_001", "decision": "reject", "reason": "Insufficient stock" }
+```
+
+## React to the result
+
+Any subscriber on `bus:ACTION_COMPLETED` receives the final outcome:
+
+```typescript
+bus.subscribe('bus:ACTION_COMPLETED', (event) => {
+  if (event.status === 'approved') {
+    // execute the actual order
+  } else if (event.status === 'rejected') {
+    // notify user of rejection reason
+  } else if (event.status === 'timeout') {
+    // notify user that approval expired
+  }
+})
+```
+
+## Timeout handling
+
+```typescript
+const queue = new InMemoryApprovalQueue({
+  bus,
+  approval_timeout_ms: 60_000,           // 1 minute
+  onTimeout: async (record) => {
+    await slack.send(`Approval ${record.draft_id} expired`)
+  },
+})
+```
+
+After timeout, `bus:ORDER_APPROVAL_TIMEOUT` + `bus:ACTION_COMPLETED` are published automatically.
+
+## Test without a real webhook
+
+```typescript
+// Directly approve in tests
+await approvalQueue.approve('draft_001', 'test-approver')
+
+// Or reject
+await approvalQueue.reject('draft_001', 'Test rejection')
+```

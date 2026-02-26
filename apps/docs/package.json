@@ -1,0 +1,27 @@
+{
+  "name": "@fitalyagents/docs",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "fumadocs-core": "^15.0.0",
+    "fumadocs-mdx": "^11.0.0",
+    "fumadocs-ui": "^15.0.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}

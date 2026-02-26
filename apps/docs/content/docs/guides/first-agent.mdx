@@ -1,0 +1,162 @@
+---
+title: Building Your First Agent
+description: Create a custom NexusAgent, register it, and connect it to the bus.
+---
+
+## What you'll build
+
+A `CatalogAgent` that handles product search intent, executes a tool, and publishes its result back to the bus.
+
+## 1. Extend NexusAgent
+
+```typescript
+import { NexusAgent } from 'fitalyagents'
+import type { TaskPayloadEvent, TaskResultEvent, AgentManifest } from 'fitalyagents'
+
+export class CatalogAgent extends NexusAgent {
+  // The manifest declares what this agent is and what it can do
+  readonly manifest: AgentManifest = {
+    agent_id: 'catalog-agent',
+    description: 'Searches the product catalog',
+    version: '1.0.0',
+    domain: 'customer_facing',
+    scope: 'commerce',
+    capabilities: ['CATALOG_SEARCH'],
+    context_mode: 'stateful',
+    context_access: { read: ['*'], write: ['last_search'], forbidden: [] },
+    async_tools: ['catalog_search'],
+    input_channel: 'queue:catalog-agent:inbox',
+    output_channel: 'queue:catalog-agent:outbox',
+    priority: 5,
+    max_concurrent: 10,
+    timeout_ms: 8000,
+    heartbeat_interval_ms: 3000,
+    role: null,
+    accepts_from: ['*'],
+    requires_human_approval: false,
+  }
+
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    const { intent_id, slots, session_id, task_id } = task
+
+    if (intent_id === 'catalog_search') {
+      const query = slots?.query as string ?? ''
+      const results = await this.searchCatalog(query)
+
+      return {
+        event: 'TASK_RESULT',
+        task_id,
+        session_id,
+        agent_id: this.manifest.agent_id,
+        status: 'completed',
+        result: results,
+        completed_at: Date.now(),
+      }
+    }
+
+    return {
+      event: 'TASK_RESULT',
+      task_id,
+      session_id,
+      agent_id: this.manifest.agent_id,
+      status: 'failed',
+      error: `Unknown intent: ${intent_id}`,
+      completed_at: Date.now(),
+    }
+  }
+
+  private async searchCatalog(query: string) {
+    // Your real business logic here
+    return [{ name: `Result for "${query}"`, price: 99.99 }]
+  }
+}
+```
+
+## 2. Instantiate and start
+
+```typescript
+import { InMemoryBus } from 'fitalyagents'
+
+const bus = new InMemoryBus()
+const agent = new CatalogAgent({ bus })
+
+await agent.start()
+// Agent is now listening on queue:catalog-agent:inbox
+```
+
+## 3. Send a task manually
+
+```typescript
+// This is normally done by SimpleRouter based on TASK_AVAILABLE events
+await bus.lpush('queue:catalog-agent:inbox', {
+  event: 'TASK_PAYLOAD',
+  task_id: 'task_001',
+  session_id: 'sess_001',
+  intent_id: 'catalog_search',
+  slots: { query: 'Nike running shoes' },
+  context_snapshot: {},
+  cancel_token: null,
+  timeout_ms: 8000,
+  reply_to: 'queue:catalog-agent:outbox',
+})
+```
+
+## 4. React to the result
+
+```typescript
+bus.subscribe('bus:ACTION_COMPLETED', (event) => {
+  if (event.session_id === 'sess_001') {
+    console.log('Result:', event.result)
+  }
+})
+```
+
+## 5. Shut down cleanly
+
+```typescript
+await agent.shutdown()
+// Publishes AGENT_DEREGISTERED, stops listening
+```
+
+## Key patterns
+
+### inject dependencies, don't import them
+
+Never import your business services directly. Accept them in the constructor:
+
+```typescript
+export class CatalogAgent extends NexusAgent {
+  constructor(
+    options: { bus: IEventBus },
+    private readonly catalogService: ICatalogService,  // injected
+  ) {
+    super(options)
+  }
+}
+```
+
+This makes the agent 100% testable with mocks — no real catalog service needed in tests.
+
+### Use context for session state
+
+```typescript
+async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+  const { context_snapshot } = task
+
+  // Read previous state
+  const lastSearch = context_snapshot?.last_search as string | undefined
+
+  // ... do work ...
+
+  return {
+    status: 'completed',
+    context_patch: { last_search: query },  // write back
+    // ...
+  }
+}
+```
+
+## Next: connect to the full pipeline
+
+- [SimpleRouter & AgentBundle](/docs/guides/simple-router) — wire agents without boilerplate
+- [Async tools](/docs/guides/async-tools) — run multiple tools in parallel from your agent

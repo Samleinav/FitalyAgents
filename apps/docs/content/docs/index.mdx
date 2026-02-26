@@ -1,0 +1,66 @@
+---
+title: FitalyAgents
+description: Multi-agent framework for async parallel tool orchestration and intelligent task dispatch.
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card'
+
+# FitalyAgents
+
+**FitalyAgents** is a TypeScript multi-agent framework built around one insight: agents should never wait.
+
+> *Just as FITALY puts letters where fingers already are, FitalyAgents puts results where the agent needs them — without waiting.*
+
+## What it solves
+
+Most LLM agent frameworks execute tools **sequentially and synchronously**. FitalyAgents executes them **in parallel, asynchronously**, and routes the results intelligently across multiple specialized agents.
+
+```
+User: "I want Nike shoes size 42"
+  │
+  ├─ Dispatcher classifies → product_search_with_price
+  │
+  ├─ InteractionAgent → plays filler audio immediately (no silent wait)
+  │
+  └─ WorkAgent runs in parallel:
+       ├─ product_search(brand:Nike, size:42) ──┐
+       └─ price_check(brand:Nike)  ─────────────┤ parallel
+                                                ↓
+                          InteractionAgent plays real response
+```
+
+## Key capabilities
+
+- **Parallel async tools** — all tool calls fire simultaneously; results inject when ready
+- **Intelligent dispatch** — embedding-based or LLM-based intent classification with hot reload
+- **Auto-bootstrap** — generate intent training data from agent manifests using an LLM
+- **Session isolation** — concurrent sessions never contaminate each other
+- **Human-in-the-loop** — built-in approval queue for orders, refunds, sensitive actions
+- **Barge-in support** — audio interrupt protocol for voice interfaces
+- **Plug-and-play DX** — `SimpleRouter` + `AgentBundle` replace 50+ lines of boilerplate
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│  LAYER 1 — Agent Middleware Bus                 │
+│  NexusAgent · AgentRegistry · ContextStore      │
+│  SessionManager · ApprovalQueue · LockManager   │
+├─────────────────────────────────────────────────┤
+│  LAYER 2 — fitalyagents/asynctools              │
+│  ToolRegistry · ExecutorPool · AsyncAgent       │
+├─────────────────────────────────────────────────┤
+│  DISPATCHER — fitalyagents/dispatcher           │
+│  NodeDispatcher · EmbeddingClassifier           │
+│  LLMDirectClassifier · DispatcherBootstrapper   │
+└─────────────────────────────────────────────────┘
+```
+
+## Explore
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started" description="Get a full agent pipeline running in 10 minutes" />
+  <Card title="Architecture" href="/docs/architecture" description="Understand how the layers fit together" />
+  <Card title="Guides" href="/docs/guides/first-agent" description="Step-by-step guides for common tasks" />
+  <Card title="Voice Retail Example" href="/docs/examples/voice-retail" description="Full multi-agent voice pipeline walkthrough" />
+</Cards>

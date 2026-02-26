@@ -4,7 +4,11 @@
       "Bash(npx vitest run --reporter=verbose)",
       "Bash(npx vitest run --reporter=verbose --root /d/GitHub/FitalyAgents/examples/voice-retail)",
       "Bash(npx vitest run --reporter=verbose --root /d/GitHub/FitalyAgents/packages/core)",
-      "Bash(pnpm add -D typedoc -w)"
+      "Bash(pnpm add -D typedoc -w)",
+      "WebFetch(domain:www.fumadocs.dev)",
+      "Bash(find /d/GitHub/FitalyAgents/node_modules/.pnpm/fumadocs-mdx@11.10.1*/node_modules/fumadocs-mdx -name \"*.md\")",
+      "Bash(find /d/GitHub/FitalyAgents/node_modules/.pnpm/fumadocs-core@15.8.5*/node_modules/fumadocs-core/dist -name \"*builder*\" -type f)",
+      "Bash(find /d/GitHub/FitalyAgents/node_modules/.pnpm/fumadocs-mdx*/node_modules/fumadocs-mdx/dist -name \"index.d.ts\" -type f)"
     ]
   }
 }
