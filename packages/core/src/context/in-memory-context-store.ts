@@ -1,4 +1,4 @@
-import type { IContextStore } from './types.js'
+import type { IContextStore, AmbientContext } from './types.js'
 
 /**
  * In-memory implementation of IContextStore.
@@ -19,6 +19,8 @@ export class InMemoryContextStore implements IContextStore {
   private data: Map<string, Map<string, unknown>> = new Map()
   /** session_id → TTL timer handle */
   private timers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+  /** session_id → ambient context */
+  private ambient: Map<string, AmbientContext> = new Map()
 
   // ── Core CRUD ───────────────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ export class InMemoryContextStore implements IContextStore {
     } else {
       // Delete entire session context
       this.data.delete(sessionId)
+      this.ambient.delete(sessionId)
       const timer = this.timers.get(sessionId)
       if (timer) {
         clearTimeout(timer)
@@ -122,6 +125,7 @@ export class InMemoryContextStore implements IContextStore {
 
     const timer = setTimeout(() => {
       this.data.delete(sessionId)
+      this.ambient.delete(sessionId)
       this.timers.delete(sessionId)
     }, ttlSeconds * 1000)
 
@@ -131,6 +135,16 @@ export class InMemoryContextStore implements IContextStore {
     }
 
     this.timers.set(sessionId, timer)
+  }
+
+  // ── Ambient Context (v2) ────────────────────────────────────────────────
+
+  async getAmbient(sessionId: string): Promise<AmbientContext | null> {
+    return this.ambient.get(sessionId) ?? null
+  }
+
+  async setAmbient(sessionId: string, data: AmbientContext): Promise<void> {
+    this.ambient.set(sessionId, data)
   }
 
   // ── Cleanup ─────────────────────────────────────────────────────────────
@@ -145,6 +159,7 @@ export class InMemoryContextStore implements IContextStore {
     }
     this.timers.clear()
     this.data.clear()
+    this.ambient.clear()
   }
 
   // ── Private ─────────────────────────────────────────────────────────────

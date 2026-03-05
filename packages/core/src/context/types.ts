@@ -84,6 +84,39 @@ export interface IContextStore {
    * After `ttlSeconds` the session is automatically deleted.
    */
   setTTL(sessionId: string, ttlSeconds: number): Promise<void>
+
+  // ── Ambient Context (v2) ────────────────────────────────────────────────
+
+  /**
+   * Get the ambient context for a session — overheard conversation snippets
+   * that the agent may use proactively.
+   */
+  getAmbient(sessionId: string): Promise<AmbientContext | null>
+
+  /**
+   * Set or update the ambient context for a session.
+   */
+  setAmbient(sessionId: string, data: AmbientContext): Promise<void>
+}
+
+// ── Ambient Context ─────────────────────────────────────────────────────────
+
+/**
+ * Ambient context captures overheard conversational data that the agent
+ * can use for proactive engagement (e.g. customer mentions a product
+ * to a friend → agent can prepare product info).
+ */
+export interface AmbientContext {
+  /** Last product mentioned in ambient speech */
+  last_product_mentioned?: string
+  /** Recent ambient conversation snippets (capped at N) */
+  conversation_snippets: Array<{
+    speaker_id?: string
+    text: string
+    timestamp: number
+  }>
+  /** When this ambient context was last updated */
+  timestamp: number
 }
 
 // ── Access enforcement ──────────────────────────────────────────────────────

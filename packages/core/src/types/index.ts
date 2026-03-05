@@ -108,6 +108,136 @@ export const ActionCompletedEventSchema = z.object({
 })
 export type ActionCompletedEvent = z.infer<typeof ActionCompletedEventSchema>
 
+// ── Safety Bus Events (v2) ───────────────────────────────────────────────────
+
+export const DraftCreatedEventSchema = z.object({
+  event: z.literal('DRAFT_CREATED'),
+  draft_id: z.string(),
+  session_id: z.string(),
+  intent_id: z.string(),
+  summary: z.record(z.unknown()),
+  ttl: z.number(),
+})
+export type DraftCreatedEvent = z.infer<typeof DraftCreatedEventSchema>
+
+export const DraftConfirmedEventSchema = z.object({
+  event: z.literal('DRAFT_CONFIRMED'),
+  draft_id: z.string(),
+  session_id: z.string(),
+  intent_id: z.string(),
+  items: z.record(z.unknown()),
+  total: z.number().optional(),
+})
+export type DraftConfirmedEvent = z.infer<typeof DraftConfirmedEventSchema>
+
+export const DraftCancelledEventSchema = z.object({
+  event: z.literal('DRAFT_CANCELLED'),
+  draft_id: z.string(),
+  session_id: z.string(),
+  reason: z.string(),
+})
+export type DraftCancelledEvent = z.infer<typeof DraftCancelledEventSchema>
+
+export const ApprovalVoiceRequestEventSchema = z.object({
+  event: z.literal('APPROVAL_VOICE_REQUEST'),
+  request_id: z.string(),
+  draft_id: z.string(),
+  approver_id: z.string(),
+  prompt_text: z.string(),
+})
+export type ApprovalVoiceRequestEvent = z.infer<typeof ApprovalVoiceRequestEventSchema>
+
+export const ApprovalWebhookRequestEventSchema = z.object({
+  event: z.literal('APPROVAL_WEBHOOK_REQUEST'),
+  request_id: z.string(),
+  draft_id: z.string(),
+  required_role: z.string(),
+  action: z.string(),
+  amount: z.number().optional(),
+  session_id: z.string(),
+})
+export type ApprovalWebhookRequestEvent = z.infer<typeof ApprovalWebhookRequestEventSchema>
+
+export const ApprovalExternalRequestEventSchema = z.object({
+  event: z.literal('APPROVAL_EXTERNAL_REQUEST'),
+  request_id: z.string(),
+  draft_id: z.string(),
+  payload: z.record(z.unknown()),
+})
+export type ApprovalExternalRequestEvent = z.infer<typeof ApprovalExternalRequestEventSchema>
+
+export const ApprovalExternalResponseEventSchema = z.object({
+  event: z.literal('APPROVAL_EXTERNAL_RESPONSE'),
+  request_id: z.string(),
+  approved: z.boolean(),
+  approver_id: z.string(),
+  reason: z.string().optional(),
+})
+export type ApprovalExternalResponseEvent = z.infer<typeof ApprovalExternalResponseEventSchema>
+
+export const ApprovalResolvedEventSchema = z.object({
+  event: z.literal('APPROVAL_RESOLVED'),
+  request_id: z.string(),
+  draft_id: z.string(),
+  approved: z.boolean(),
+  approver_id: z.string(),
+  channel_used: z.string(),
+  timestamp: z.number(),
+})
+export type ApprovalResolvedEvent = z.infer<typeof ApprovalResolvedEventSchema>
+
+// ── Session / Target Bus Events (v2) ─────────────────────────────────────────
+
+export const SpeechPartialEventSchema = z.object({
+  event: z.literal('SPEECH_PARTIAL'),
+  session_id: z.string(),
+  text: z.string(),
+  confidence: z.number(),
+  speaker_id: z.string().optional(),
+})
+export type SpeechPartialEvent = z.infer<typeof SpeechPartialEventSchema>
+
+export const AmbientContextEventSchema = z.object({
+  event: z.literal('AMBIENT_CONTEXT'),
+  session_id: z.string(),
+  speaker_id: z.string().optional(),
+  text: z.string(),
+  timestamp: z.number(),
+})
+export type AmbientContextEvent = z.infer<typeof AmbientContextEventSchema>
+
+export const TargetDetectedEventSchema = z.object({
+  event: z.literal('TARGET_DETECTED'),
+  session_id: z.string(),
+  speaker_id: z.string(),
+  store_id: z.string(),
+})
+export type TargetDetectedEvent = z.infer<typeof TargetDetectedEventSchema>
+
+export const TargetQueuedEventSchema = z.object({
+  event: z.literal('TARGET_QUEUED'),
+  session_id: z.string(),
+  speaker_id: z.string(),
+  position: z.number(),
+})
+export type TargetQueuedEvent = z.infer<typeof TargetQueuedEventSchema>
+
+export const TargetGroupEventSchema = z.object({
+  event: z.literal('TARGET_GROUP'),
+  session_id: z.string(),
+  speaker_ids: z.array(z.string()),
+  primary: z.string().nullable(),
+})
+export type TargetGroupEvent = z.infer<typeof TargetGroupEventSchema>
+
+export const ProactiveTriggerEventSchema = z.object({
+  event: z.literal('PROACTIVE_TRIGGER'),
+  session_id: z.string(),
+  reason: z.string(),
+  context: z.record(z.unknown()),
+})
+export type ProactiveTriggerEvent = z.infer<typeof ProactiveTriggerEventSchema>
+
 // ── IEventBus interface ──────────────────────────────────────────────────────
 
 /**

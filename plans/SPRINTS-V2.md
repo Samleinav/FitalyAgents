@@ -43,9 +43,10 @@ NO EXISTE, CREAR:
 
 ## Fase 1 — Simplificación de Core
 
-### Sprint 1.1 — BORRAR código v1 (`packages/core`)
+### Sprint 1.1 — BORRAR código v1 (`packages/core`) ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** Eliminar toda la orquestación manual que el LLM reemplaza.
+**Resultado:** 12 test files, 118 tests passing. routing/, registry/, locks/, tasks/ eliminados.
 
 ```
 BORRAR archivos:
@@ -94,9 +95,10 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 1.2 — Safety Module + Multi-Channel Approval
+### Sprint 1.2 — Safety Module + Multi-Channel Approval ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** Construir el corazón del nuevo modelo de seguridad.
+**Resultado:** 17 test files, 280 tests passing. SafetyGuard, DraftStore, 3 channels, ApprovalOrchestrator, bus events, ToolDefinition safety fields.
 
 ```
 CREAR packages/core/src/safety/channels/types.ts:
@@ -220,9 +222,10 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 1.3 — Session + Context v2
+### Sprint 1.3 — Session + Context v2 ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** Soporte para múltiples hablantes y contexto ambient.
+**Resultado:** 14 test files, 217 tests passing. TargetGroupStateMachine, AmbientContext, 6 bus event schemas.
 
 ```
 CREAR packages/core/src/session/target-group.ts:
