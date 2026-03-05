@@ -1,4 +1,12 @@
 {
+  "env": {
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "AWS_REGION": "us-east-1",
+    "ANTHROPIC_MODEL": "us.anthropic.claude-sonnet-4-6",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "us.anthropic.claude-opus-4-6-v1",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "us.anthropic.claude-sonnet-4-6",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
   "permissions": {
     "allow": [
       "Bash(npx vitest run --reporter=verbose)",
@@ -8,7 +16,10 @@
       "WebFetch(domain:www.fumadocs.dev)",
       "Bash(find /d/GitHub/FitalyAgents/node_modules/.pnpm/fumadocs-mdx@11.10.1*/node_modules/fumadocs-mdx -name \"*.md\")",
       "Bash(find /d/GitHub/FitalyAgents/node_modules/.pnpm/fumadocs-core@15.8.5*/node_modules/fumadocs-core/dist -name \"*builder*\" -type f)",
-      "Bash(find /d/GitHub/FitalyAgents/node_modules/.pnpm/fumadocs-mdx*/node_modules/fumadocs-mdx/dist -name \"index.d.ts\" -type f)"
+      "Bash(find /d/GitHub/FitalyAgents/node_modules/.pnpm/fumadocs-mdx*/node_modules/fumadocs-mdx/dist -name \"index.d.ts\" -type f)",
+      "Bash(git rm -r --cached apps/docs/.next/ apps/docs/.source/)",
+      "Bash(git add apps/docs/.gitignore)",
+      "Bash(git commit:*)"
     ]
   }
 }

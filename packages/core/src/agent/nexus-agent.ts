@@ -16,6 +16,8 @@ export interface NexusAgentOptions {
 /**
  * NexusAgent — the base class for all FitalyAgents Layer 1 agents.
  *
+ * @deprecated Use StreamAgent instead. Will be removed in v2.0.0 (Sprint 4.1).
+ *
  * Handles:
  * - Self-registration on the bus at startup
  * - Heartbeat publishing at configurable intervals

@@ -7,6 +7,141 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] — Unreleased
+
+> FitalyAgents v2: el LLM es el cerebro, el dispatcher es un acelerador especulativo.
+> Framework reenfocado como motor para asistentes de voz en retail físico (FitalyStore).
+
+### Breaking Changes
+
+- **Eliminados de `packages/core`:** `CapabilityRouter`, `SimpleRouter`, `AgentRegistry`, `LockManager`, `TaskQueue` — el LLM hace el routing directamente via tool_call
+- **`NexusAgent`** reemplazado por `StreamAgent` (subscribe to bus channels, no inbox/outbox)
+- **`InMemoryApprovalQueue`** migrado a `ApprovalOrchestrator` con canales configurables; `IApprovalQueue` se mantiene como re-export para backwards compat
+- Bus events eliminados: `bus:TASK_AVAILABLE`, `bus:DISPATCH_FALLBACK`, `bus:INTENT_UPDATED`
+- Channels eliminados: `queue:*:inbox`, `queue:*:outbox`
+
+### Added
+
+#### Core — Safety Module (`packages/core/src/safety/`)
+
+**SafetyGuard**
+- Tool-level risk classification: `safe | staged | protected | restricted`
+- `SafetyGuard.evaluate(action, params, speaker, context)` → `SafetyDecision`
+- `roleHasPermission(role, action, params)` — verifica límites numéricos y porcentuales
+- `findNearbyApprover(requiredRole, storeId)` — busca aprobador presente en tienda
+
+**DraftStore**
+- Drafts mutables con TTL automático (Redis/InMemory)
+- Lifecycle completo: `create`, `update`, `confirm`, `cancel`, `rollback`
+- Historial de cambios para rollback granular
+- Cliente puede modificar N veces antes de confirmar sin crear órdenes fantasma
+
+**Multi-Channel Approval (ApprovalOrchestrator)**
+- `IApprovalChannel` interface: `notify(request, approver)` + `waitForResponse(request, timeoutMs)` + `cancel(requestId)`
+- `VoiceApprovalChannel` — aprobación por voz; integra `VoiceIdentifierAgent`; escucha `bus:SPEECH_FINAL` con NLU yes/no
+- `WebhookApprovalChannel` — HTTP webhook (migra `InMemoryApprovalQueue`); notifica vía `bus:APPROVAL_WEBHOOK_REQUEST`
+- `ExternalToolChannel` — herramienta externa configurable vía HTTP/bus; recibe respuesta en `bus:APPROVAL_EXTERNAL_RESPONSE`
+- `VisionApprovalChannel` — gestos vía `VisionDetectorAgent` (Sprint futuro)
+- Estrategia `parallel`: todos los canales a la vez, primero en responder cancela los demás
+- Estrategia `sequential`: intenta voz primero; si timeout → webhook/app
+- Configuración por tool: `approval_channels: [{ type, timeout_ms }]`, `approval_strategy`
+
+**Human Role Model**
+- `HumanRole: 'customer' | 'staff' | 'cashier' | 'manager' | 'owner'`
+- `HumanProfile` con `voice_embedding` (registrado por `VoiceIdentifierAgent`) y `approval_limits`
+- `ApprovalLimits`: `payment_max`, `discount_max_pct`, `refund_max` por rol
+- Roles en humanos (no en agentes IA) — define quién puede aprobar qué y con qué límites
+
+**New Bus Events**
+- `bus:APPROVAL_VOICE_REQUEST` — solicitud de aprobación por voz al empleado identificado
+- `bus:APPROVAL_WEBHOOK_REQUEST` — notificación push para app móvil
+- `bus:APPROVAL_EXTERNAL_REQUEST` / `bus:APPROVAL_EXTERNAL_RESPONSE` — canal externo configurable
+- `bus:APPROVAL_RESOLVED` — resultado final de cualquier canal (incluye `channel_used: string`)
+- `bus:SPEECH_PARTIAL` — audio parcial para speculative dispatch (desde FitalyVoice)
+- `bus:AMBIENT_CONTEXT` — conversación no dirigida al agente (enriquece contexto)
+- `bus:TARGET_DETECTED` / `bus:TARGET_QUEUED` / `bus:TARGET_GROUP` — multi-speaker state machine
+- `bus:DRAFT_CREATED` / `bus:DRAFT_CONFIRMED` / `bus:DRAFT_CANCELLED` — lifecycle de drafts
+- `bus:PROACTIVE_TRIGGER` — ProactiveAgent detecta situación de ayuda proactiva
+
+#### Core — Session + Context v2
+
+**TargetGroup**
+- `TargetGroupStateMachine` — multi-speaker: TARGET (habla al agente), AMBIENT (conversación de fondo), QUEUED (espera)
+- Priority queue para múltiples clientes simultáneos
+
+**ContextStore ambient**
+- `getAmbient(sessionId)` / `setAmbient(sessionId, data)` — contexto de conversación no dirigida
+
+#### Core — Agentes Autónomos
+
+**StreamAgent** (reemplaza NexusAgent)
+- Subscribe to bus channels directamente, sin inbox/outbox
+- Lifecycle: `start()`, `stop()`, `dispose()` con health monitoring
+
+**ContextBuilderAgent**
+- Consume `SPEECH_FINAL`, `AMBIENT_CONTEXT`, `ACTION_COMPLETED`, `DRAFT_*`
+- Mantiene resumen de conversación y contexto enriquecido por sesión
+
+**ProactiveAgent**
+- Detecta: cliente esperando, producto agotado, oferta relevante
+- Emite `bus:PROACTIVE_TRIGGER` → `InteractionAgent` decide cuándo hablar
+
+#### Dispatcher — Speculative Engine (`packages/dispatcher/`)
+
+**SpeculativeCache**
+- Pre-ejecuta SAFE tools en `SPEECH_PARTIAL` antes de que el LLM los pida (ahorro ~250ms)
+- STAGED: crea draft especulativo con TTL y referencia en cache
+- PROTECTED/RESTRICTED: solo registra hint (no ejecuta nada)
+- LRU con capacidad configurable (default 256 entries)
+
+**IntentTeacher** (migrado desde `examples/agent-comparison/`)
+- `instructionPrompt` inyectable por negocio — sin business logic hardcoded
+- Evalúa correcciones del LLM: `add | skip | flag`
+- Actualiza vector store en vivo via `addExample()`
+- Redis backend para persistencia de correcciones
+
+**IntentScoreStore** (migrado desde `examples/agent-comparison/`)
+- EMA (α=0.1) por tool para tracking de accuracy
+- Training mode (siempre especula) → Production mode (solo si score ≥ 0.70)
+- Auto-suggest switch a production cuando hit rate ≥ 90%
+
+#### Interaction Agent (`packages/core/src/agent/interaction-agent.ts`)
+
+- LLM streaming con tool calling (Groq Llama 3.1 8B / Claude Haiku)
+- Integra `SpeculativeCache` del dispatcher — tool results pre-computados en 0ms
+- Tool call interception con `SafetyGuard`: SAFE ejecuta, STAGED presenta draft, PROTECTED pide confirmación, RESTRICTED lanza ApprovalOrchestrator
+- Streaming response → `ttsCallback` para TTS inmediato
+
+#### Documentation
+
+- `docs/ARCHITECTURE-V2.md` — visión v2 con diagramas de capas
+- `docs/SAFETY-MODEL.md` — safety levels, DraftStore lifecycle, flujos concretos
+- `docs/APPROVAL-CHANNELS.md` — multi-canal configurable, estrategias, ejemplos por tool
+- `docs/HUMAN-ROLES.md` — modelo de roles, límites, escalación automática
+- `docs/FITALYSTORE-PRODUCT.md` — visión de producto retail, tiers, FitalyCloud, FitalyInsights
+- `docs/DISPATCHER-SPECULATIVE.md` — cache especulativa, L1/L2/L3, Teacher + ScoreStore
+
+### Removed
+
+- `packages/core/src/routing/capability-router.ts` — LLM hace el routing
+- `packages/core/src/routing/simple-router.ts`
+- `packages/core/src/routing/types.ts`
+- `packages/core/src/registry/agent-registry.ts` — reemplazado por `ToolRegistry`
+- `packages/core/src/locks/lock-manager.ts` — simplificado a `DraftStore`
+- `packages/core/src/tasks/task-queue.ts` — LLM maneja secuencia de tools
+- `packages/core/src/agent/nexus-agent.ts` — reemplazado por `StreamAgent`
+
+### Test Coverage (objetivo al cierre de Sprint 3.3)
+
+| Package | Actual | Objetivo |
+|---|---|---|
+| `packages/core` | 212 | 300+ |
+| `packages/dispatcher` | 40 | 90+ |
+| `examples/voice-retail` | 73 | 73 (sin regresiones) |
+| **Total** | **325** | **463+** |
+
+---
+
 ## [1.1.0] — 2026-02-24
 
 ### Added

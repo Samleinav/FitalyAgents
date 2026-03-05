@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { NexusAgent, createBus } from 'fitalyagents'
+ * import { StreamAgent, createBus } from 'fitalyagents'
  *
  * const bus = await createBus({ redisUrl: process.env.REDIS_URL })
  * ```
@@ -55,23 +55,17 @@ export { InMemoryBus } from './bus/in-memory-bus.js'
 export { RedisBus, createBus } from './bus/redis-bus.js'
 
 // Agent
+/** @deprecated Use StreamAgent instead. Will be removed in v2.0.0. */
 export { NexusAgent } from './agent/nexus-agent.js'
 export type { NexusAgentOptions } from './agent/nexus-agent.js'
 export { AgentBundle } from './agent/agent-bundle.js'
 export type { AgentBundleOptions, Disposable } from './agent/agent-bundle.js'
-
-// Registry
-export { AgentRegistry } from './registry/agent-registry.js'
-export type { RegistryFilters } from './registry/agent-registry.js'
+export { StreamAgent } from './agent/stream-agent.js'
 
 // Context
 export { InMemoryContextStore } from './context/in-memory-context-store.js'
 export { AccessDeniedError, enforceAccess } from './context/types.js'
 export type { IContextStore } from './context/types.js'
-
-// Locks
-export { InMemoryLockManager } from './locks/in-memory-lock-manager.js'
-export type { ILockManager, LockValue, OnLockExpired } from './locks/types.js'
 
 // Session
 export { InMemorySessionManager } from './session/in-memory-session-manager.js'
@@ -81,22 +75,6 @@ export type {
   PriorityGroup,
   OnSessionTerminated,
 } from './session/types.js'
-
-// Tasks
-export { InMemoryTaskQueue } from './tasks/in-memory-task-queue.js'
-export type { ITaskQueue, Task, TaskInput, QueueTaskStatus, TaskQueueDeps } from './tasks/types.js'
-
-// Routing
-export { CapabilityRouter } from './routing/capability-router.js'
-export type {
-  ICapabilityRouter,
-  RouteResult,
-  RouteRequirements,
-  TaskAvailableEvent,
-  CapabilityRouterDeps,
-} from './routing/types.js'
-export { SimpleRouter } from './routing/simple-router.js'
-export type { SimpleRouterOptions } from './routing/simple-router.js'
 
 // Audio Queue
 export { InMemoryAudioQueueService } from './audio/in-memory-audio-queue-service.js'
