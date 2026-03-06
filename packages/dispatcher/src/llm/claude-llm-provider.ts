@@ -1,5 +1,8 @@
 import type { LLMProvider } from './types.js'
 
+// Ambient declaration (available in Node.js but not in ES2022 lib)
+declare const process: { env: Record<string, string | undefined> }
+
 /** Default model — fast and cost-efficient for classification and generation tasks */
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 const DEFAULT_MAX_TOKENS = 1024

@@ -13,8 +13,18 @@
  */
 
 // Node dispatcher
-export { NodeDispatcher } from './node/node-dispatcher.js'
-export type { NodeDispatcherDeps } from './node/node-dispatcher.js'
+export {
+  NodeDispatcher,
+  SPECULATIVE_CONFIDENCE_MIN,
+  SPECULATIVE_MARGIN_MIN,
+} from './node/node-dispatcher.js'
+export type {
+  NodeDispatcherDeps,
+  SpeculativeSafetyLevel,
+  SpeculativeToolMeta,
+  SpeculativeExecutor,
+  IntentToolResolver,
+} from './node/node-dispatcher.js'
 
 // Classifier
 export { InMemoryEmbeddingClassifier } from './node/classifier/in-memory-embedding-classifier.js'
@@ -63,9 +73,11 @@ export type {
   IntentEntry,
   FallbackRequest,
   SpeechFinalEvent,
+  SpeechPartialEvent,
 } from './types/index.js'
 export {
   CONFIDENCE_THRESHOLD,
   FallbackRequestSchema,
   SpeechFinalEventSchema,
+  SpeechPartialEventSchema,
 } from './types/index.js'

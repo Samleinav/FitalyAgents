@@ -70,6 +70,15 @@ export const SpeechFinalEventSchema = z.object({
 })
 export type SpeechFinalEvent = z.infer<typeof SpeechFinalEventSchema>
 
+export const SpeechPartialEventSchema = z.object({
+  event: z.literal('SPEECH_PARTIAL'),
+  session_id: z.string(),
+  text: z.string(),
+  locale: z.string().optional(),
+  timestamp: z.number(),
+})
+export type SpeechPartialEvent = z.infer<typeof SpeechPartialEventSchema>
+
 // ── Classifier interface ────────────────────────────────────────────────────
 
 export interface IEmbeddingClassifier {

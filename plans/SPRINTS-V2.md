@@ -562,7 +562,10 @@ CRITERIO DE DONE:
 
 ## Fase 5 — FitalyVoice Integration
 
-### Sprint 5.1 — SPEECH_PARTIAL support
+### Sprint 5.1 — SPEECH_PARTIAL support ✅ COMPLETADO 2026-03-06
+
+**Objetivo:** Dispatcher pre-ejecuta SAFE tools durante habla parcial.
+**Resultado:** NodeDispatcher suscribe `bus:SPEECH_PARTIAL` cuando tiene SpeculativeCache inyectado. Thresholds estrictos (0.90 confianza, 0.15 margen). SAFE→pre-ejecuta+cachea, STAGED/PROTECTED/RESTRICTED→cachea hint. SpeechPartialEvent type agregado. 12 tests nuevos (19 total en node-dispatcher). 7 test files, 107 tests. Build DTS clean. También se corrigió error pre-existente de DTS con `setInterval`/`clearInterval` y `process.env`.
 
 ```
 [ ] Dispatcher suscribe bus:SPEECH_PARTIAL
@@ -570,6 +573,7 @@ CRITERIO DE DONE:
 [ ] Tests: PARTIAL → speculative hit → FINAL usa cache (0ms tool wait)
 [ ] pnpm -r build && pnpm -r test
 ```
+
 
 ### Sprint 5.2 — Target Group State Machine
 
