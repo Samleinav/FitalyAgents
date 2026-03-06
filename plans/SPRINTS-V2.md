@@ -261,9 +261,10 @@ CRITERIO DE DONE:
 
 ## Fase 2 — Dispatcher v2
 
-### Sprint 2.1 — Speculative Cache
+### Sprint 2.1 — Speculative Cache ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** El dispatcher pre-ejecuta SAFE tools antes de que el LLM los pida.
+**Resultado:** SpeculativeCache con LRU eviction, TTL, 3 entry types. 22 tests passing.
 
 ```
 CREAR packages/dispatcher/src/speculative-cache.ts:
@@ -300,9 +301,10 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 2.2 — Migrar Teacher + ScoreStore
+### Sprint 2.2 — Migrar Teacher + ScoreStore ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** Sacar los prototipos de examples/ a packages/ como código de producción.
+**Resultado:** IntentTeacher (injectable LLM, generic intents), IntentScoreStore (EMA, injectable backend). 41 tests passing.
 
 ```
 MIGRAR examples/agent-comparison/src/intent-teacher.ts
@@ -341,9 +343,10 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 2.3 — BORRAR código viejo del Dispatcher
+### Sprint 2.3 — BORRAR código viejo del Dispatcher ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** Limpiar el dispatcher de v1.
+**Resultado:** Borrados fallback/ y bootstrapper/. node-dispatcher.test.ts migrado a MockFallbackAgent. 7 test files, 95 tests passing.
 
 ```
 BORRAR:

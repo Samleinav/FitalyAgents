@@ -1,15 +1,63 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { NodeDispatcher } from './node-dispatcher.js'
 import { InMemoryEmbeddingClassifier } from './classifier/in-memory-embedding-classifier.js'
-import { InMemoryLLMFallbackAgent } from './fallback/in-memory-llm-fallback-agent.js'
 import { InMemoryIntentLibrary } from './intent-library/in-memory-intent-library.js'
 import { InMemoryBus } from 'fitalyagents'
+import type { ILLMFallbackAgent } from '../types/index.js'
+import type { IEventBus, Unsubscribe } from 'fitalyagents'
+
+// ── Mock Fallback Agent (replaces deleted InMemoryLLMFallbackAgent) ──────────
+
+class MockFallbackAgent implements ILLMFallbackAgent {
+  private unsub: Unsubscribe | null = null
+  constructor(
+    private readonly bus: IEventBus,
+    private readonly intentLibrary: InMemoryIntentLibrary,
+  ) {}
+
+  start(): void {
+    this.unsub = this.bus.subscribe('bus:DISPATCH_FALLBACK', (data) => {
+      const event = data as { session_id: string; text: string }
+      void this.resolve(event)
+    })
+  }
+
+  private async resolve(event: { session_id: string; text: string }): Promise<void> {
+    await this.bus.publish('bus:TASK_AVAILABLE', {
+      event: 'TASK_AVAILABLE',
+      task_id: `fallback_${Date.now()}`,
+      session_id: event.session_id,
+      intent_id: 'generic_query',
+      domain_required: 'customer_facing',
+      scope_hint: 'general',
+      capabilities_required: ['GENERAL_QUERY'],
+      slots: { raw_text: event.text },
+      priority: 5,
+      source: 'llm_fallback',
+      timeout_ms: 8000,
+      created_at: Date.now(),
+    })
+
+    await this.bus.publish('bus:INTENT_UPDATED', {
+      event: 'INTENT_UPDATED',
+      intent_id: 'generic_query',
+      new_example: event.text,
+      source: 'llm_fallback',
+      timestamp: Date.now(),
+    })
+  }
+
+  dispose(): void {
+    if (this.unsub) this.unsub()
+    this.unsub = null
+  }
+}
 
 describe('NodeDispatcher', () => {
   let bus: InMemoryBus
   let lib: InMemoryIntentLibrary
   let classifier: InMemoryEmbeddingClassifier
-  let fallbackAgent: InMemoryLLMFallbackAgent
+  let fallbackAgent: MockFallbackAgent
   let dispatcher: NodeDispatcher
 
   beforeEach(async () => {
@@ -27,17 +75,7 @@ describe('NodeDispatcher', () => {
 
     classifier = new InMemoryEmbeddingClassifier(lib)
 
-    fallbackAgent = new InMemoryLLMFallbackAgent({
-      bus,
-      intentLibrary: lib,
-      resolver: async (text) => ({
-        intent_id: 'generic_query',
-        domain_required: 'customer_facing',
-        scope_hint: 'general',
-        capabilities_required: ['GENERAL_QUERY'],
-        slots: { raw_text: text },
-      }),
-    })
+    fallbackAgent = new MockFallbackAgent(bus, lib)
 
     dispatcher = new NodeDispatcher({
       bus,

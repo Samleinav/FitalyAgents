@@ -20,20 +20,35 @@ export type { NodeDispatcherDeps } from './node/node-dispatcher.js'
 export { InMemoryEmbeddingClassifier } from './node/classifier/in-memory-embedding-classifier.js'
 export { LLMDirectClassifier } from './node/classifier/llm-direct-classifier.js'
 
-// Fallback
-export { InMemoryLLMFallbackAgent } from './node/fallback/in-memory-llm-fallback-agent.js'
-export type { FallbackResolver } from './node/fallback/in-memory-llm-fallback-agent.js'
-
 // Intent Library
 export { InMemoryIntentLibrary } from './node/intent-library/in-memory-intent-library.js'
-
-// Bootstrapper
-export { DispatcherBootstrapper } from './node/bootstrapper/dispatcher-bootstrapper.js'
-export type { BootstrapOptions } from './node/bootstrapper/dispatcher-bootstrapper.js'
 
 // LLM
 export type { LLMProvider } from './llm/types.js'
 export { ClaudeLLMProvider } from './llm/claude-llm-provider.js'
+
+// Speculative Cache (v2)
+export { SpeculativeCache } from './speculative-cache.js'
+export type {
+  SpeculativeResult,
+  SpeculativeToolResult,
+  SpeculativeDraftRef,
+  SpeculativeHint,
+} from './speculative-cache.js'
+
+// Intent Teacher (v2)
+export { IntentTeacher } from './intent-teacher.js'
+export type {
+  TeacherAction,
+  TeacherResult,
+  TeacherEvent,
+  TeacherConfig,
+  ITeacherLLM,
+} from './intent-teacher.js'
+
+// Intent Score Store (v2)
+export { IntentScoreStore, InMemoryScoreBackend, SCORE_THRESHOLDS } from './intent-score-store.js'
+export type { ScoreEntry, ConfidenceLevel, IScoreBackend } from './intent-score-store.js'
 
 // Types
 export type {
