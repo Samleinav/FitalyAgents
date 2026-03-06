@@ -369,9 +369,10 @@ CRITERIO DE DONE:
 
 ## Fase 3 — Interaction Agent
 
-### Sprint 3.1 — Interaction Agent (base)
+### Sprint 3.1 — Interaction Agent (base) ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** El LLM streaming con tool calling — el cerebro del sistema.
+**Resultado:** InteractionAgent con IStreamingLLM, safety pipeline (4 niveles), speculative cache, context building, TTS streaming. 15 test files, 235 tests passing. Build DTS clean.
 
 ```
 CREAR packages/core/src/agent/interaction-agent.ts:
@@ -405,9 +406,10 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 3.2 — Draft Flow multi-turno
+### Sprint 3.2 — Draft Flow multi-turno ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** El cliente puede modificar su orden N veces antes de confirmar.
+**Resultado:** handleDraftFlow con parseDraftIntent (regex ES/EN), extractDraftChanges vía LLM, subscribeDraftExpiry TTL. 16 test files, 248 tests. Build DTS clean.
 
 ```
 EXTENDER interaction-agent.ts:
@@ -432,9 +434,10 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 3.3 — PROTECTED + RESTRICTED con ApprovalOrchestrator
+### Sprint 3.3 — PROTECTED + RESTRICTED con ApprovalOrchestrator ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** Cerrar el loop de aprobación humana.
+**Resultado:** handleProtectedConfirm (confirm/deny/re-prompt), subscribeApprovalEvents (APPROVAL_RESOLVED + ORDER_APPROVAL_TIMEOUT), hasPendingConfirmation. 17 test files, 258 tests. Build DTS clean.
 
 ```
 EXTENDER interaction-agent.ts:
@@ -468,9 +471,10 @@ CRITERIO DE DONE:
 
 ## Fase 4 — Agentes Autónomos
 
-### Sprint 4.1 — StreamAgent + eliminar NexusAgent
+### Sprint 4.1 — StreamAgent + eliminar NexusAgent ✅ COMPLETADO 2026-03-05
 
 **Objetivo:** Base class limpia para agentes que viven en el bus.
+**Resultado:** StreamAgent con tests (11 tests), AgentBundle migrado a IAgent genérica (stop/shutdown), NexusAgent eliminado. 0 referencias residuales en core. 17 test files, 257 tests. Build DTS clean.
 
 ```
 COMPLETAR packages/core/src/agent/stream-agent.ts:
@@ -506,7 +510,9 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 4.2 — ContextBuilderAgent
+### Sprint 4.2 — ContextBuilderAgent ✅ COMPLETADO 2026-03-05
+
+**Resultado:** ContextBuilderAgent extends StreamAgent, suscribe 6 canales del bus, mantiene conversation_history, ambient_context, pending_draft, action_history, last_product_mentioned por sesión. 15 tests nuevos. 18 test files, 272 tests. Build DTS clean.
 
 ```
 CREAR packages/core/src/agent/context-builder-agent.ts:
@@ -530,7 +536,9 @@ CRITERIO DE DONE:
 
 ---
 
-### Sprint 4.3 — ProactiveAgent
+### Sprint 4.3 — ProactiveAgent ✅ COMPLETADO 2026-03-05
+
+**Resultado:** ProactiveAgent extends StreamAgent. Detecta idle_customer (configurable timer con reset), out_of_stock (stock=0, empty products, in_stock=false), draft_expired (ttl_expired). 11 tests. 19 test files, 283 tests total. Build DTS clean.
 
 ```
 CREAR packages/core/src/agent/proactive-agent.ts:

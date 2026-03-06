@@ -83,12 +83,34 @@ export { InMemoryBus } from './bus/in-memory-bus.js'
 export { RedisBus, createBus } from './bus/redis-bus.js'
 
 // Agent
-/** @deprecated Use StreamAgent instead. Will be removed in v2.0.0. */
-export { NexusAgent } from './agent/nexus-agent.js'
-export type { NexusAgentOptions } from './agent/nexus-agent.js'
 export { AgentBundle } from './agent/agent-bundle.js'
-export type { AgentBundleOptions, Disposable } from './agent/agent-bundle.js'
+export type { AgentBundleOptions, Disposable, IAgent } from './agent/agent-bundle.js'
 export { StreamAgent } from './agent/stream-agent.js'
+export { InteractionAgent } from './agent/interaction-agent.js'
+export { ContextBuilderAgent } from './agent/context-builder-agent.js'
+export type {
+  ConversationContext,
+  ConversationTurn,
+  ContextBuilderConfig,
+} from './agent/context-builder-agent.js'
+export { ProactiveAgent } from './agent/proactive-agent.js'
+export type {
+  ProactiveReason,
+  ProactiveTrigger,
+  ProactiveAgentConfig,
+} from './agent/proactive-agent.js'
+export type {
+  IStreamingLLM,
+  LLMStreamChunk,
+  InteractionToolDef,
+  IToolExecutor,
+  ISpeculativeCache,
+  ToolCallResult,
+  InteractionAgentDeps,
+  DraftFlowResult,
+  DraftUserIntent,
+  ProtectedConfirmResult,
+} from './agent/interaction-agent.js'
 
 // Context
 export { InMemoryContextStore } from './context/in-memory-context-store.js'

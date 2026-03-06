@@ -1,21 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
 import { AgentBundle } from './agent-bundle.js'
-import type { NexusAgent } from './nexus-agent.js'
+import type { IAgent } from './agent-bundle.js'
 
 // ── Test doubles ──────────────────────────────────────────────────────────────
 
-function makeAgent(_id: string): NexusAgent & { startCalled: boolean; shutdownCalled: boolean } {
+function makeAgent(_id: string): IAgent & { startCalled: boolean; stopCalled: boolean } {
   return {
     startCalled: false,
-    shutdownCalled: false,
+    stopCalled: false,
     async start() {
       this.startCalled = true
     },
-    async shutdown() {
-      this.shutdownCalled = true
+    async stop() {
+      this.stopCalled = true
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any
+  }
 }
 
 function makeDisposable() {
@@ -41,20 +40,18 @@ describe('AgentBundle', () => {
 
     it('starts agents in order', async () => {
       const order: string[] = []
-      const a1 = {
+      const a1: IAgent = {
         async start() {
           order.push('a1')
         },
-        async shutdown() {},
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any as NexusAgent
-      const a2 = {
+        async stop() {},
+      }
+      const a2: IAgent = {
         async start() {
           order.push('a2')
         },
-        async shutdown() {},
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any as NexusAgent
+        async stop() {},
+      }
 
       const bundle = new AgentBundle({ agents: [a1, a2] })
       await bundle.start()
@@ -68,41 +65,52 @@ describe('AgentBundle', () => {
     })
   })
 
-  // ── shutdown ─────────────────────────────────────────────────────────
+  // ── stop ─────────────────────────────────────────────────────────────
 
-  describe('shutdown()', () => {
-    it('shuts down all agents', async () => {
+  describe('stop()', () => {
+    it('stops all agents', async () => {
       const a1 = makeAgent('a1')
       const a2 = makeAgent('a2')
       const bundle = new AgentBundle({ agents: [a1, a2] })
 
-      await bundle.shutdown()
+      await bundle.stop()
 
-      expect(a1.shutdownCalled).toBe(true)
-      expect(a2.shutdownCalled).toBe(true)
+      expect(a1.stopCalled).toBe(true)
+      expect(a2.stopCalled).toBe(true)
     })
 
-    it('shuts down agents in REVERSE order', async () => {
+    it('stops agents in REVERSE order', async () => {
       const order: string[] = []
-      const a1 = {
+      const a1: IAgent = {
         async start() {},
-        async shutdown() {
+        async stop() {
           order.push('a1')
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any as NexusAgent
-      const a2 = {
+      }
+      const a2: IAgent = {
         async start() {},
-        async shutdown() {
+        async stop() {
           order.push('a2')
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any as NexusAgent
+      }
 
       const bundle = new AgentBundle({ agents: [a1, a2] })
-      await bundle.shutdown()
+      await bundle.stop()
 
       expect(order).toEqual(['a2', 'a1'])
+    })
+  })
+
+  // ── shutdown (deprecated alias) ─────────────────────────────────────
+
+  describe('shutdown() (deprecated)', () => {
+    it('delegates to stop()', async () => {
+      const a1 = makeAgent('a1')
+      const bundle = new AgentBundle({ agents: [a1] })
+
+      await bundle.shutdown()
+
+      expect(a1.stopCalled).toBe(true)
     })
   })
 
@@ -125,19 +133,19 @@ describe('AgentBundle', () => {
       expect(() => bundle.dispose()).not.toThrow()
     })
 
-    it('does NOT shutdown agents — only disposes resources', async () => {
+    it('does NOT stop agents — only disposes resources', async () => {
       const a1 = makeAgent('a1')
       const bundle = new AgentBundle({ agents: [a1] })
 
       bundle.dispose()
 
-      expect(a1.shutdownCalled).toBe(false)
+      expect(a1.stopCalled).toBe(false)
     })
   })
 
   // ── full lifecycle ────────────────────────────────────────────────────
 
-  describe('full lifecycle: start → shutdown → dispose', () => {
+  describe('full lifecycle: start → stop → dispose', () => {
     it('executes complete lifecycle without errors', async () => {
       const agent = makeAgent('main')
       const resource = makeDisposable()
@@ -149,8 +157,8 @@ describe('AgentBundle', () => {
       await bundle.start()
       expect(agent.startCalled).toBe(true)
 
-      await bundle.shutdown()
-      expect(agent.shutdownCalled).toBe(true)
+      await bundle.stop()
+      expect(agent.stopCalled).toBe(true)
 
       bundle.dispose()
       expect(resource.dispose).toHaveBeenCalledOnce()

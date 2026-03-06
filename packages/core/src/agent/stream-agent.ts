@@ -1,9 +1,9 @@
 import type { IEventBus, BusHandler } from '../types/index.js'
 
 /**
- * StreamAgent — base class for agents that live on the event bus (v2).
+ * StreamAgent — base class for agents that live on the event bus.
  *
- * Replaces NexusAgent with a simpler, stream-oriented lifecycle:
+ * Provides a clean, stream-oriented lifecycle:
  * - subscribe/unsubscribe to bus channels
  * - start/stop/dispose lifecycle
  * - configurable heartbeat

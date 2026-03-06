@@ -1,0 +1,563 @@
+import { describe, it, expect, vi } from 'vitest'
+import { InteractionAgent } from './interaction-agent.js'
+import type {
+  IStreamingLLM,
+  LLMStreamChunk,
+  InteractionToolDef,
+  IToolExecutor,
+  ISpeculativeCache,
+  InteractionAgentDeps,
+} from './interaction-agent.js'
+import { InMemoryBus } from '../bus/in-memory-bus.js'
+import { InMemoryContextStore } from '../context/in-memory-context-store.js'
+import { SafetyGuard } from '../safety/safety-guard.js'
+import { InMemoryDraftStore } from '../safety/draft-store.js'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function createMockLLM(chunks: LLMStreamChunk[]): IStreamingLLM {
+  return {
+    async *stream() {
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    },
+  }
+}
+
+function createMockExecutor(results: Record<string, unknown> = {}): IToolExecutor {
+  return {
+    execute: vi.fn(async (toolId: string, _input: unknown) => {
+      if (toolId in results) return results[toolId]
+      return { ok: true, tool: toolId }
+    }),
+  }
+}
+
+function createMockCache(
+  entries: Record<string, { type: string; result?: unknown; draftId?: string }> = {},
+): ISpeculativeCache {
+  return {
+    get: vi.fn((_sessionId: string, intentId: string) => entries[intentId] ?? null),
+    invalidate: vi.fn(),
+  }
+}
+
+function buildTools(
+  ...defs: Array<{ id: string; safety: InteractionToolDef['safety']; prompt?: string }>
+): Map<string, InteractionToolDef> {
+  const map = new Map<string, InteractionToolDef>()
+  for (const d of defs) {
+    map.set(d.id, {
+      tool_id: d.id,
+      description: `Tool ${d.id}`,
+      safety: d.safety,
+      confirm_prompt: d.prompt,
+    })
+  }
+  return map
+}
+
+function createAgent(overrides: Partial<InteractionAgentDeps> = {}): {
+  agent: InteractionAgent
+  bus: InMemoryBus
+  contextStore: InMemoryContextStore
+  executor: IToolExecutor
+  ttsLog: string[]
+} {
+  const bus = new InMemoryBus()
+  const contextStore = new InMemoryContextStore()
+  const executor = overrides.executor ?? createMockExecutor()
+  const ttsLog: string[] = []
+  const safetyGuard = new SafetyGuard({ toolConfigs: [] })
+
+  const agent = new InteractionAgent({
+    bus,
+    llm: overrides.llm ?? createMockLLM([]),
+    contextStore,
+    toolRegistry: overrides.toolRegistry ?? new Map(),
+    executor,
+    safetyGuard,
+    ttsCallback: (text, _sid) => ttsLog.push(text),
+    ...overrides,
+  })
+
+  return { agent, bus, contextStore, executor, ttsLog }
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+describe('InteractionAgent', () => {
+  // ── Text streaming ─────────────────────────────────────────────────
+
+  describe('text streaming', () => {
+    it('streams text chunks to ttsCallback', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Hola, ' },
+        { type: 'text', text: '¿en qué puedo ayudarte?' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, ttsLog } = createAgent({ llm })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'hola',
+      })
+
+      expect(result.textChunks).toEqual(['Hola, ', '¿en qué puedo ayudarte?'])
+      expect(ttsLog).toEqual(['Hola, ', '¿en qué puedo ayudarte?'])
+    })
+
+    it('stores response in context store', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Response text' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, contextStore } = createAgent({ llm })
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'query',
+      })
+
+      const lastResponse = await contextStore.get<string>('session-1', 'last_response')
+      expect(lastResponse).toBe('Response text')
+
+      const lastUserText = await contextStore.get<string>('session-1', 'last_user_text')
+      expect(lastUserText).toBe('query')
+    })
+  })
+
+  // ── SAFE tool ──────────────────────────────────────────────────────
+
+  describe('SAFE tool', () => {
+    it('executes SAFE tool directly via executor', async () => {
+      const executor = createMockExecutor({ product_search: { products: ['Nike Air'] } })
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'product_search', input: { query: 'Nike' } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        executor,
+        toolRegistry: buildTools({ id: 'product_search', safety: 'safe' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'busco tenis nike',
+      })
+
+      expect(result.toolResults).toHaveLength(1)
+      expect(result.toolResults[0].type).toBe('executed')
+      if (result.toolResults[0].type === 'executed') {
+        expect(result.toolResults[0].result).toEqual({ products: ['Nike Air'] })
+      }
+      expect(executor.execute).toHaveBeenCalledWith('product_search', { query: 'Nike' })
+    })
+
+    it('uses cached result from speculative cache', async () => {
+      const executor = createMockExecutor()
+      const cache = createMockCache({
+        product_search: { type: 'tool_result', result: { products: ['Cached Nike'] } },
+      })
+
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'product_search', input: { query: 'Nike' } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        executor,
+        speculativeCache: cache,
+        toolRegistry: buildTools({ id: 'product_search', safety: 'safe' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'busco tenis nike',
+      })
+
+      expect(result.toolResults[0].type).toBe('cached')
+      if (result.toolResults[0].type === 'cached') {
+        expect(result.toolResults[0].result).toEqual({ products: ['Cached Nike'] })
+      }
+      // Executor should NOT have been called
+      expect(executor.execute).not.toHaveBeenCalled()
+    })
+
+    it('invalidates speculative cache at end of turn', async () => {
+      const cache = createMockCache()
+      const llm = createMockLLM([
+        { type: 'text', text: 'Hello' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent } = createAgent({ llm, speculativeCache: cache })
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'hello',
+      })
+
+      expect(cache.invalidate).toHaveBeenCalledWith('session-1')
+    })
+  })
+
+  // ── STAGED tool ────────────────────────────────────────────────────
+
+  describe('STAGED tool', () => {
+    it('creates a draft and returns draft_ready', async () => {
+      const bus = new InMemoryBus()
+      const draftStore = new InMemoryDraftStore({ bus })
+
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'order_create', input: { items: ['shirt'] } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        bus,
+        draftStore,
+        toolRegistry: buildTools({ id: 'order_create', safety: 'staged' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'quiero comprar una camisa',
+      })
+
+      expect(result.toolResults).toHaveLength(1)
+      expect(result.toolResults[0].type).toBe('draft_ready')
+      if (result.toolResults[0].type === 'draft_ready') {
+        expect(result.toolResults[0].needs_confirmation).toBe(true)
+        expect(result.toolResults[0].draftId).toBeTruthy()
+      }
+    })
+
+    it('uses pre-created draft from speculative cache', async () => {
+      const bus = new InMemoryBus()
+      const draftStore = new InMemoryDraftStore({ bus })
+      const cache = createMockCache({
+        order_create: { type: 'draft_ref', draftId: 'pre_draft_001' },
+      })
+
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'order_create', input: { items: ['shirt'] } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        bus,
+        draftStore,
+        speculativeCache: cache,
+        toolRegistry: buildTools({ id: 'order_create', safety: 'staged' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'quiero comprar una camisa',
+      })
+
+      expect(result.toolResults[0].type).toBe('draft_ready')
+      if (result.toolResults[0].type === 'draft_ready') {
+        expect(result.toolResults[0].draftId).toBe('pre_draft_001')
+      }
+    })
+
+    it('returns error if draftStore not available', async () => {
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'order_create', input: {} },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        draftStore: undefined,
+        toolRegistry: buildTools({ id: 'order_create', safety: 'staged' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'quiero comprar',
+      })
+
+      expect(result.toolResults[0].type).toBe('error')
+    })
+  })
+
+  // ── PROTECTED tool ─────────────────────────────────────────────────
+
+  describe('PROTECTED tool', () => {
+    it('returns needs_confirmation with prompt', async () => {
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'price_override', input: { amount: 50 } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        toolRegistry: buildTools({
+          id: 'price_override',
+          safety: 'protected',
+          prompt: '¿Confirma el cambio de precio?',
+        }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'cambia el precio',
+      })
+
+      expect(result.toolResults).toHaveLength(1)
+      expect(result.toolResults[0].type).toBe('needs_confirmation')
+      if (result.toolResults[0].type === 'needs_confirmation') {
+        expect(result.toolResults[0].prompt).toBe('¿Confirma el cambio de precio?')
+      }
+    })
+
+    it('uses default prompt when confirm_prompt not set', async () => {
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'price_override', input: {} },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        toolRegistry: buildTools({ id: 'price_override', safety: 'protected' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'cambia el precio',
+      })
+
+      if (result.toolResults[0].type === 'needs_confirmation') {
+        expect(result.toolResults[0].prompt).toContain('price_override')
+      }
+    })
+  })
+
+  // ── RESTRICTED tool ────────────────────────────────────────────────
+
+  describe('RESTRICTED tool', () => {
+    it('returns error if approvalOrchestrator not available', async () => {
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'refund_create', input: { amount: 100 } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        approvalOrchestrator: undefined,
+        toolRegistry: buildTools({ id: 'refund_create', safety: 'restricted' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'quiero un reembolso',
+      })
+
+      expect(result.toolResults[0].type).toBe('error')
+    })
+
+    it('sends TTS notification while waiting for approval', async () => {
+      // Create a mock orchestrator that resolves immediately
+      const mockOrchestrator = {
+        orchestrate: vi.fn().mockResolvedValue({ approved: true, reason: 'ok', channel: 'voice' }),
+      }
+
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'refund_create', input: { amount: 100 } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent, ttsLog } = createAgent({
+        llm,
+        approvalOrchestrator: mockOrchestrator as any,
+        toolRegistry: buildTools({ id: 'refund_create', safety: 'restricted' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'quiero un reembolso',
+        speaker_id: 'customer_1',
+      })
+
+      expect(ttsLog).toContain('Un momento, necesito autorización para esta acción.')
+      expect(result.toolResults[0].type).toBe('pending_approval')
+      if (result.toolResults[0].type === 'pending_approval') {
+        expect(result.toolResults[0].approved).toBe(true)
+      }
+    })
+  })
+
+  // ── Unknown tool ───────────────────────────────────────────────────
+
+  describe('unknown tool', () => {
+    it('returns error for unregistered tool', async () => {
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'unknown_tool', input: {} },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({ llm })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'do something',
+      })
+
+      expect(result.toolResults[0].type).toBe('error')
+      if (result.toolResults[0].type === 'error') {
+        expect(result.toolResults[0].error).toContain('Unknown tool')
+      }
+    })
+  })
+
+  // ── Context building ──────────────────────────────────────────────
+
+  describe('context building', () => {
+    it('includes conversation history from previous turn', async () => {
+      const contextStore = new InMemoryContextStore()
+      await contextStore.set('session-1', 'last_user_text', '¿tienes tenis?')
+      await contextStore.set('session-1', 'last_response', 'Sí, tenemos varias opciones.')
+
+      let capturedMessages: unknown[] = []
+      const llm: IStreamingLLM = {
+        async *stream(params) {
+          capturedMessages = params.messages
+          yield { type: 'text', text: 'response' } as LLMStreamChunk
+          yield { type: 'end', stop_reason: 'end_turn' } as LLMStreamChunk
+        },
+      }
+
+      const { agent } = createAgent({ llm, contextStore })
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'muéstrame los Nike',
+      })
+
+      // Should have: prev user, prev assistant, current user
+      expect(capturedMessages).toHaveLength(3)
+      expect((capturedMessages[0] as any).role).toBe('user')
+      expect((capturedMessages[0] as any).content).toBe('¿tienes tenis?')
+      expect((capturedMessages[1] as any).role).toBe('assistant')
+      expect((capturedMessages[2] as any).role).toBe('user')
+      expect((capturedMessages[2] as any).content).toBe('muéstrame los Nike')
+    })
+
+    it('sends only current message when no history', async () => {
+      let capturedMessages: unknown[] = []
+      const llm: IStreamingLLM = {
+        async *stream(params) {
+          capturedMessages = params.messages
+          yield { type: 'end', stop_reason: 'end_turn' } as LLMStreamChunk
+        },
+      }
+
+      const { agent } = createAgent({ llm })
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'hola',
+      })
+
+      expect(capturedMessages).toHaveLength(1)
+    })
+  })
+
+  // ── Bus events ─────────────────────────────────────────────────────
+
+  describe('bus events', () => {
+    it('publishes ACTION_COMPLETED after handling', async () => {
+      const bus = new InMemoryBus()
+      const events: unknown[] = []
+      bus.subscribe('bus:ACTION_COMPLETED', (data) => events.push(data))
+
+      const llm = createMockLLM([
+        { type: 'text', text: 'Hello' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent } = createAgent({ llm, bus })
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'hi',
+      })
+
+      expect(events).toHaveLength(1)
+      expect(events[0]).toHaveProperty('event', 'ACTION_COMPLETED')
+      expect(events[0]).toHaveProperty('agent_id', 'InteractionAgent')
+    })
+  })
+
+  // ── Mixed chunks (text + tool_call) ────────────────────────────────
+
+  describe('mixed text and tool calls', () => {
+    it('handles interleaved text and tool calls', async () => {
+      const executor = createMockExecutor({ product_search: { products: ['Nike'] } })
+      const llm = createMockLLM([
+        { type: 'text', text: 'Déjame buscar eso.' },
+        { type: 'tool_call', id: 'tc_1', name: 'product_search', input: { q: 'Nike' } },
+        { type: 'text', text: ' Encontré resultados.' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, ttsLog } = createAgent({
+        llm,
+        executor,
+        toolRegistry: buildTools({ id: 'product_search', safety: 'safe' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'busco Nike',
+      })
+
+      expect(result.textChunks).toEqual(['Déjame buscar eso.', ' Encontré resultados.'])
+      expect(result.toolResults).toHaveLength(1)
+      expect(result.toolResults[0].type).toBe('executed')
+      expect(ttsLog).toHaveLength(2)
+    })
+  })
+
+  // ── Executor error ─────────────────────────────────────────────────
+
+  describe('executor error', () => {
+    it('returns error when executor throws', async () => {
+      const executor: IToolExecutor = {
+        execute: vi.fn().mockRejectedValue(new Error('Connection refused')),
+      }
+
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'product_search', input: {} },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        executor,
+        toolRegistry: buildTools({ id: 'product_search', safety: 'safe' }),
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'busco zapatos',
+      })
+
+      expect(result.toolResults[0].type).toBe('error')
+      if (result.toolResults[0].type === 'error') {
+        expect(result.toolResults[0].error).toContain('Connection refused')
+      }
+    })
+  })
+})
