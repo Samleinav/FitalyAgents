@@ -149,6 +149,151 @@ describe('ContextBuilderAgent', () => {
     })
   })
 
+  // ── Ambient Context Pipeline (Sprint 5.3) ─────────────────────────
+
+  describe('ambient context pipeline', () => {
+    it('AMBIENT_CONTEXT with text extracts product mention into structured ambient', async () => {
+      const { agent, bus, contextStore } = createAgent()
+      await agent.start()
+
+      await bus.publish('bus:AMBIENT_CONTEXT', {
+        session_id: 'ses-1',
+        text: 'busco tenis Nike para regalo',
+        speaker_id: 'spk-ambient',
+      })
+
+      await new Promise((r) => setTimeout(r, 20))
+
+      const ambient = await contextStore.getAmbient('ses-1')
+      expect(ambient).not.toBeNull()
+      expect(ambient!.last_product_mentioned).toBe('tenis Nike para regalo')
+      expect(ambient!.conversation_snippets).toHaveLength(1)
+      expect(ambient!.conversation_snippets[0].text).toBe('busco tenis Nike para regalo')
+      expect(ambient!.conversation_snippets[0].speaker_id).toBe('spk-ambient')
+
+      await agent.stop()
+    })
+
+    it('ambient last_product_mentioned resolves in getEnrichedContext', async () => {
+      // Scenario: customer mentions Nike to a friend (ambient),
+      // then asks "¿los tienen en azul?" — context resolves product = Nike
+      const { agent, bus } = createAgent()
+      await agent.start()
+
+      // Customer overheard saying they like Nike
+      await bus.publish('bus:AMBIENT_CONTEXT', {
+        session_id: 'ses-1',
+        text: 'me gustan los tenis Nike',
+        speaker_id: 'spk-1',
+      })
+
+      await new Promise((r) => setTimeout(r, 20))
+
+      // Customer now asks directly (no product mentioned in direct speech)
+      await bus.publish('bus:SPEECH_FINAL', {
+        session_id: 'ses-1',
+        text: '¿los tienen en azul?',
+      })
+
+      await new Promise((r) => setTimeout(r, 20))
+
+      const ctx = await agent.getEnrichedContext('ses-1')
+      // Direct speech didn't mention a product, but ambient context has 'tenis Nike'
+      expect(ctx.last_product_mentioned).not.toBeNull()
+      // Ambient product surfaces via fallback
+      expect(ctx.ambient_context.last_product_mentioned).toBeTruthy()
+
+      await agent.stop()
+    })
+
+    it('direct speech product overrides ambient product', async () => {
+      const { agent, bus } = createAgent()
+      await agent.start()
+
+      // Ambient mention
+      await bus.publish('bus:AMBIENT_CONTEXT', {
+        session_id: 'ses-1',
+        text: 'busco tenis Nike',
+      })
+      await new Promise((r) => setTimeout(r, 20))
+
+      // Direct speech with different product
+      await bus.publish('bus:SPEECH_FINAL', {
+        session_id: 'ses-1',
+        text: 'quiero zapatos Adidas',
+      })
+      await new Promise((r) => setTimeout(r, 20))
+
+      const ctx = await agent.getEnrichedContext('ses-1')
+      // Direct speech product takes precedence
+      expect(ctx.last_product_mentioned).toContain('Adidas')
+
+      await agent.stop()
+    })
+
+    it('accumulates multiple ambient text snippets', async () => {
+      const { agent, bus, contextStore } = createAgent()
+      await agent.start()
+
+      await bus.publish('bus:AMBIENT_CONTEXT', {
+        session_id: 'ses-1',
+        text: 'me gustan los tenis Nike',
+      })
+      await bus.publish('bus:AMBIENT_CONTEXT', {
+        session_id: 'ses-1',
+        text: 'y también los de Adidas',
+      })
+
+      await new Promise((r) => setTimeout(r, 20))
+
+      const ambient = await contextStore.getAmbient('ses-1')
+      expect(ambient!.conversation_snippets).toHaveLength(2)
+
+      await agent.stop()
+    })
+
+    it('ambient snippets appear in enriched context ambient_context', async () => {
+      const { agent, bus } = createAgent()
+      await agent.start()
+
+      await bus.publish('bus:AMBIENT_CONTEXT', {
+        session_id: 'ses-1',
+        text: 'busco tenis Nike',
+      })
+
+      await new Promise((r) => setTimeout(r, 20))
+
+      const ctx = await agent.getEnrichedContext('ses-1')
+      expect(Array.isArray(ctx.ambient_context.conversation_snippets)).toBe(true)
+      expect((ctx.ambient_context.conversation_snippets as unknown[]).length).toBeGreaterThan(0)
+
+      await agent.stop()
+    })
+
+    it('non-text ambient events do not affect structured ambient', async () => {
+      const { agent, bus, contextStore } = createAgent()
+      await agent.start()
+
+      await bus.publish('bus:AMBIENT_CONTEXT', {
+        session_id: 'ses-1',
+        noise_level: 'high',
+        speaker_count: 3,
+      })
+
+      await new Promise((r) => setTimeout(r, 20))
+
+      // Flat context still updated
+      const ctx = await agent.getEnrichedContext('ses-1')
+      expect(ctx.ambient_context.noise_level).toBe('high')
+
+      // Structured ambient not touched
+      const ambient = await contextStore.getAmbient('ses-1')
+      expect(ambient).toBeNull()
+
+      await agent.stop()
+    })
+  })
+
   // ── Draft states ──────────────────────────────────────────────────
 
   describe('draft states', () => {

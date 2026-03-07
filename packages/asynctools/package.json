@@ -1,6 +1,6 @@
 {
     "name": "@fitalyagents/asynctools",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "description": "Standalone async parallel tool execution for any LLM agent",
     "type": "module",
     "exports": {
@@ -29,7 +29,7 @@
         "parallel",
         "llm"
     ],
-    "license": "SEE LICENSE IN LICENSE",
+    "license": "AGPL-3.0-only",
     "dependencies": {
         "zod": "^3.24.2"
     },

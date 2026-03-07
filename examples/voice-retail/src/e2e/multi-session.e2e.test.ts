@@ -9,7 +9,7 @@
  * 3. ACTION_COMPLETED scoping: events from sess_ana don't fire callbacks for sess_pedro
  * 4. Load test: latency degradation under increasing concurrency (1, 5, 10, 20)
  * 5. AudioQueue isolation: segments from one session never play on another
- * 6. ApprovalQueue isolation: approving order from sess_A doesn't affect sess_B
+ * 6. Full multi-session pipeline: 5 sessions running simultaneously
  * 7. Race condition detection: concurrent patches to ContextStore
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -18,8 +18,6 @@ import {
   InMemoryContextStore,
   InMemoryAudioQueueService,
   InMemoryApprovalQueue,
-  InMemoryLockManager,
-  InMemoryTaskQueue,
 } from 'fitalyagents'
 import type { AudioSegment } from 'fitalyagents'
 import { WorkAgent } from '../agents/work/work-agent.js'
@@ -454,50 +452,7 @@ describe('E2E: Multi-Session Concurrente (Sprint 4.1)', () => {
     })
   })
 
-  // ── 6. TaskQueue concurrent isolation ───────────────────────────────────
-
-  describe('TaskQueue concurrent isolation', () => {
-    it("tasks from different sessions don't interfere", async () => {
-      const locks = new InMemoryLockManager()
-      const queue = new InMemoryTaskQueue({ lockManager: locks, bus })
-
-      // Publish tasks for 5 different sessions
-      const taskPromises = Array.from({ length: 5 }, (_, i) =>
-        queue.publish({
-          taskId: `task_s${i}`,
-          sessionId: `sess_${i}`,
-          intentId: 'product_search',
-          slots: { session: `sess_${i}` },
-          contextSnapshot: {},
-          priority: 5,
-          timeoutMs: 8000,
-          cancelToken: `tok_${i}`,
-          replyTo: `queue:out:${i}`,
-        }),
-      )
-
-      await Promise.all(taskPromises)
-
-      // Each task should be independently claimable
-      for (let i = 0; i < 5; i++) {
-        const claimed = await queue.claim(`agent_${i}`, `task_s${i}`)
-        expect(claimed).not.toBeNull()
-        expect(claimed!.sessionId).toBe(`sess_${i}`)
-      }
-
-      // Complete one session shouldn't affect others
-      await queue.start('task_s0')
-      await queue.complete('task_s0', { done: true })
-
-      expect(await queue.getStatus('task_s0')).toBe('COMPLETED')
-      expect(await queue.getStatus('task_s1')).toBe('LOCKED') // still locked by agent_1
-
-      queue.dispose()
-      locks.dispose()
-    })
-  })
-
-  // ── 7. Full multi-session pipeline ──────────────────────────────────────
+  // ── 6. Full multi-session pipeline ──────────────────────────────────────
 
   describe('Full pipeline: 5 sessions running simultaneously', () => {
     it('each session gets its own complete flow without contamination', async () => {

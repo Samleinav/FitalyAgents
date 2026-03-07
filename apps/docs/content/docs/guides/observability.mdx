@@ -1,0 +1,182 @@
+---
+title: Observability with Langfuse
+description: Trace every agent turn — LLM calls, tool spans, latency, and classification scores — with zero framework dependencies.
+---
+
+FitalyAgents ships with an injectable tracing interface (`ITracer`) and two implementations:
+
+| Implementation | Use case |
+|---|---|
+| `NoopTracer` | Default — zero overhead, no config needed |
+| `LangfuseTracer` | Production observability via [Langfuse](https://langfuse.com) |
+
+The framework never imports `langfuse` directly. You pass your own instance, so there are **zero new dependencies** unless you opt in.
+
+---
+
+## Concepts
+
+```
+ITracer
+  └─ startTrace(name, params) → ITrace
+       ├─ span(name, input) → ISpan    ← wraps sub-operations
+       │    └─ span.end(output)
+       ├─ generation(params)           ← records LLM input/output/latency
+       ├─ score(name, value, comment)  ← numeric scores (0-1)
+       └─ end(output)                  ← closes the trace
+```
+
+Each user turn becomes one **trace**. Inside it, LLM calls become **generations**, tool executions become **spans**, and classifier results become **scores**.
+
+---
+
+## Quick start
+
+### 1. Install Langfuse
+
+```bash
+npm install langfuse
+```
+
+### 2. Create the tracer
+
+```typescript
+import Langfuse from 'langfuse'
+import { LangfuseTracer } from 'fitalyagents'
+
+const tracer = new LangfuseTracer(
+  new Langfuse({
+    publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+    secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  })
+)
+```
+
+### 3. Inject into agents
+
+```typescript
+import { InteractionAgent } from './agents/interaction-agent'
+import { NodeDispatcher } from 'fitalyagents/dispatcher'
+
+// Both accept an optional tracer — falls back to NoopTracer if omitted
+const interaction = new InteractionAgent({ bus, contextStore, tracer })
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary, tracer })
+```
+
+### 4. Flush on shutdown
+
+```typescript
+process.on('SIGTERM', async () => {
+  await bundle.stop()
+  await tracer.flush()   // send any buffered events to Langfuse
+  process.exit(0)
+})
+```
+
+---
+
+## What gets traced automatically
+
+### InteractionAgent
+
+Every time `bus:SPEECH_FINAL` arrives:
+
+| Event | Type | Data |
+|---|---|---|
+| Turn start | trace | `{ sessionId, text, speaker_id }` |
+| LLM streaming | span | wraps the full streaming call |
+| Each tool call | span | `tool_<name>` with input |
+| LLM generation | generation | input messages, output text, latency |
+| Turn end | trace end | `{ latencyMs, textChunks, toolResults }` |
+
+### NodeDispatcher
+
+Every classification:
+
+| Event | Type | Value |
+|---|---|---|
+| `classifier_confidence` | score | 0–1 confidence from embedding classifier |
+| `classifier_hit` | score | `1` = embedding hit, `0` = fell back to LLM |
+
+---
+
+## Bring your own tracer
+
+`ITracer` is a plain interface — you can implement it for any backend:
+
+```typescript
+import type { ITracer, ITrace, ISpan, GenerationParams, TracerStartParams } from 'fitalyagents'
+
+class DatadogTracer implements ITracer {
+  startTrace(name: string, params: TracerStartParams): ITrace {
+    // return your ITrace implementation
+  }
+  async flush(): Promise<void> { /* ... */ }
+}
+```
+
+---
+
+## Instrument custom code
+
+You can use the tracer anywhere in your agent:
+
+```typescript
+class MyAgent extends NexusAgent {
+  constructor(
+    options: { bus: IEventBus },
+    private tracer: ITracer = new NoopTracer(),
+  ) {
+    super(options)
+  }
+
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    const trace = this.tracer.startTrace('my_agent_turn', {
+      sessionId: task.session_id,
+      input: { intent: task.intent_id },
+    })
+
+    const dbSpan = trace.span('db_lookup', { query: task.slots })
+    const data = await this.db.find(task.slots)
+    dbSpan.end({ rows: data.length })
+
+    trace.score('result_confidence', data.length > 0 ? 1 : 0)
+    trace.end({ result: data })
+
+    return { status: 'completed', result: data, /* ... */ }
+  }
+}
+```
+
+---
+
+## Viewing traces in Langfuse
+
+After running your pipeline, open your Langfuse project:
+
+- **Traces** tab — one trace per user turn
+- **Generations** — LLM calls with token counts and latency
+- **Scores** — classifier confidence over time (great for detecting model drift)
+- **Sessions** — group all turns by `session_id`
+
+Langfuse's session grouping is automatic: `sessionId` maps to Langfuse's `userId` field by default, so each conversation appears as one session thread.
+
+---
+
+## TypeScript types
+
+```typescript
+import type {
+  ITracer,
+  ITrace,
+  ISpan,
+  GenerationParams,
+  TracerStartParams,
+} from 'fitalyagents'
+
+import { NoopTracer, NoopTrace, NoopSpan } from 'fitalyagents'
+import { LangfuseTracer } from 'fitalyagents'
+import type { LangfuseClientLike } from 'fitalyagents'
+```
+
+`LangfuseClientLike` is the minimal duck-type interface the tracer uses — you can pass any object that satisfies it, not just the official `langfuse` package.

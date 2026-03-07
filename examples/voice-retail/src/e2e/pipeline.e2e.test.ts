@@ -31,7 +31,7 @@
  * ```
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { InMemoryBus, InMemoryAudioQueueService, SimpleRouter } from 'fitalyagents'
+import { InMemoryBus, InMemoryAudioQueueService } from 'fitalyagents'
 import type { AudioSegment } from 'fitalyagents'
 
 import { InteractionAgent } from '../agents/interaction/interaction-agent.js'
@@ -45,21 +45,48 @@ import { MockToolExecutor } from '../agents/work/mock-tool-executor.js'
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Build the task router for E2E tests using SimpleRouter.
+ * Build the task router for E2E tests.
+ * Routes TASK_AVAILABLE events to agent inboxes via the bus.
  * Routes speech intents to WorkAgent and always notifies InteractionAgent.
  */
 function createSimpleRouter(bus: InMemoryBus) {
-  const router = new SimpleRouter({
-    bus,
-    routes: {
-      product_search: 'work-agent',
-      product_search_with_price: 'work-agent',
-      price_query: 'work-agent',
-      order_query: 'work-agent',
-    },
-    alwaysNotify: ['interaction-agent'],
+  const routes: Record<string, string> = {
+    product_search: 'work-agent',
+    product_search_with_price: 'work-agent',
+    price_query: 'work-agent',
+    order_query: 'work-agent',
+  }
+  const alwaysNotify = ['interaction-agent']
+
+  return bus.subscribe('bus:TASK_AVAILABLE', (data: unknown) => {
+    const event = data as {
+      task_id: string
+      session_id: string
+      intent_id: string
+      slots: Record<string, unknown>
+      timeout_ms: number
+    }
+    const taskPayload = {
+      event: 'TASK_PAYLOAD' as const,
+      task_id: event.task_id,
+      session_id: event.session_id,
+      intent_id: event.intent_id,
+      slots: event.slots ?? {},
+      context_snapshot: {},
+      cancel_token: null,
+      timeout_ms: event.timeout_ms ?? 8000,
+      reply_to: `queue:${routes[event.intent_id] ?? 'work-agent'}:outbox`,
+    }
+    const targetAgent = routes[event.intent_id]
+    if (targetAgent) {
+      void bus.publish(`queue:${targetAgent}:inbox`, taskPayload)
+    }
+    for (const agentId of alwaysNotify) {
+      if (agentId !== targetAgent) {
+        void bus.publish(`queue:${agentId}:inbox`, taskPayload)
+      }
+    }
   })
-  return router.start()
 }
 
 /**

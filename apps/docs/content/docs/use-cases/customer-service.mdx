@@ -1,0 +1,218 @@
+---
+title: Customer Service Bot
+description: A text-based support agent that classifies issues, retrieves account data in parallel, escalates to humans when needed, and tracks every interaction.
+---
+
+## The scenario
+
+An e-commerce customer service bot. Customers contact via chat asking about orders, returns, refunds, or account issues. Requirements:
+
+- Fast intent classification (embedding-based, ~1ms)
+- Multiple data sources queried in parallel (order status + account info + shipping)
+- Escalation to human agents for refunds above $200
+- Audit trail of every decision (GDPR compliance)
+- Graceful degradation when CRM is slow or down
+
+---
+
+## Architecture
+
+```
+Chat widget / API
+     │
+     └─ bus:SPEECH_FINAL ──▶ Dispatcher ──▶ bus:TASK_AVAILABLE
+                                                    │
+                                          SimpleRouter
+                                          ├─▶ queue:support-agent:inbox
+                                          └─▶ queue:billing-agent:inbox
+                                                    │
+                                          SupportAgent / BillingAgent
+                                          ├─ fetch_order_status  ──┐
+                                          ├─ fetch_account_info  ──┤ parallel
+                                          └─ fetch_shipping       ──┘
+                                                    │
+                                          bus:ACTION_COMPLETED
+                                                    │
+                                          ResponseAgent (LLM)
+```
+
+---
+
+## Intent classification at scale
+
+For a support bot with 30+ intent types, use the embedding classifier:
+
+```typescript
+import {
+  NodeDispatcher,
+  InMemoryEmbeddingClassifier,
+  InMemoryIntentLibrary,
+  DispatcherBootstrapper,
+  ClaudeLLMProvider,
+} from 'fitalyagents/dispatcher'
+
+const intentLibrary = new InMemoryIntentLibrary()
+const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
+
+// Auto-generate training examples from your agent manifests
+const bootstrapper = new DispatcherBootstrapper({
+  intentLibrary,
+  llm: new ClaudeLLMProvider(),
+})
+
+await bootstrapper.bootstrapFromManifests([
+  supportAgent.manifest,
+  billingAgent.manifest,
+])
+
+await classifier.init()
+
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
+await dispatcher.start()
+```
+
+The bootstrapper generates 10–15 diverse examples per intent using Claude, so you don't have to write them manually.
+
+### Keeping the classifier up to date
+
+When you add a new intent (e.g., "dispute_charge"), the classifier updates in real time:
+
+```typescript
+// Add a new intent with examples
+await intentLibrary.addExamples('dispute_charge', [
+  'I want to dispute this charge',
+  'This transaction looks wrong',
+  'I was charged twice',
+])
+
+// Classifier hot-reloads automatically via bus:INTENT_UPDATED
+```
+
+---
+
+## Parallel data fetching
+
+```typescript
+class SupportAgent extends NexusAgent {
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    // Fetch all relevant data simultaneously
+    const [order, account, shipping] = await Promise.all([
+      pool.execute('fetch_order', `${task.task_id}_order`, { order_id: task.slots?.order_id }),
+      pool.execute('fetch_account', `${task.task_id}_account`, { user_id: task.slots?.user_id }),
+      pool.execute('fetch_shipping', `${task.task_id}_shipping`, { order_id: task.slots?.order_id }),
+    ])
+
+    return {
+      status: 'completed',
+      result: { order: order.result, account: account.result, shipping: shipping.result },
+      /* ... */
+    }
+  }
+}
+```
+
+Total latency = `max(order, account, shipping)` instead of `order + account + shipping`.
+
+---
+
+## Escalation for high-value refunds
+
+```typescript
+registry.register({
+  tool_id: 'refund_create',
+  executor: { type: 'ts_fn' },
+  safety: 'restricted',
+  required_role: 'staff',
+  approval_channels: [{
+    type: 'webhook',
+    timeout_ms: 300_000,   // 5 minutes for human review
+    config: { url: process.env.ESCALATION_WEBHOOK },
+  }],
+})
+```
+
+```typescript
+// BillingAgent checks amount before calling the tool
+async process(task) {
+  const amount = task.slots?.refund_amount as number
+
+  if (amount > 200) {
+    // tool has safety:'restricted' — ApprovalQueue handles escalation
+    const result = await pool.execute('refund_create', task.task_id, task.slots)
+
+    if (result.status === 'circuit_open' || result.status === 'failed') {
+      return { status: 'completed', result: {
+        text: 'Our team will review your refund request within 24 hours.'
+      }, /* ... */ }
+    }
+  }
+
+  // Small refund — auto-approve
+  return pool.execute('auto_refund', task.task_id, task.slots)
+}
+```
+
+---
+
+## Circuit breaker for CRM
+
+CRM systems go down. Don't let them take down your bot:
+
+```typescript
+registry.register({
+  tool_id: 'fetch_account',
+  executor: { type: 'http', url: process.env.CRM_URL },
+  retry: { max_attempts: 2, backoff_ms: 500 },
+  circuit_breaker: {
+    failure_threshold: 3,
+    reset_timeout_ms: 60_000,
+  },
+})
+
+const pool = new ExecutorPool(registry, {
+  onOpen: async (toolId) => {
+    // Publish event — ResponseAgent can use this to adjust its answer
+    await bus.publish('bus:TOOL_DEGRADED', { tool_id: toolId })
+    await alerting.sendPagerDuty(`${toolId} circuit opened`)
+  },
+})
+```
+
+When the CRM circuit opens, the bot responds with cached or partial data instead of timing out for 10 seconds per user.
+
+---
+
+## Audit trail with Langfuse
+
+Every interaction is traced automatically:
+
+```typescript
+const tracer = new LangfuseTracer(new Langfuse({ publicKey, secretKey }))
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary, tracer })
+```
+
+In Langfuse:
+- Each customer message = one trace
+- Tool calls = child spans with input/output
+- Classification confidence = score (detect when the bot is uncertain)
+- Session grouping by `customer_id` shows full conversation history
+
+Useful for GDPR: you can pull all traces for a `userId` to produce a data access report.
+
+---
+
+## Session isolation
+
+Multiple customers are served concurrently. FitalyAgents guarantees session isolation:
+
+```typescript
+// Customer A and B send messages at the same time
+await Promise.all([
+  bus.publish('bus:SPEECH_FINAL', { session_id: 'customer-A', text: 'where is my order?' }),
+  bus.publish('bus:SPEECH_FINAL', { session_id: 'customer-B', text: 'I want a refund' }),
+])
+
+// Each agent call gets its own session_id
+// ContextBuilderAgent isolates conversation_history per session
+// No cross-contamination is possible
+```

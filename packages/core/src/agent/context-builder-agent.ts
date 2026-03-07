@@ -1,6 +1,6 @@
 import { StreamAgent } from './stream-agent.js'
 import type { IEventBus } from '../types/index.js'
-import type { IContextStore } from '../context/types.js'
+import type { AmbientContext, IContextStore } from '../context/types.js'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,13 +138,28 @@ export class ContextBuilderAgent extends StreamAgent {
     const ambient =
       (await this.contextStore.get<Record<string, unknown>>(sessionId, 'ambient_context')) ?? {}
 
+    // Load structured ambient context — use its last_product_mentioned as fallback
+    const structuredAmbient = await this.contextStore.getAmbient(sessionId)
+    const effectiveLastProduct = lastProduct ?? structuredAmbient?.last_product_mentioned ?? null
+
+    // Merge structured ambient data into the flat ambient_context map so the LLM sees it
+    const ambientWithStructured: Record<string, unknown> = { ...ambient }
+    if (structuredAmbient) {
+      if (structuredAmbient.last_product_mentioned) {
+        ambientWithStructured.last_product_mentioned = structuredAmbient.last_product_mentioned
+      }
+      if (structuredAmbient.conversation_snippets.length > 0) {
+        ambientWithStructured.conversation_snippets = structuredAmbient.conversation_snippets
+      }
+    }
+
     return {
       session_id: sessionId,
       conversation_history: history,
-      last_product_mentioned: lastProduct,
+      last_product_mentioned: effectiveLastProduct,
       pending_draft: pendingDraft,
       action_history: actions,
-      ambient_context: ambient,
+      ambient_context: ambientWithStructured,
     }
   }
 
@@ -180,11 +195,43 @@ export class ContextBuilderAgent extends StreamAgent {
     const existing =
       (await this.contextStore.get<Record<string, unknown>>(sessionId, 'ambient_context')) ?? {}
 
-    // Merge new ambient data
-    const { session_id: _sid, event: _evt, ...ambient } = data
-    const merged = { ...existing, ...ambient, updated_at: Date.now() }
-
+    // Merge new ambient data (flat merge for non-text signals like noise_level, speaker_count)
+    const { session_id: _sid, event: _evt, text, speaker_id, ...rest } = data
+    const merged = { ...existing, ...rest, updated_at: Date.now() }
     await this.contextStore.set(sessionId, 'ambient_context', merged)
+
+    // For text-bearing ambient events, also update the structured AmbientContext
+    if (typeof text === 'string' && text.length > 0) {
+      const existingAmbient = (await this.contextStore.getAmbient(sessionId)) ?? {
+        conversation_snippets: [],
+        timestamp: Date.now(),
+      }
+
+      // Add snippet
+      const snippets = [...existingAmbient.conversation_snippets]
+      snippets.push({
+        speaker_id: typeof speaker_id === 'string' ? speaker_id : undefined,
+        text,
+        timestamp: Date.now(),
+      })
+      // Cap at 20 snippets
+      while (snippets.length > 20) snippets.shift()
+
+      // Extract product mention from ambient text
+      const productMention = this.extractProductMention(text)
+
+      const updated: AmbientContext = {
+        conversation_snippets: snippets,
+        timestamp: Date.now(),
+        ...(productMention
+          ? { last_product_mentioned: productMention }
+          : {
+              last_product_mentioned: existingAmbient.last_product_mentioned,
+            }),
+      }
+
+      await this.contextStore.setAmbient(sessionId, updated)
+    }
   }
 
   private async handleActionCompleted(

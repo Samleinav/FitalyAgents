@@ -5,53 +5,54 @@ description: Execute multiple tools simultaneously and inject results as they ar
 
 `@fitalyagents/asynctools` (Layer 2) solves the fundamental problem with LLM tool calling: by default, tools run one at a time. FitalyAgents runs them **all at once**.
 
-## Installation (standalone)
+## Installation
 
 ```bash
 npm install @fitalyagents/asynctools
-# or use via the main package:
-import { ... } from 'fitalyagents/asynctools'
 ```
 
 ## Define tools
 
+Each tool has an `executor` type. For in-process functions, use `ts_fn` and register a handler separately:
+
 ```typescript
-import { ToolRegistry } from 'fitalyagents/asynctools'
+import { ToolRegistry, registerFunctionHandler } from 'fitalyagents/asynctools'
 
 const registry = new ToolRegistry()
 
+// 1. Declare the tool schema
 registry.register({
   tool_id: 'product_search',
   description: 'Search product catalog',
-  input_schema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string' },
-      max_price: { type: 'number' },
-    },
-    required: ['query'],
-  },
-  executor: {
-    type: 'function',
-    fn: async (input) => {
-      // your real implementation
-      return { results: [{ name: 'Nike Air Max', price: 129.99 }] }
-    },
-  },
+  executor: { type: 'ts_fn' },
   execution_mode: 'async',
-  injection_strategy: 'inject_when_all',
   timeout_ms: 5000,
+})
+
+// 2. Attach the implementation
+registerFunctionHandler('product_search', async (input) => {
+  const { query } = input as { query: string }
+  return { results: [{ name: 'Nike Air Max', price: 129.99 }] }
 })
 
 registry.register({
   tool_id: 'price_check',
-  description: 'Get current price with discounts',
-  executor: {
-    type: 'function',
-    fn: async (input) => ({ base_price: 129.99, discount: 15, final_price: 110.49 }),
-  },
-  execution_mode: 'async',
-  injection_strategy: 'inject_when_all',
+  executor: { type: 'ts_fn' },
+  timeout_ms: 3000,
+})
+
+registerFunctionHandler('price_check', async (input) => {
+  const { brand } = input as { brand: string }
+  return { base_price: 129.99, discount: 15, final_price: 110.49 }
+})
+```
+
+For HTTP tools, specify `url` instead:
+
+```typescript
+registry.register({
+  tool_id: 'external_search',
+  executor: { type: 'http', url: 'https://api.store.com/search', method: 'POST' },
   timeout_ms: 5000,
 })
 ```
@@ -61,73 +62,87 @@ registry.register({
 ```typescript
 import { ExecutorPool } from 'fitalyagents/asynctools'
 
-const pool = new ExecutorPool({ registry })
+const pool = new ExecutorPool(registry)
 
-// Both tools fire simultaneously
-const results = await pool.executeAll([
-  { tool_id: 'product_search', input: { query: 'Nike shoes' } },
-  { tool_id: 'price_check', input: { brand: 'Nike' } },
+// Both tools fire simultaneously — unique toolCallId per invocation
+const [searchResult, priceResult] = await Promise.all([
+  pool.execute('product_search', 'call_search_1', { query: 'Nike shoes' }),
+  pool.execute('price_check',    'call_price_1',  { brand: 'Nike' }),
 ])
 
-// results.product_search → { results: [...] }
-// results.price_check    → { base_price: ..., final_price: ... }
+// Total latency ≈ max(searchTime, priceTime), not their sum
+console.log(searchResult.status)     // 'completed'
+console.log(searchResult.result)     // { results: [...] }
+console.log(searchResult.duration_ms)
+```
+
+`pool.execute()` always resolves (never throws). It returns a `ToolResult`:
+
+```typescript
+interface ToolResult {
+  tool_call_id: string
+  tool_id: string
+  status: 'completed' | 'failed' | 'timed_out' | 'rate_limited' | 'circuit_open'
+  result?: unknown
+  error?: string
+  started_at: number
+  completed_at: number
+  duration_ms: number
+}
 ```
 
 ## Execution modes
 
-### `async` — fire and collect
+Set `execution_mode` on each tool to control how `AsyncAgent` handles it:
 
-Tool fires immediately. With `inject_when_all`, waits for all tools in the batch before returning.
+| Mode | Behavior |
+|---|---|
+| `async` | Fire immediately; inject result when ready (default) |
+| `sync` | Block the turn until complete; inject immediately |
+| `fire_forget` | Fire and never inject result |
+| `deferred` | Fire; wait until end of turn to inject |
 
-```typescript
-// Tool A (200ms) + Tool B (300ms) = ~300ms total (not 500ms)
-```
+## Injection strategies
 
-### `inject_when_ready` — stream results
+When using `AsyncAgent`, `injectionStrategy` on the wrapper controls when pending results re-enter the LLM:
 
-Each tool injects its result as soon as it completes:
-
-```typescript
-const stream = pool.executeStream([
-  { tool_id: 'product_search', input: { query: 'Nike' } },
-  { tool_id: 'price_check', input: { brand: 'Nike' } },
-])
-
-for await (const { tool_id, result } of stream) {
-  console.log(`${tool_id} done:`, result)
-}
-```
-
-### `inject_on_timeout` — partial results are acceptable
-
-```typescript
-registry.register({
-  tool_id: 'slow_enrichment',
-  execution_mode: 'async',
-  injection_strategy: 'inject_on_timeout',
-  timeout_ms: 2000,  // return whatever we have after 2s
-  // ...
-})
-```
+| Strategy | When result injects |
+|---|---|
+| `inject_when_all` | Wait for ALL async tools to complete/fail/timeout (default) |
+| `inject_when_ready` | Inject each result as soon as it arrives |
+| `inject_on_timeout` | Inject after the global timeout expires |
 
 ## Wrap any LLM agent
 
-`AsyncAgent` adds parallel tool execution to any LLM:
+`AsyncAgent` adds parallel tool execution to any LLM. Implement `IInnerAgent`:
 
 ```typescript
-import { AsyncAgent } from 'fitalyagents/asynctools'
+import { AsyncAgent, registerFunctionHandler } from 'fitalyagents/asynctools'
+import type { IInnerAgent, Message, AgentResponse } from 'fitalyagents/asynctools'
 
-const agent = new AsyncAgent({
-  registry,
-  // inner: any object with run(messages) → ToolCallRequest[]
-  inner: {
-    async run(messages) {
-      // call your LLM (OpenAI, Claude, Gemini...)
-      const response = await openai.chat.completions.create({ messages })
-      return extractToolCalls(response)
-    },
+const inner: IInnerAgent = {
+  async run(messages: Message[]): Promise<AgentResponse> {
+    // Call your LLM (OpenAI, Claude, Gemini...)
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      tools: buildToolSchemas(registry),
+    })
+
+    const msg = response.choices[0].message
+    return {
+      content: msg.content ?? undefined,
+      tool_calls: msg.tool_calls?.map(tc => ({
+        id: tc.id,
+        tool_id: tc.function.name,
+        input: JSON.parse(tc.function.arguments),
+      })),
+      stop_reason: response.choices[0].finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn',
+    }
   },
-})
+}
+
+const agent = new AsyncAgent({ registry, inner })
 
 const result = await agent.run([
   { role: 'user', content: 'Find Nike shoes and check the price' },
@@ -138,21 +153,59 @@ const result = await agent.run([
 ## Use within a NexusAgent
 
 ```typescript
+import { ExecutorPool, ToolRegistry, registerFunctionHandler } from 'fitalyagents/asynctools'
+
 class WorkAgent extends NexusAgent {
   private pool: ExecutorPool
 
   constructor(options: { bus: IEventBus; registry: ToolRegistry }) {
     super(options)
-    this.pool = new ExecutorPool({ registry: options.registry })
+    this.pool = new ExecutorPool(options.registry)
   }
 
   async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
-    const results = await this.pool.executeAll([
-      { tool_id: 'product_search', input: task.slots },
-      { tool_id: 'price_check', input: { brand: task.slots?.brand } },
+    const [search, price] = await Promise.all([
+      this.pool.execute('product_search', `${task.task_id}_s`, task.slots),
+      this.pool.execute('price_check',    `${task.task_id}_p`, { brand: task.slots?.brand }),
     ])
 
-    return { status: 'completed', result: results, /* ... */ }
+    return {
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      status: 'completed',
+      result: { search: search.result, price: price.result },
+      completed_at: Date.now(),
+    }
   }
 }
 ```
+
+## Concurrency limits
+
+Control how many calls can run simultaneously per tool:
+
+```typescript
+registry.register({
+  tool_id: 'slow_tool',
+  executor: { type: 'ts_fn' },
+  max_concurrent: 2,   // at most 2 in-flight at once; excess is queued
+})
+```
+
+## Fault tolerance
+
+Add retry, rate limiting, and circuit breaker to any tool:
+
+```typescript
+registry.register({
+  tool_id: 'product_search',
+  executor: { type: 'http', url: 'https://api.store.com/search' },
+  retry: { max_attempts: 2, backoff_ms: 300 },
+  rate_limit: { requests_per_second: 10 },
+  circuit_breaker: { failure_threshold: 5, reset_timeout_ms: 30_000 },
+})
+```
+
+See the [Hardening guide](/docs/guides/hardening) for details.

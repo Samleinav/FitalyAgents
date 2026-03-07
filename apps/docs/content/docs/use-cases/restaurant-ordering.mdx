@@ -1,0 +1,227 @@
+---
+title: Restaurant Ordering System
+description: A table-side voice ordering system that handles multi-person orders, dietary restrictions, real-time menu availability, and kitchen confirmation — without blocking the conversation.
+---
+
+## The scenario
+
+A restaurant with table-side tablets. A group of diners places orders by voice. The system must:
+
+- Handle multiple people speaking near the same device
+- Look up menu availability and allergen info in parallel
+- Accumulate a group order across multiple turns ("and I'll have the pasta")
+- Send the final order to the kitchen POS and wait for confirmation
+- Pause ordering when a waiter interrupts ("let me tell you today's specials")
+
+---
+
+## Architecture
+
+```
+Tablet microphone
+     │
+     ├─ bus:SPEAKER_DETECTED ──▶ TargetGroupBridge
+     │                          (table_id → session, group priority)
+     │
+     ├─ bus:SPEECH_FINAL ──▶ ContextBuilderAgent (accumulates group order)
+     │                   └─▶ Dispatcher ──▶ intent classification
+     │                                          │
+     │                              bus:TASK_AVAILABLE
+     │                                          │
+     │                                MenuAgent / OrderAgent
+     │                                ├─ check_availability ──┐
+     │                                └─ check_allergens     ──┘ parallel
+     │                                          │
+     │                                bus:ACTION_COMPLETED
+     │                                          │
+     └─ TableAgent (streams response, accumulates order draft)
+```
+
+---
+
+## Table sessions and priority groups
+
+Each table is a session. When a waiter walks up, their session gets elevated priority:
+
+```typescript
+import {
+  TargetGroupBridge,
+  InMemorySessionManager,
+} from 'fitalyagents'
+
+const bridge = new TargetGroupBridge({
+  bus,
+  sessionManager,
+  storeId: `table-${tableNumber}`,
+})
+
+await bridge.start()
+
+// When waiter card is detected, pause customer session
+bus.subscribe('bus:EMPLOYEE_DETECTED', async (event) => {
+  await sessionManager.pauseSession(customerSessionId, event.employee_id)
+  // Waiter now has full attention
+})
+
+// When waiter leaves
+bus.subscribe('bus:EMPLOYEE_DEPARTED', async (event) => {
+  await sessionManager.resumeSession(customerSessionId)
+})
+```
+
+---
+
+## Parallel availability + allergen checks
+
+```typescript
+class MenuAgent extends NexusAgent {
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    const { menu_item, diner_profile } = task.slots as {
+      menu_item: string
+      diner_profile?: { allergies: string[] }
+    }
+
+    // Both queries fire simultaneously
+    const [availability, allergens] = await Promise.all([
+      pool.execute('check_availability', `${task.task_id}_avail`, { item: menu_item }),
+      pool.execute('check_allergens',    `${task.task_id}_allerg`, {
+        item: menu_item,
+        allergens: diner_profile?.allergies ?? [],
+      }),
+    ])
+
+    const available = (availability.result as { in_stock: boolean }).in_stock
+    const hasConflict = (allergens.result as { conflict: boolean }).conflict
+
+    return {
+      status: 'completed',
+      result: {
+        text: available
+          ? hasConflict
+            ? `The ${menu_item} contains ingredients you're allergic to.`
+            : `Yes, the ${menu_item} is available!`
+          : `Sorry, the ${menu_item} is not available tonight.`,
+        available,
+        allergen_conflict: hasConflict,
+      },
+      /* ... */
+    }
+  }
+}
+```
+
+---
+
+## Accumulating a group order across turns
+
+`ContextBuilderAgent` tracks the conversation history. Use action history to accumulate order items:
+
+```typescript
+// Turn 1: "I'll have the burger"
+// ACTION_COMPLETED → { intent_id: 'add_to_order', result: { item: 'burger', person: 'spk-1' } }
+
+// Turn 2: "And I'll have the pasta"
+// ACTION_COMPLETED → { intent_id: 'add_to_order', result: { item: 'pasta', person: 'spk-2' } }
+
+// OrderAgent reads action history to build the full order
+const ctx = await ctxAgent.getEnrichedContext(session_id)
+
+const orderItems = ctx.action_history
+  .filter(a => a.intent_id === 'add_to_order')
+  .map(a => a.result as { item: string; person: string })
+
+// [{ item: 'burger', person: 'spk-1' }, { item: 'pasta', person: 'spk-2' }]
+```
+
+---
+
+## Draft order with kitchen confirmation
+
+The final "send to kitchen" action creates a draft that requires a confirmation:
+
+```typescript
+registry.register({
+  tool_id: 'send_to_kitchen',
+  executor: { type: 'http', url: process.env.POS_WEBHOOK },
+  safety: 'staged',           // creates a draft, waits for confirmation
+  staged_action: 'kitchen_order',
+  confirm_prompt: 'Send this order to the kitchen?',
+  timeout_ms: 30_000,
+})
+```
+
+The flow:
+1. Diner says "we're ready to order"
+2. `OrderAgent` calls `send_to_kitchen` → creates a draft
+3. `bus:DRAFT_CREATED` published → `ContextBuilderAgent` stores `pending_draft`
+4. System reads back the order: "You have: 1 burger, 1 pasta. Shall I send this to the kitchen?"
+5. Diner confirms → `bus:DRAFT_CONFIRMED` → POS call executes
+
+---
+
+## Ambient context for group orders
+
+When multiple diners discuss preferences before ordering, ambient context captures it:
+
+```typescript
+// Diner A says to Diner B (not addressing the system):
+await bus.publish('bus:AMBIENT_CONTEXT', {
+  session_id: tableSessionId,
+  text: 'I want something without gluten',
+  speaker_id: 'spk-diner-a',
+})
+
+// Later, Diner A addresses the system:
+await bus.publish('bus:SPEECH_FINAL', {
+  session_id: tableSessionId,
+  text: 'what pasta dishes do you have?',
+})
+
+// InteractionAgent enriches the prompt with ambient context:
+// ctx.ambient_context.conversation_snippets includes the gluten mention
+// LLM can pro-actively filter gluten-free options
+```
+
+---
+
+## Hardening for peak hours
+
+During dinner rush, the POS system can get overwhelmed:
+
+```typescript
+registry.register({
+  tool_id: 'send_to_kitchen',
+  executor: { type: 'http', url: process.env.POS_WEBHOOK },
+  rate_limit: {
+    requests_per_second: 2,   // POS handles max 2 orders/sec
+  },
+  circuit_breaker: {
+    failure_threshold: 3,
+    reset_timeout_ms: 15_000,  // retry after 15s
+  },
+  retry: {
+    max_attempts: 3,
+    backoff_ms: 1000,
+  },
+})
+
+const pool = new ExecutorPool(registry, {
+  onOpen: (toolId) => {
+    // Alert kitchen staff — POS is down
+    staffAlerts.send('POS system not responding — take orders manually')
+  },
+})
+```
+
+---
+
+## What FitalyAgents replaces
+
+Without FitalyAgents you'd build:
+- Custom session tracking (which table is active, who is speaking)
+- Sequential tool calls (allergens after availability, not concurrent)
+- Manual draft state machine
+- Custom retry + timeout logic per tool
+- Ad-hoc context accumulation
+
+FitalyAgents provides all of this as composable, tested primitives.

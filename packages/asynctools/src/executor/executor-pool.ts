@@ -5,6 +5,9 @@ import { HttpExecutor } from './http-executor.js'
 import { FunctionExecutor } from './function-executor.js'
 import { SubprocessExecutor } from './subprocess-executor.js'
 import { ToolExecutionError } from '../errors.js'
+import { RateLimiter } from './rate-limiter.js'
+import { CircuitBreaker } from './circuit-breaker.js'
+import type { CircuitBreakerCallbacks } from './circuit-breaker.js'
 
 interface QueuedTask {
   resolve: (result: ToolResult) => void
@@ -42,12 +45,18 @@ export class ExecutorPool {
   private executors: Map<string, IExecutor> = new Map()
   private queues: Map<string, QueuedTask[]> = new Map()
   private stats: Map<string, ToolStats> = new Map()
+  private rateLimiters: Map<string, RateLimiter> = new Map()
+  private circuitBreakers: Map<string, CircuitBreaker> = new Map()
 
-  constructor(private registry: ToolRegistry) {
+  constructor(
+    private registry: ToolRegistry,
+    private cbCallbacks: CircuitBreakerCallbacks = {},
+  ) {
     // Pre-create executors for each registered tool
     for (const tool of registry.list()) {
       this.ensureExecutor(tool.executor.type)
       this.ensureStats(tool.tool_id)
+      this.ensureGuards(tool.tool_id)
     }
   }
 
@@ -63,6 +72,37 @@ export class ExecutorPool {
     const toolDef = this.registry.getOrThrow(toolId)
     this.ensureExecutor(toolDef.executor.type)
     this.ensureStats(toolId)
+    this.ensureGuards(toolId)
+
+    const startedAt = Date.now()
+
+    // ── Circuit breaker check ─────────────────────────────────────────
+    const cb = this.circuitBreakers.get(toolId)
+    if (cb && !cb.allowRequest()) {
+      return {
+        tool_call_id: toolCallId,
+        tool_id: toolId,
+        status: 'circuit_open',
+        error: `Circuit breaker for "${toolId}" is OPEN`,
+        started_at: startedAt,
+        completed_at: startedAt,
+        duration_ms: 0,
+      }
+    }
+
+    // ── Rate limit check ──────────────────────────────────────────────
+    const rl = this.rateLimiters.get(toolId)
+    if (rl && !rl.tryAcquire()) {
+      return {
+        tool_call_id: toolCallId,
+        tool_id: toolId,
+        status: 'rate_limited',
+        error: `Tool "${toolId}" rate limit exceeded (${rl.limit} req/s)`,
+        started_at: startedAt,
+        completed_at: startedAt,
+        duration_ms: 0,
+      }
+    }
 
     const stats = this.stats.get(toolId)!
 
@@ -151,6 +191,7 @@ export class ExecutorPool {
     const toolDef = this.registry.getOrThrow(toolId)
     const maxAttempts = toolDef.retry.max_attempts
     const backoffMs = toolDef.retry.backoff_ms
+    const cb = this.circuitBreakers.get(toolId)
 
     let lastError: Error | null = null
 
@@ -168,6 +209,7 @@ export class ExecutorPool {
 
         const result = await executor.execute(toolId, wrappedInput, controller.signal)
         clearTimeout(timeoutId)
+        cb?.recordSuccess()
         return result
       } catch (error) {
         clearTimeout(timeoutId)
@@ -177,6 +219,8 @@ export class ExecutorPool {
         if (controller.signal.aborted) {
           lastError = new Error(`Tool "${toolId}" timed out after ${toolDef.timeout_ms}ms`)
         }
+
+        cb?.recordFailure()
 
         // Don't retry if this was the last attempt
         if (attempt < maxAttempts) {
@@ -227,6 +271,21 @@ export class ExecutorPool {
   private ensureStats(toolId: string): void {
     if (!this.stats.has(toolId)) {
       this.stats.set(toolId, { executing: 0, queued: 0, completed: 0, failed: 0 })
+    }
+  }
+
+  private ensureGuards(toolId: string): void {
+    const toolDef = this.registry.getOrThrow(toolId)
+
+    if (toolDef.rate_limit && !this.rateLimiters.has(toolId)) {
+      this.rateLimiters.set(toolId, new RateLimiter(toolDef.rate_limit))
+    }
+
+    if (toolDef.circuit_breaker && !this.circuitBreakers.has(toolId)) {
+      this.circuitBreakers.set(
+        toolId,
+        new CircuitBreaker(toolId, toolDef.circuit_breaker, this.cbCallbacks),
+      )
     }
   }
 

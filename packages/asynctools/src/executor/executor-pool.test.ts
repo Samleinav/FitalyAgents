@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ToolRegistry } from '../registry/tool-registry.js'
 import { ExecutorPool } from './executor-pool.js'
 import { registerFunctionHandler, clearFunctionHandlers } from './function-executor.js'
@@ -263,6 +263,103 @@ describe('ExecutorPool', () => {
       expect(result.status).toBe('failed')
       expect(result.error).toContain('permanent failure')
       expect(result.error).toContain('2 attempt(s)')
+    })
+  })
+
+  // ── Rate Limiting ──────────────────────────────────────────────────────
+
+  describe('Rate limiting', () => {
+    it('returns rate_limited status when limit is exceeded', async () => {
+      registry.register({
+        tool_id: 'rate_limited_fn',
+        executor: { type: 'ts_fn' },
+        rate_limit: { requests_per_second: 2 },
+      })
+      registerFunctionHandler('rate_limited_fn', () => 'ok')
+
+      const pool = new ExecutorPool(registry)
+      const r1 = await pool.execute('rate_limited_fn', 'r1', {})
+      const r2 = await pool.execute('rate_limited_fn', 'r2', {})
+      const r3 = await pool.execute('rate_limited_fn', 'r3', {}) // 3rd in same ms window
+
+      expect(r1.status).toBe('completed')
+      expect(r2.status).toBe('completed')
+      expect(r3.status).toBe('rate_limited')
+      expect(r3.error).toContain('rate limit exceeded')
+    })
+
+    it('tools without rate_limit config are not limited', async () => {
+      registry.register({
+        tool_id: 'unlimited_fn',
+        executor: { type: 'ts_fn' },
+      })
+      registerFunctionHandler('unlimited_fn', () => 'ok')
+
+      const pool = new ExecutorPool(registry)
+      const results = await Promise.all([
+        pool.execute('unlimited_fn', 'u1', {}),
+        pool.execute('unlimited_fn', 'u2', {}),
+        pool.execute('unlimited_fn', 'u3', {}),
+      ])
+      for (const r of results) expect(r.status).toBe('completed')
+    })
+  })
+
+  // ── Circuit Breaker ────────────────────────────────────────────────────
+
+  describe('Circuit breaker', () => {
+    it('opens circuit after failure_threshold consecutive failures', async () => {
+      registry.register({
+        tool_id: 'cb_fn',
+        executor: { type: 'ts_fn' },
+        circuit_breaker: { failure_threshold: 2, reset_timeout_ms: 30_000 },
+      })
+      registerFunctionHandler('cb_fn', () => {
+        throw new Error('always fails')
+      })
+
+      const pool = new ExecutorPool(registry)
+      const r1 = await pool.execute('cb_fn', 'c1', {})
+      const r2 = await pool.execute('cb_fn', 'c2', {})
+      // Circuit should now be OPEN
+      const r3 = await pool.execute('cb_fn', 'c3', {})
+
+      expect(r1.status).toBe('failed')
+      expect(r2.status).toBe('failed')
+      expect(r3.status).toBe('circuit_open')
+      expect(r3.error).toContain('OPEN')
+    })
+
+    it('calls onOpen callback when circuit trips', async () => {
+      const onOpen = vi.fn()
+      registry.register({
+        tool_id: 'cb_notify_fn',
+        executor: { type: 'ts_fn' },
+        circuit_breaker: { failure_threshold: 1, reset_timeout_ms: 30_000 },
+      })
+      registerFunctionHandler('cb_notify_fn', () => {
+        throw new Error('fail')
+      })
+
+      const pool = new ExecutorPool(registry, { onOpen })
+      await pool.execute('cb_notify_fn', 'n1', {})
+
+      expect(onOpen).toHaveBeenCalledOnce()
+      expect(onOpen).toHaveBeenCalledWith('cb_notify_fn', 1)
+    })
+
+    it('tools without circuit_breaker config are not affected', async () => {
+      registry.register({
+        tool_id: 'no_cb_fn',
+        executor: { type: 'ts_fn' },
+      })
+      registerFunctionHandler('no_cb_fn', () => 'ok')
+
+      const pool = new ExecutorPool(registry)
+      for (let i = 0; i < 5; i++) {
+        const r = await pool.execute('no_cb_fn', `i${i}`, {})
+        expect(r.status).toBe('completed')
+      }
     })
   })
 

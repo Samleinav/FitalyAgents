@@ -19,8 +19,10 @@ OPENAI_API_KEY=sk-...
 
 ## LLM provider for the Dispatcher
 
+Implement the `LLMProvider` interface. The single method is `complete(system, user): Promise<string>`:
+
 ```typescript
-import { type LLMProvider, type ClassificationResult } from 'fitalyagents/dispatcher'
+import { type LLMProvider } from 'fitalyagents/dispatcher'
 import OpenAI from 'openai'
 
 export class OpenAIProvider implements LLMProvider {
@@ -28,39 +30,48 @@ export class OpenAIProvider implements LLMProvider {
 
   constructor(private model = 'gpt-4o-mini') {}
 
-  async classify(utterance: string, agentManifests: string): Promise<ClassificationResult> {
+  async complete(system: string, user: string): Promise<string> {
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
-      response_format: { type: 'json_object' },
       messages: [
-        {
-          role: 'system',
-          content: `You are an intent classifier. Return only valid JSON:
-{ "agent_id": "...", "intent_id": "...", "confidence": 0.0 }
-Available agents:\n${agentManifests}`,
-        },
-        { role: 'user', content: utterance },
+        { role: 'system', content: system },
+        { role: 'user', content: user },
       ],
     })
-
-    return JSON.parse(response.choices[0].message.content!)
+    return response.choices[0].message.content ?? ''
   }
 }
 ```
 
-Register it:
+Wire it into `DispatcherBootstrapper` to auto-generate training examples, then start `NodeDispatcher`:
 
 ```typescript
-import { DispatcherBootstrapper } from 'fitalyagents/dispatcher'
+import {
+  NodeDispatcher,
+  InMemoryEmbeddingClassifier,
+  InMemoryIntentLibrary,
+  DispatcherBootstrapper,
+} from 'fitalyagents/dispatcher'
 
-const dispatcher = new DispatcherBootstrapper({
-  bus,
-  llmProvider: new OpenAIProvider('gpt-4o'),
-  agents: [interactionAgent, workAgent, orderAgent],
+const intentLibrary = new InMemoryIntentLibrary()
+const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
+
+const bootstrapper = new DispatcherBootstrapper({
+  intentLibrary,
+  llm: new OpenAIProvider('gpt-4o'),
 })
 
-dispatcher.start()
+await bootstrapper.bootstrapFromManifests([
+  interactionAgent.manifest,
+  workAgent.manifest,
+  orderAgent.manifest,
+])
+
+await classifier.init()
+
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
+await dispatcher.start()
 ```
 
 ## Function calling for structured extraction
@@ -115,9 +126,16 @@ Use inside an agent's `process()`:
 
 ```typescript
 async process(task) {
-  const slots = await extractSlots(task.slots.raw_utterance as string)
-  // proceed with structured data
-  return { status: 'success', result: { slots } }
+  const slots = await extractSlots(task.slots?.raw_utterance as string)
+  return {
+    status: 'completed',
+    result: { slots },
+    event: 'TASK_RESULT',
+    task_id: task.task_id,
+    session_id: task.session_id,
+    agent_id: this.manifest.agent_id,
+    completed_at: Date.now(),
+  }
 }
 ```
 
@@ -185,7 +203,7 @@ class StreamingAgent extends NexusAgent {
     const stream = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       stream: true,
-      messages: [{ role: 'user', content: task.slots.message as string }],
+      messages: [{ role: 'user', content: task.slots?.message as string }],
     })
 
     let fullText = ''
@@ -203,7 +221,15 @@ class StreamingAgent extends NexusAgent {
       }
     }
 
-    return { status: 'success', result: { text: fullText } }
+    return {
+      status: 'completed',
+      result: { text: fullText },
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      completed_at: Date.now(),
+    }
   }
 }
 ```

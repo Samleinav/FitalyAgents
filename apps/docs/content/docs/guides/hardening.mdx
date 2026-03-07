@@ -1,0 +1,208 @@
+---
+title: Hardening Tools
+description: Protect external services with rate limiting, circuit breakers, and retry — configured per tool.
+---
+
+`@fitalyagents/asynctools` lets you attach fault-tolerance policies directly to each `ToolDefinition`. No extra wiring needed — `ExecutorPool` enforces them automatically.
+
+| Policy | What it prevents |
+|---|---|
+| **Retry** | Transient failures (network blip, 500 once) |
+| **Rate limiter** | Exceeding external API quotas |
+| **Circuit breaker** | Cascading failures when a service is down |
+
+All three work together and are configured in the same `ToolDefinition` object.
+
+---
+
+## Retry
+
+Already enabled by default (`max_attempts: 1`). Increase it for unreliable services:
+
+```typescript
+registry.register({
+  tool_id: 'inventory_check',
+  executor: { type: 'http', url: 'https://api.store.com/inventory' },
+  retry: {
+    max_attempts: 3,   // attempt 1, then 2 retries
+    backoff_ms: 200,   // 200ms → 400ms → 800ms (exponential)
+  },
+})
+```
+
+Failed attempts are automatically reported to the circuit breaker if one is configured.
+
+---
+
+## Rate Limiter
+
+A **sliding window** rate limiter — counts requests in the last 1 000 ms. Add `rate_limit` to any tool:
+
+```typescript
+registry.register({
+  tool_id: 'product_search',
+  executor: { type: 'http', url: 'https://api.store.com/search' },
+  rate_limit: {
+    requests_per_second: 10,  // max 10 calls per sliding second
+  },
+})
+```
+
+When the limit is exceeded, `execute()` returns **immediately** with:
+
+```typescript
+{
+  status: 'rate_limited',
+  error: 'Tool "product_search" rate limit exceeded (10 req/s)',
+  duration_ms: 0,   // no I/O was performed
+}
+```
+
+Your agent can then respond gracefully — "please wait a moment" — instead of queuing up or timing out.
+
+### How the sliding window works
+
+```
+t=0ms    ✓ request 1
+t=100ms  ✓ request 2
+...
+t=900ms  ✓ request 10   ← limit reached
+t=950ms  ✗ rate_limited (window still has 10 requests)
+t=1100ms ✓ allowed      (request from t=0ms aged out)
+```
+
+Unlike a fixed window, there are no burst cliffs at second boundaries.
+
+---
+
+## Circuit Breaker
+
+A **three-state FSM** that auto-disables a tool after repeated failures:
+
+```
+CLOSED ──(N failures)──▶ OPEN ──(reset_timeout_ms)──▶ HALF_OPEN
+  ▲                                                         │
+  └─────────(probe success)────────────────────────────────┘
+                     │ probe failure
+                     ▼
+                   OPEN (timer reset)
+```
+
+```typescript
+registry.register({
+  tool_id: 'order_create',
+  executor: { type: 'http', url: 'https://erp.internal/orders' },
+  circuit_breaker: {
+    failure_threshold: 5,       // open after 5 consecutive failures
+    reset_timeout_ms: 30_000,   // try a probe after 30s
+  },
+})
+```
+
+When the circuit is OPEN, `execute()` returns immediately:
+
+```typescript
+{
+  status: 'circuit_open',
+  error: 'Circuit breaker for "order_create" is OPEN',
+  duration_ms: 0,
+}
+```
+
+### Notifications via callbacks
+
+Pass callbacks to `ExecutorPool` to react to state changes:
+
+```typescript
+import { ExecutorPool } from 'fitalyagents/asynctools'
+
+const pool = new ExecutorPool(registry, {
+  onOpen: (toolId, failures) => {
+    console.error(`[ALERT] ${toolId} circuit opened after ${failures} failures`)
+    // e.g. publish to bus, send Slack alert, update health endpoint
+    bus.publish('bus:TOOL_DEGRADED', { tool_id: toolId })
+  },
+  onClose: (toolId) => {
+    console.log(`[RECOVERY] ${toolId} circuit closed`)
+    bus.publish('bus:TOOL_RECOVERED', { tool_id: toolId })
+  },
+})
+```
+
+---
+
+## All three together
+
+A realistic configuration for a payment service:
+
+```typescript
+registry.register({
+  tool_id: 'payment_charge',
+  executor: { type: 'http', url: 'https://payments.internal/charge', method: 'POST' },
+  execution_mode: 'async',
+  timeout_ms: 8_000,
+  retry: {
+    max_attempts: 2,     // one retry on transient error
+    backoff_ms: 500,
+  },
+  rate_limit: {
+    requests_per_second: 5,   // 5 RPS max (payment processor limit)
+  },
+  circuit_breaker: {
+    failure_threshold: 3,     // open after 3 failures
+    reset_timeout_ms: 60_000, // 1 minute cooldown for payments
+  },
+  safety: 'restricted',       // requires human approval
+  required_role: 'cashier',
+})
+```
+
+---
+
+## Using standalone
+
+`RateLimiter` and `CircuitBreaker` are exported and usable independently:
+
+```typescript
+import { RateLimiter, CircuitBreaker } from 'fitalyagents/asynctools'
+
+const limiter = new RateLimiter({ requests_per_second: 20 })
+
+if (!limiter.tryAcquire()) {
+  throw new Error('Rate limit exceeded')
+}
+
+const cb = new CircuitBreaker('my_service', {
+  failure_threshold: 5,
+  reset_timeout_ms: 30_000,
+}, {
+  onOpen: (id) => alert(`${id} is down`),
+})
+
+if (!cb.allowRequest()) {
+  return cachedResponse()
+}
+
+try {
+  const result = await callService()
+  cb.recordSuccess()
+  return result
+} catch (err) {
+  cb.recordFailure()
+  throw err
+}
+```
+
+---
+
+## Tool status reference
+
+| Status | Meaning |
+|---|---|
+| `completed` | Tool ran successfully |
+| `failed` | Tool threw an error (after all retries) |
+| `timed_out` | AbortController cancelled the request |
+| `rate_limited` | Rejected before execution — sliding window full |
+| `circuit_open` | Rejected before execution — circuit is OPEN |
+
+All statuses are typed via `ToolStatus` from `fitalyagents/asynctools`.

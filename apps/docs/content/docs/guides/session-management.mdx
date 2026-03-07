@@ -10,7 +10,7 @@ description: Track concurrent user sessions with priority groups, pause/resume, 
 ```typescript
 import { InMemorySessionManager } from 'fitalyagents'
 
-const sessions = new InMemorySessionManager()
+const sessions = new InMemorySessionManager({ bus })
 
 // Create a session
 await sessions.createSession('sess_001', { userId: 'user_42' })
@@ -97,6 +97,7 @@ enforceAccess(manifest.context_access, 'write', 'payment_info')
 
 ```typescript
 const sessions = new InMemorySessionManager({
+  bus,
   onTerminated: async (sessionId) => {
     // Clean up resources for this session
     await contextStore.deleteSession(sessionId)

@@ -29,6 +29,8 @@ export type {
   SubprocessExecutorConfig,
   ExecutorConfig,
   RetryConfig,
+  RateLimitConfig,
+  CircuitBreakerConfig,
   ToolDefinition,
   ToolResult,
   PendingToolCall,
@@ -52,6 +54,8 @@ export {
   SubprocessExecutorConfigSchema,
   ExecutorConfigSchema,
   RetryConfigSchema,
+  RateLimitConfigSchema,
+  CircuitBreakerConfigSchema,
   ToolDefinitionSchema,
 } from './types/index.js'
 
@@ -64,6 +68,9 @@ export { HttpExecutor } from './executor/http-executor.js'
 export { FunctionExecutor } from './executor/function-executor.js'
 export { SubprocessExecutor } from './executor/subprocess-executor.js'
 export { registerFunctionHandler, clearFunctionHandlers } from './executor/function-executor.js'
+export { RateLimiter } from './executor/rate-limiter.js'
+export { CircuitBreaker } from './executor/circuit-breaker.js'
+export type { CircuitState, CircuitBreakerCallbacks } from './executor/circuit-breaker.js'
 export type { IExecutor } from './executor/types.js'
 
 // Tracking

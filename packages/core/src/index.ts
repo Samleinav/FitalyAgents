@@ -40,6 +40,7 @@ export type {
   TargetQueuedEvent,
   TargetGroupEvent,
   ProactiveTriggerEvent,
+  TargetGroupChangedEvent,
   BusHandler,
   PatternBusHandler,
   Unsubscribe,
@@ -76,6 +77,7 @@ export {
   TargetQueuedEventSchema,
   TargetGroupEventSchema,
   ProactiveTriggerEventSchema,
+  TargetGroupChangedEventSchema,
 } from './types/index.js'
 
 // Bus
@@ -111,6 +113,14 @@ export type {
   DraftUserIntent,
   ProtectedConfirmResult,
 } from './agent/interaction-agent.js'
+export { TargetGroupBridge } from './agent/target-group-bridge.js'
+export type {
+  TargetGroupBridgeConfig,
+  TargetGroupSnapshot,
+  SpeakerDetectedPayload,
+  SpeakerLostPayload,
+  SpeakerAmbientPayload,
+} from './agent/target-group-bridge.js'
 
 // Context
 export { InMemoryContextStore } from './context/in-memory-context-store.js'
@@ -173,3 +183,15 @@ export { WebhookApprovalChannel } from './safety/channels/webhook-channel.js'
 export { ExternalToolChannel } from './safety/channels/external-tool-channel.js'
 export type { ExternalToolChannelConfig } from './safety/channels/external-tool-channel.js'
 export { ApprovalOrchestrator } from './safety/approval-orchestrator.js'
+
+// Tracing
+export type {
+  ITracer,
+  ITrace,
+  ISpan,
+  GenerationParams,
+  TracerStartParams,
+} from './tracing/types.js'
+export { NoopTracer, NoopTrace, NoopSpan } from './tracing/noop-tracer.js'
+export { LangfuseTracer } from './tracing/langfuse-tracer.js'
+export type { LangfuseClientLike } from './tracing/langfuse-tracer.js'

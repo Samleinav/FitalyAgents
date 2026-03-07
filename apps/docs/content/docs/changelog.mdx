@@ -4,11 +4,114 @@ description: All notable changes to FitalyAgents, newest first.
 full: true
 ---
 
+## v1.2.0 — 2026-03-06
+
+Major v2 rewrite. All new components are available in `fitalyagents` unless noted otherwise.
+
+### License
+
+Changed from Apache 2.0 + Commons Clause to **AGPL-3.0**. Source-available, open source recognized. Commercial closed-source deployments require a separate commercial license — contact the maintainers.
+
+### Breaking changes
+
+- **`NexusAgent` removed** — replaced by `StreamAgent`. Extend `StreamAgent` and implement `onEvent(channel, payload)`.
+- **`CapabilityRouter`, `SimpleRouter`, `AgentRegistry`, `LockManager`, `TaskQueue` removed** — the LLM-based dispatcher replaces all static routing.
+- **`DispatcherBootstrapper`, `LLMFallbackAgent` removed from dispatcher** — bootstrap now lives in the `IntentTeacher` + `IntentScoreStore` pipeline.
+
+### New — Safety Module
+
+**`SafetyGuard`** — evaluates tool actions against speaker role and approval limits.
+
+**`DraftStore`** (in-memory + Redis) — multi-turn order modification with TTL:
+```typescript
+const draftId = await draftStore.create(sessionId, orderInput)
+await draftStore.update(draftId, { color: 'blue' })
+await draftStore.confirm(draftId)
+```
+
+**`ApprovalOrchestrator`** — multi-channel human approval (`parallel` or `sequential`):
+- `VoiceApprovalChannel` — waits for `bus:SPEECH_FINAL` from the designated approver
+- `WebhookApprovalChannel` — posts to a URL, waits for `bus:APPROVAL_WEBHOOK_RESPONSE`
+- `ExternalToolChannel` — HTTP callback pattern
+
+### New — Dispatcher v2
+
+**`SpeculativeCache`** — pre-executes SAFE tools during `bus:SPEECH_PARTIAL`. When the final utterance arrives, the tool result is already cached (0ms wait). Confidence threshold: 0.90, margin: 0.15.
+
+**`IntentTeacher`** — learns from corrections at runtime via `addExample()`. Updates the live classifier without restart.
+
+**`IntentScoreStore`** — tracks per-intent hit rate via EMA (α=0.1). `isProduction(intentId)` returns `true` when score ≥ 0.70.
+
+### New — Core Agents
+
+**`StreamAgent`** — abstract base class replacing `NexusAgent`. Handles subscribe/unsubscribe lifecycle, heartbeat, and `onEvent()` dispatch.
+
+**`InteractionAgent`** — streaming LLM agent with full safety pipeline:
+- Streams TTS token-by-token via `ttsCallback`
+- Routes tool calls through `SafetyGuard` (safe/staged/protected/restricted)
+- Integrates speculative cache, `ApprovalOrchestrator`, and `IntentTeacher`
+
+**`ContextBuilderAgent`** — maintains per-session `ConversationContext` (history, ambient, pending draft, action history). Call `getEnrichedContext(sessionId)` before each LLM turn.
+
+**`ProactiveAgent`** — emits `bus:PROACTIVE_TRIGGER` for idle customer, out-of-stock, and draft expiry scenarios.
+
+### New — FitalyVoice (sprints 5.1–5.3)
+
+**`TargetGroupBridge`** — maps hardware speaker events to sessions with priority group management. Publishes `bus:TARGET_GROUP_CHANGED` on every FSM transition.
+
+```typescript
+const bridge = new TargetGroupBridge({ bus, sessionManager, storeId: 'kiosk-1' })
+await bridge.start()
+```
+
+**Ambient Context Pipeline** — `ContextBuilderAgent` extracts `last_product_mentioned` from overheard speech for coreference resolution across turns.
+
+**SPEECH_PARTIAL speculative execution** — `NodeDispatcher` pre-executes SAFE tools during partial speech when confidence ≥ 0.90 and margin ≥ 0.15.
+
+### New — Observability (sprint 6.1)
+
+**`ITracer` / `NoopTracer` / `LangfuseTracer`** — injectable tracing, zero overhead by default:
+
+```typescript
+const tracer = new LangfuseTracer(new Langfuse({ publicKey, secretKey }))
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary, tracer })
+```
+
+`LangfuseTracer` is a duck-type adapter — no `langfuse` peer dependency in core.
+
+### New — Hardening (sprint 6.3, `@fitalyagents/asynctools`)
+
+**`RateLimiter`** — sliding 1-second window enforced per tool via `rate_limit: { requests_per_second }`.
+
+**`CircuitBreaker`** — CLOSED → OPEN → HALF_OPEN FSM with `onOpen`/`onClose` callbacks:
+
+```typescript
+registry.register({
+  tool_id: 'payment',
+  circuit_breaker: { failure_threshold: 5, reset_timeout_ms: 30_000 },
+})
+const pool = new ExecutorPool(registry, { onOpen: (toolId) => alerting.send(`${toolId} down`) })
+```
+
+New `ToolResult.status` values: `'rate_limited'`, `'circuit_open'`.
+
+### Test coverage
+
+| Package | Tests |
+|---|---|
+| `packages/core` | 320 |
+| `packages/dispatcher` | 107 |
+| `@fitalyagents/asynctools` | 110 |
+| `examples/voice-retail` | 64 |
+| **Total** | **601** |
+
+---
+
 ## v1.1.0 — 2026-02-24
 
 ### License
 
-Changed from MIT to **Apache 2.0 + Commons Clause** — source-available, use freely to build products, cannot sell the framework itself as a product.
+Changed from MIT to **Apache 2.0 + Commons Clause** (superseded by AGPL-3.0 in v1.2.0).
 
 ### New — DX utilities (core)
 

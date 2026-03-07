@@ -4,6 +4,8 @@ import type { SafetyGuard } from '../safety/safety-guard.js'
 import type { InMemoryDraftStore } from '../safety/draft-store.js'
 import type { ApprovalOrchestrator } from '../safety/approval-orchestrator.js'
 import type { HumanProfile, HumanRole, ApprovalResponse } from '../safety/channels/types.js'
+import type { ITracer, ITrace } from '../tracing/types.js'
+import { NoopTracer } from '../tracing/noop-tracer.js'
 
 // ── LLM Streaming Interface ──────────────────────────────────────────────────
 
@@ -109,6 +111,8 @@ export interface InteractionAgentDeps {
   speculativeCache?: ISpeculativeCache
   ttsCallback?: (text: string, sessionId: string) => void
   systemPrompt?: string
+  /** Optional observability tracer. Defaults to NoopTracer. */
+  tracer?: ITracer
 }
 
 /**
@@ -148,6 +152,7 @@ export class InteractionAgent {
   private readonly speculativeCache?: ISpeculativeCache
   private readonly ttsCallback: (text: string, sessionId: string) => void
   private readonly systemPrompt: string
+  private readonly tracer: ITracer
 
   /**
    * Tracks PROTECTED tools waiting for client confirmation.
@@ -173,6 +178,7 @@ export class InteractionAgent {
     this.speculativeCache = deps.speculativeCache
     this.ttsCallback = deps.ttsCallback ?? (() => {})
     this.systemPrompt = deps.systemPrompt ?? 'You are a helpful voice assistant.'
+    this.tracer = deps.tracer ?? new NoopTracer()
   }
 
   /**
@@ -192,10 +198,18 @@ export class InteractionAgent {
   }): Promise<{
     textChunks: string[]
     toolResults: ToolCallResult[]
+    traceId: string
   }> {
     const { session_id, text, speaker_id } = event
     const textChunks: string[] = []
     const toolResults: ToolCallResult[] = []
+    const t0 = Date.now()
+
+    // ── Observability: start turn trace ──────────────────────────────────────
+    const trace: ITrace = this.tracer.startTrace('speech_turn', {
+      sessionId: session_id,
+      input: { text, speaker_id },
+    })
 
     // 1. Build context
     const messages = await this.buildMessages(session_id, text)
@@ -204,6 +218,9 @@ export class InteractionAgent {
     const tools = this.buildToolsList()
 
     // 3. Stream LLM response
+    const llmStart = Date.now()
+    const llmSpan = trace.span('llm_stream', { system: this.systemPrompt, toolCount: tools.length })
+
     for await (const chunk of this.llm.stream({
       system: this.systemPrompt,
       messages,
@@ -217,8 +234,12 @@ export class InteractionAgent {
         }
 
         case 'tool_call': {
+          const toolSpan = trace.span(`tool_${chunk.name}`, {
+            input: chunk.input as Record<string, unknown>,
+          })
           const result = await this.handleToolCall(chunk.name, chunk.input, session_id, speaker_id)
           toolResults.push(result)
+          toolSpan.end({ type: result.type })
           break
         }
 
@@ -229,8 +250,18 @@ export class InteractionAgent {
       }
     }
 
-    // 4. Store conversation in context
     const fullText = textChunks.join('')
+    llmSpan.end({ textChunks: textChunks.length, toolResults: toolResults.length })
+
+    // Record LLM generation with latency
+    trace.generation({
+      name: 'interaction_llm',
+      input: messages,
+      output: fullText || null,
+      latencyMs: Date.now() - llmStart,
+    })
+
+    // 4. Store conversation in context
     if (fullText) {
       await this.contextStore.set(session_id, 'last_response', fullText)
     }
@@ -250,7 +281,14 @@ export class InteractionAgent {
     // 6. Invalidate speculative cache at end of turn
     this.speculativeCache?.invalidate(session_id)
 
-    return { textChunks, toolResults }
+    // ── Observability: end trace ─────────────────────────────────────────────
+    trace.end({
+      latencyMs: Date.now() - t0,
+      textChunks: textChunks.length,
+      toolResults: toolResults.length,
+    })
+
+    return { textChunks, toolResults, traceId: trace.traceId }
   }
 
   /**

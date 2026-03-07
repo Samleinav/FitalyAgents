@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: How FitalyAgents layers fit together — bus, agents, dispatcher, and utilities.
+description: How FitalyAgents layers fit together — bus, agents, dispatcher, async tools, and observability.
 ---
 
 ## Overview
@@ -8,31 +8,33 @@ description: How FitalyAgents layers fit together — bus, agents, dispatcher, a
 FitalyAgents is organized into three layers plus utilities. You can use any layer independently.
 
 ```
-┌────────────────────────────────────────────────────┐
-│  LAYER 1 — Agent Middleware (fitalyagents)         │
-│  NexusAgent · AgentRegistry · ContextStore         │
-│  SessionManager · ApprovalQueue · LockManager      │
-│  TaskQueue · CapabilityRouter · AudioQueueService  │
-├────────────────────────────────────────────────────┤
-│  LAYER 2 — Async Tools (fitalyagents/asynctools)   │
-│  ToolRegistry · ExecutorPool · AsyncAgent          │
-│  PendingStateTracker · InjectionManager            │
-├────────────────────────────────────────────────────┤
-│  DISPATCHER (fitalyagents/dispatcher)              │
-│  NodeDispatcher · InMemoryEmbeddingClassifier      │
-│  LLMDirectClassifier · DispatcherBootstrapper      │
-│  InMemoryIntentLibrary · LLMFallbackAgent          │
-├────────────────────────────────────────────────────┤
-│  DX UTILITIES                                      │
-│  SimpleRouter · AgentBundle · ClaudeLLMProvider    │
-└────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  LAYER 1 — Agent Middleware (fitalyagents)                     │
+│  NexusAgent · StreamAgent · ContextBuilderAgent               │
+│  AgentRegistry · InMemorySessionManager · InMemoryApprovalQueue│
+│  InMemoryAudioQueueService · TargetGroupBridge                 │
+│  ITracer · NoopTracer · LangfuseTracer                         │
+├────────────────────────────────────────────────────────────────┤
+│  LAYER 2 — Async Tools (@fitalyagents/asynctools)              │
+│  ToolRegistry · ExecutorPool · AsyncAgent                      │
+│  RateLimiter · CircuitBreaker                                  │
+│  PendingStateTracker · InjectionManager                        │
+├────────────────────────────────────────────────────────────────┤
+│  DISPATCHER (fitalyagents/dispatcher)                          │
+│  NodeDispatcher · InMemoryEmbeddingClassifier                  │
+│  LLMDirectClassifier · DispatcherBootstrapper                  │
+│  InMemoryIntentLibrary · LLMFallbackAgent                      │
+├────────────────────────────────────────────────────────────────┤
+│  DX UTILITIES                                                  │
+│  SimpleRouter · AgentBundle · ClaudeLLMProvider                │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Layer 1 — Agent Middleware
 
-The core of the framework. Provides:
+The core of the framework. Provides session management, agent lifecycle, approval flows, and observability.
 
 ### Bus
 
@@ -59,6 +61,20 @@ Base class for all agents. Handles:
 
 You extend it and implement `process(task: TaskPayloadEvent): Promise<TaskResultEvent>`.
 
+### StreamAgent
+
+Extension of `NexusAgent` for streaming LLM responses. Subclass it when you need token-by-token output to a TTS pipeline. `ContextBuilderAgent` extends `StreamAgent`.
+
+### ContextBuilderAgent
+
+Maintains the full conversation state for a session:
+- **Conversation history** — messages across turns
+- **Ambient context** — overheard speech, environmental signals
+- **Draft store** — pending staged actions awaiting confirmation
+- **Action history** — completed intents (used for multi-turn accumulation)
+
+Call `ctxAgent.getEnrichedContext(session_id)` to get a `ConversationContext` snapshot before calling your LLM.
+
 ### Inversion of Control
 
 The framework calls your code — not the other way around:
@@ -77,27 +93,92 @@ TaskResultEvent returned → bus:ACTION_COMPLETED published
 
 Tracks active sessions with:
 - Priority groups: `0` (social/group), `1` (individual, default), `2` (employee/system)
-- `pauseSession()` / `resumeSession()` — employee interrupt protocol
-- Session-scoped `ContextStore` isolation
+- `pauseSession(sessionId, pausedBy?)` / `resumeSession(sessionId)` — employee interrupt protocol
+- `listByPriorityGroup(pg)` — excludes terminated sessions
+
+```typescript
+const sessionManager = new InMemorySessionManager({ bus })
+```
+
+### TargetGroupBridge
+
+Maps hardware speaker-detection events to sessions. Handles:
+- FSM per speaker: `idle → active → paused → terminated`
+- Priority elevation when an employee card is detected
+- Automatic session creation on first `bus:SPEAKER_DETECTED`
+
+```typescript
+const bridge = new TargetGroupBridge({ bus, sessionManager, storeId: 'kiosk-1' })
+await bridge.start()
+```
+
+See the [Target Group guide](/docs/guides/target-group) for full details.
 
 ### ApprovalQueue
 
 Human-in-the-loop for sensitive actions:
+
 ```
 OrderAgent creates draft → bus:ORDER_PENDING_APPROVAL
      ↓
-ApprovalQueue stores it with timeout
+InMemoryApprovalQueue stores it with timeout
      ↓
-Human approves via webhook → bus:ORDER_APPROVED + bus:ACTION_COMPLETED
+Human approves → bus:ORDER_APPROVED + bus:ACTION_COMPLETED
      OR rejects → bus:ORDER_APPROVAL_REJECTED + bus:ACTION_COMPLETED
      OR timeout → bus:ORDER_APPROVAL_TIMEOUT + bus:ACTION_COMPLETED
 ```
+
+### Observability (ITracer)
+
+Every component accepts an optional `tracer`. The default is `NoopTracer` (zero overhead). Swap in `LangfuseTracer` for full distributed tracing:
+
+```typescript
+import { LangfuseTracer } from 'fitalyagents'
+import Langfuse from 'langfuse'
+
+const tracer = new LangfuseTracer(new Langfuse({ publicKey, secretKey }))
+
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary, tracer })
+const interaction = new InteractionAgent({ bus, contextStore, tracer })
+```
+
+See the [Observability guide](/docs/guides/observability) for details.
 
 ---
 
 ## Layer 2 — Async Tools
 
 The problem: LLM tool calling is sequential and synchronous by default. FitalyAgents makes it parallel and async.
+
+### ToolRegistry + ExecutorPool
+
+```typescript
+import { ToolRegistry, ExecutorPool, registerFunctionHandler } from '@fitalyagents/asynctools'
+
+const registry = new ToolRegistry()
+
+registry.register({
+  tool_id: 'my_tool',
+  executor: { type: 'ts_fn' },
+  timeout_ms: 5000,
+})
+
+registerFunctionHandler('my_tool', async (input) => {
+  return { result: 'done' }
+})
+
+const pool = new ExecutorPool(registry)
+```
+
+For HTTP tools, specify a URL instead:
+
+```typescript
+registry.register({
+  tool_id: 'external_api',
+  executor: { type: 'http', url: 'https://api.example.com/endpoint', method: 'POST' },
+  timeout_ms: 5000,
+})
+```
 
 ### Execution modes
 
@@ -115,6 +196,25 @@ The problem: LLM tool calling is sequential and synchronous by default. FitalyAg
 | `inject_when_all` | Wait for ALL parallel tools to finish |
 | `inject_when_ready` | Inject each result as it arrives |
 | `inject_on_timeout` | Inject after timeout with partial results |
+
+### Fault tolerance: RateLimiter + CircuitBreaker
+
+Layer 2 includes built-in hardening. Add these to any tool registration:
+
+```typescript
+registry.register({
+  tool_id: 'product_search',
+  executor: { type: 'http', url: process.env.CATALOG_API_URL },
+  retry: { max_attempts: 2, backoff_ms: 200 },
+  rate_limit: { requests_per_second: 20 },
+  circuit_breaker: {
+    failure_threshold: 5,
+    reset_timeout_ms: 30_000,
+  },
+})
+```
+
+`ExecutorPool` enforces these automatically — no application code required. See the [Hardening guide](/docs/guides/hardening).
 
 ---
 
@@ -134,19 +234,19 @@ User text → Classifier → ClassifyResult → TASK_AVAILABLE event
 | Classifier | Latency | Setup | Best for |
 |---|---|---|---|
 | `InMemoryEmbeddingClassifier` | ~1ms | Training examples required | Production |
-| `LLMDirectClassifier` | ~200-500ms | Works with descriptions only | Prototyping |
+| `LLMDirectClassifier` | ~200–500ms | Works with descriptions only | Prototyping |
 
 ### DispatcherBootstrapper
 
-Auto-generates training examples from agent manifests:
+Auto-generates training examples from agent manifests using an LLM:
 
 ```typescript
 const bootstrapper = new DispatcherBootstrapper({
   intentLibrary,
   llm: new ClaudeLLMProvider(),
 })
-await bootstrapper.bootstrapFromRegistry(registry)
-// Done — intent library populated with LLM-generated examples
+await bootstrapper.bootstrapFromManifests([agentA.manifest, agentB.manifest])
+// Intent library now has 10–15 examples per intent
 ```
 
 ---
@@ -155,20 +255,32 @@ await bootstrapper.bootstrapFromRegistry(registry)
 
 | Channel | Direction | Publisher | Subscribers |
 |---|---|---|---|
-| `bus:SPEECH_FINAL` | pub/sub | STT / test | Dispatcher |
-| `bus:TASK_AVAILABLE` | pub/sub | Dispatcher | Router / CapabilityRouter |
+| `bus:SPEECH_FINAL` | pub/sub | STT / test harness | Dispatcher, ContextBuilderAgent |
+| `bus:AMBIENT_CONTEXT` | pub/sub | App code | ContextBuilderAgent |
+| `bus:SPEAKER_DETECTED` | pub/sub | Mic array / hardware | TargetGroupBridge |
+| `bus:EMPLOYEE_DETECTED` | pub/sub | Badge reader | App code → SessionManager |
+| `bus:EMPLOYEE_DEPARTED` | pub/sub | Badge reader | App code → SessionManager |
+| `bus:TASK_AVAILABLE` | pub/sub | Dispatcher | SimpleRouter / CapabilityRouter |
 | `queue:<agent-id>:inbox` | queue (lpush/brpop) | Router | NexusAgent |
 | `bus:ACTION_COMPLETED` | pub/sub | NexusAgent | InteractionAgent, UI |
 | `bus:BARGE_IN` | pub/sub | STT | AudioQueueService |
 | `bus:INTENT_UPDATED` | pub/sub | Bootstrapper, FallbackAgent | Classifier |
-| `bus:ORDER_PENDING_APPROVAL` | pub/sub | OrderAgent | ApprovalQueue |
+| `bus:ORDER_PENDING_APPROVAL` | pub/sub | NexusAgent | ApprovalQueue |
 | `bus:ORDER_APPROVED` | pub/sub | ApprovalQueue | OrderAgent |
+| `bus:ORDER_APPROVAL_REJECTED` | pub/sub | ApprovalQueue | OrderAgent |
+| `bus:ORDER_APPROVAL_TIMEOUT` | pub/sub | ApprovalQueue | OrderAgent |
+| `bus:DRAFT_CREATED` | pub/sub | NexusAgent | ContextBuilderAgent |
+| `bus:DRAFT_CONFIRMED` | pub/sub | App code | OrderAgent |
+| `bus:TOOL_DEGRADED` | pub/sub | ExecutorPool (onOpen) | ResponseAgent |
+| `bus:AGENT_REGISTERED` | pub/sub | NexusAgent | AgentRegistry |
+| `bus:AGENT_DEREGISTERED` | pub/sub | NexusAgent | AgentRegistry |
+| `bus:SESSION_CREATED` | pub/sub | SessionManager | ContextBuilderAgent |
 
 ---
 
 ## In-memory vs Redis
 
-Every component has an `InMemory*` implementation. For production, swap to the Redis-backed version — the interfaces are identical:
+Every stateful component has an `InMemory*` implementation. For production, swap to the Redis-backed version — the interfaces are identical:
 
 ```typescript
 // Same interface, different backend

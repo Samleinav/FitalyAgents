@@ -1,6 +1,6 @@
 {
     "name": "@fitalyagents/dispatcher",
-    "version": "0.0.1",
+    "version": "1.2.0",
     "description": "Intelligent task dispatcher with embedding classifier and LLM fallback",
     "type": "module",
     "exports": {
@@ -29,7 +29,7 @@
         "intent",
         "embedding"
     ],
-    "license": "SEE LICENSE IN LICENSE",
+    "license": "AGPL-3.0-only",
     "dependencies": {
         "fitalyagents": "workspace:*",
         "ioredis": "^5.4.2",

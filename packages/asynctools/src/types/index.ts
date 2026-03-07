@@ -28,7 +28,15 @@ export const InjectionStrategySchema = z.enum([
 export type InjectionStrategy = z.infer<typeof InjectionStrategySchema>
 
 // ─── Tool Status ────────────────────────────────────────────────────────────
-export const ToolStatusSchema = z.enum(['pending', 'running', 'completed', 'failed', 'timed_out'])
+export const ToolStatusSchema = z.enum([
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'timed_out',
+  'rate_limited',
+  'circuit_open',
+])
 export type ToolStatus = z.infer<typeof ToolStatusSchema>
 
 // ─── Executor Type ──────────────────────────────────────────────────────────
@@ -77,6 +85,22 @@ export const RetryConfigSchema = z.object({
 })
 export type RetryConfig = z.infer<typeof RetryConfigSchema>
 
+// ─── Rate Limit Config ──────────────────────────────────────────────────────
+export const RateLimitConfigSchema = z.object({
+  /** Maximum requests allowed per second per tool_id. */
+  requests_per_second: z.number().int().min(1),
+})
+export type RateLimitConfig = z.infer<typeof RateLimitConfigSchema>
+
+// ─── Circuit Breaker Config ─────────────────────────────────────────────────
+export const CircuitBreakerConfigSchema = z.object({
+  /** Number of consecutive failures before opening the circuit. */
+  failure_threshold: z.number().int().min(1).default(5),
+  /** Milliseconds to wait before transitioning from OPEN → HALF_OPEN. */
+  reset_timeout_ms: z.number().int().min(1000).default(30_000),
+})
+export type CircuitBreakerConfig = z.infer<typeof CircuitBreakerConfigSchema>
+
 // ─── Tool Definition ────────────────────────────────────────────────────────
 /**
  * Complete definition of a tool that an async agent can invoke.
@@ -104,6 +128,8 @@ export const ToolDefinitionSchema = z.object({
   timeout_ms: z.number().int().min(100).default(10_000),
   max_concurrent: z.number().int().min(1).default(5),
   retry: RetryConfigSchema.default({}),
+  rate_limit: RateLimitConfigSchema.optional(),
+  circuit_breaker: CircuitBreakerConfigSchema.optional(),
   input_schema: z.record(z.unknown()).optional(),
   output_schema: z.record(z.unknown()).optional(),
 

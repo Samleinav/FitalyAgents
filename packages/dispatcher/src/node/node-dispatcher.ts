@@ -1,4 +1,5 @@
-import type { IEventBus, Unsubscribe } from 'fitalyagents'
+import type { IEventBus, Unsubscribe, ITracer } from 'fitalyagents'
+import { NoopTracer } from 'fitalyagents'
 import type {
   IEmbeddingClassifier,
   ILLMFallbackAgent,
@@ -80,6 +81,8 @@ export interface NodeDispatcherDeps {
   speculativeTtlMs?: number
   /** TTL for speculative hints (PROTECTED/RESTRICTED) in ms (default: 10_000). */
   speculativeHintTtlMs?: number
+  /** Optional observability tracer. Defaults to NoopTracer. */
+  tracer?: ITracer
 }
 
 /**
@@ -128,6 +131,8 @@ export class NodeDispatcher {
   private readonly speculativeTtlMs: number
   private readonly speculativeHintTtlMs: number
 
+  private readonly tracer: ITracer
+
   private unsubs: Unsubscribe[] = []
   private watchdogTimer: number | null = null
   private started = false
@@ -145,6 +150,7 @@ export class NodeDispatcher {
     this.speculativeExecutor = deps.speculativeExecutor ?? null
     this.speculativeTtlMs = deps.speculativeTtlMs ?? 30_000
     this.speculativeHintTtlMs = deps.speculativeHintTtlMs ?? 10_000
+    this.tracer = deps.tracer ?? new NoopTracer()
   }
 
   // ── Start all workers ─────────────────────────────────────────────────
@@ -235,6 +241,11 @@ export class NodeDispatcher {
   private async handleSpeech(event: SpeechFinalEvent): Promise<void> {
     const result: ClassifyResult = await this.classifier.classify(event.text)
 
+    const trace = this.tracer.startTrace('dispatcher_classify', {
+      sessionId: event.session_id,
+      input: { text: event.text },
+    })
+
     if (result.type === 'confident' && result.confidence >= CONFIDENCE_THRESHOLD) {
       // Fast dispatch: publish directly to task queue
       await this.bus.publish('bus:TASK_AVAILABLE', {
@@ -252,6 +263,9 @@ export class NodeDispatcher {
         timeout_ms: 8000,
         created_at: Date.now(),
       })
+      trace.score('classifier_confidence', result.confidence)
+      trace.score('classifier_hit', 1)
+      trace.end({ intent_id: result.intent_id, outcome: 'hit' })
     } else {
       // Low confidence: publish fallback request
       await this.bus.publish('bus:DISPATCH_FALLBACK', {
@@ -262,6 +276,9 @@ export class NodeDispatcher {
         top_candidates: result.type === 'fallback' ? result.top_candidates : result.candidates,
         timestamp: Date.now(),
       })
+      trace.score('classifier_confidence', result.confidence)
+      trace.score('classifier_hit', 0, 'fell back to LLM')
+      trace.end({ outcome: 'fallback' })
     }
   }
 

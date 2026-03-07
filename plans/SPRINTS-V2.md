@@ -50,47 +50,47 @@ NO EXISTE, CREAR:
 
 ```
 BORRAR archivos:
-[ ] packages/core/src/routing/capability-router.ts
-[ ] packages/core/src/routing/simple-router.ts
-[ ] packages/core/src/routing/types.ts
-[ ] packages/core/src/routing/  (directorio vacío)
-[ ] packages/core/src/registry/agent-registry.ts
-[ ] packages/core/src/registry/  (directorio vacío)
-[ ] packages/core/src/locks/lock-manager.ts
-[ ] packages/core/src/locks/types.ts
-[ ] packages/core/src/locks/  (directorio vacío)
-[ ] packages/core/src/tasks/task-queue.ts
-[ ] packages/core/src/tasks/types.ts
-[ ] packages/core/src/tasks/  (directorio vacío)
+[x] packages/core/src/routing/capability-router.ts
+[x] packages/core/src/routing/simple-router.ts
+[x] packages/core/src/routing/types.ts
+[x] packages/core/src/routing/  (directorio vacío)
+[x] packages/core/src/registry/agent-registry.ts
+[x] packages/core/src/registry/  (directorio vacío)
+[x] packages/core/src/locks/lock-manager.ts
+[x] packages/core/src/locks/types.ts
+[x] packages/core/src/locks/  (directorio vacío)
+[x] packages/core/src/tasks/task-queue.ts
+[x] packages/core/src/tasks/types.ts
+[x] packages/core/src/tasks/  (directorio vacío)
 
 DEPRECAR (marcar @deprecated, NO borrar — se borra en Sprint 4.1):
-[ ] packages/core/src/agent/nexus-agent.ts
+[x] packages/core/src/agent/nexus-agent.ts
     → Agregar JSDoc: @deprecated Use StreamAgent instead. Will be removed in v2.0.0
 
 CREAR (stub para que Sprint 3+ lo use):
-[ ] packages/core/src/agent/stream-agent.ts
+[x] packages/core/src/agent/stream-agent.ts
     → Exporta clase StreamAgent vacía con lifecycle: start(), stop(), dispose()
 
 ACTUALIZAR:
-[ ] packages/core/src/index.ts
+[x] packages/core/src/index.ts
     → Remover exports: CapabilityRouter, SimpleRouter, AgentRegistry, LockManager,
       TaskQueue, InMemoryTaskQueue + todos sus types
     → Agregar export: StreamAgent
-[ ] packages/core/src/types/index.ts
+[x] packages/core/src/types/index.ts
     → Eliminar: TaskPayloadEvent, TaskResultEvent, HeartbeatEvent (si solo lo usa routing)
     → Mantener: ActionCompletedEvent, BusEvents base
 
 TESTS:
-[ ] Eliminar tests de módulos borrados:
+[x] Eliminar tests de módulos borrados:
     capability-router.test.ts, agent-registry.test.ts,
     lock-manager.test.ts, task-queue.test.ts
-[ ] Actualizar tests que importaban los módulos eliminados
-[ ] Verificar examples/voice-retail — ajustar imports rotos
+[x] Actualizar tests que importaban los módulos eliminados
+[x] Verificar examples/voice-retail — ajustar imports rotos
 
 CRITERIO DE DONE:
-[ ] pnpm -r build  → sin errores TypeScript
-[ ] pnpm -r test   → solo tests de módulos existentes pasan
-[ ] docs/ARCHITECTURE-V2.md creado ✅ (ya existe)
+[x] pnpm -r build  → sin errores TypeScript
+[x] pnpm -r test   → solo tests de módulos existentes pasan
+[x] docs/ARCHITECTURE-V2.md creado ✅ (ya existe)
 ```
 
 ---
@@ -102,122 +102,122 @@ CRITERIO DE DONE:
 
 ```
 CREAR packages/core/src/safety/channels/types.ts:
-[ ] type SafetyLevel = 'safe' | 'staged' | 'protected' | 'restricted'
-[ ] type HumanRole = 'customer' | 'staff' | 'cashier' | 'manager' | 'owner'
-[ ] interface HumanProfile { id, name, role, store_id, voice_embedding?, approval_limits, is_present? }
-[ ] interface ApprovalLimits { payment_max?, discount_max_pct?, refund_max?, can_override_price?, can_adjust_inventory? }
-[ ] interface IApprovalChannel { id, type, notify(request, approver), waitForResponse(request, timeoutMs), cancel(requestId) }
-[ ] interface ApprovalRequest { id, draft_id, action, amount?, session_id, required_role, context, timeout_ms }
-[ ] interface ApprovalResponse { approved, approver_id, channel_used, reason?, timestamp }
-[ ] type ApprovalStrategy = 'parallel' | 'sequential'
+[x] type SafetyLevel = 'safe' | 'staged' | 'protected' | 'restricted'
+[x] type HumanRole = 'customer' | 'staff' | 'cashier' | 'manager' | 'owner'
+[x] interface HumanProfile { id, name, role, store_id, voice_embedding?, approval_limits, is_present? }
+[x] interface ApprovalLimits { payment_max?, discount_max_pct?, refund_max?, can_override_price?, can_adjust_inventory? }
+[x] interface IApprovalChannel { id, type, notify(request, approver), waitForResponse(request, timeoutMs), cancel(requestId) }
+[x] interface ApprovalRequest { id, draft_id, action, amount?, session_id, required_role, context, timeout_ms }
+[x] interface ApprovalResponse { approved, approver_id, channel_used, reason?, timestamp }
+[x] type ApprovalStrategy = 'parallel' | 'sequential'
 
 CREAR packages/core/src/safety/safety-guard.ts:
-[ ] class SafetyGuard
-[ ] evaluate(action, params, speaker, context): SafetyDecision
-[ ] roleHasPermission(speaker, toolName, params): boolean
+[x] class SafetyGuard
+[x] evaluate(action, params, speaker, context): SafetyDecision
+[x] roleHasPermission(speaker, toolName, params): boolean
     → verifica payment_max, discount_max_pct, refund_max contra params.amount/percentage
-[ ] findNearbyApprover(requiredRole, storeId): Promise<HumanProfile | null>
+[x] findNearbyApprover(requiredRole, storeId): Promise<HumanProfile | null>
     → consulta bus o in-memory registry de perfiles presentes
-[ ] const defaultLimits: Record<HumanRole, ApprovalLimits>
+[x] const defaultLimits: Record<HumanRole, ApprovalLimits>
 
 CREAR packages/core/src/safety/draft-store.ts:
-[ ] interface Draft { id, session_id, intent_id, status, items, total?, ttl_seconds, history[], created_at }
-[ ] class InMemoryDraftStore (para tests)
-[ ] class RedisDraftStore (para producción)
-[ ] create(sessionId, input): Promise<string>          → draftId
-[ ] update(draftId, changes): Promise<Draft>           → guarda historial, renueva TTL
-[ ] confirm(draftId): Promise<void>                    → status='confirmed'
-[ ] cancel(draftId): Promise<void>                     → eliminar
-[ ] rollback(draftId): Promise<Draft>                  → restaurar historial[-1]
-[ ] get(draftId): Promise<Draft | null>
-[ ] getBySession(sessionId): Promise<Draft | null>
-[ ] TTL: auto-expira → publica bus:DRAFT_CANCELLED
+[x] interface Draft { id, session_id, intent_id, status, items, total?, ttl_seconds, history[], created_at }
+[x] class InMemoryDraftStore (para tests)
+[x] class RedisDraftStore (para producción)
+[x] create(sessionId, input): Promise<string>          → draftId
+[x] update(draftId, changes): Promise<Draft>           → guarda historial, renueva TTL
+[x] confirm(draftId): Promise<void>                    → status='confirmed'
+[x] cancel(draftId): Promise<void>                     → eliminar
+[x] rollback(draftId): Promise<Draft>                  → restaurar historial[-1]
+[x] get(draftId): Promise<Draft | null>
+[x] getBySession(sessionId): Promise<Draft | null>
+[x] TTL: auto-expira → publica bus:DRAFT_CANCELLED
 
 CREAR packages/core/src/safety/channels/voice-channel.ts:
-[ ] class VoiceApprovalChannel implements IApprovalChannel
-[ ] notify(): publica bus:APPROVAL_VOICE_REQUEST con prompt_text generado
-[ ] waitForResponse(): suscribe bus:SPEECH_FINAL
+[x] class VoiceApprovalChannel implements IApprovalChannel
+[x] notify(): publica bus:APPROVAL_VOICE_REQUEST con prompt_text generado
+[x] waitForResponse(): suscribe bus:SPEECH_FINAL
     → verifica speaker_id === approver esperado
     → NLU simple: detecta afirmativo/negativo en texto
     → resuelve ApprovalResponse o null (timeout)
-[ ] cancel(): unsuscribe + cleanup
+[x] cancel(): unsuscribe + cleanup
 
 CREAR packages/core/src/safety/channels/webhook-channel.ts:
-[ ] class WebhookApprovalChannel implements IApprovalChannel
-[ ] Migrar lógica timer/timeout de InMemoryApprovalQueue
-[ ] notify(): publica bus:APPROVAL_WEBHOOK_REQUEST
-[ ] waitForResponse(): espera bus:APPROVAL_WEBHOOK_RESPONSE donde payload.request_id matches
-[ ] cancel(): unsuscribe
+[x] class WebhookApprovalChannel implements IApprovalChannel
+[x] Migrar lógica timer/timeout de InMemoryApprovalQueue
+[x] notify(): publica bus:APPROVAL_WEBHOOK_REQUEST
+[x] waitForResponse(): espera bus:APPROVAL_WEBHOOK_RESPONSE donde payload.request_id matches
+[x] cancel(): unsuscribe
 
 CREAR packages/core/src/safety/channels/external-tool-channel.ts:
-[ ] class ExternalToolChannel implements IApprovalChannel
-[ ] Config: { url: string, method: 'POST' | 'GET', auth?: string }
-[ ] notify(): HTTP fetch al endpoint externo con ApprovalRequest serializado
-[ ] waitForResponse(): suscribe bus:APPROVAL_EXTERNAL_RESPONSE donde request_id matches
-[ ] cancel(): unsuscribe
+[x] class ExternalToolChannel implements IApprovalChannel
+[x] Config: { url: string, method: 'POST' | 'GET', auth?: string }
+[x] notify(): HTTP fetch al endpoint externo con ApprovalRequest serializado
+[x] waitForResponse(): suscribe bus:APPROVAL_EXTERNAL_RESPONSE donde request_id matches
+[x] cancel(): unsuscribe
 
 CREAR packages/core/src/safety/approval-orchestrator.ts:
-[ ] class ApprovalOrchestrator
-[ ] start(): suscribe bus:ORDER_PENDING_APPROVAL → llama orchestrate()
-[ ] orchestrate(request): Promise<ApprovalResponse>
+[x] class ApprovalOrchestrator
+[x] start(): suscribe bus:ORDER_PENDING_APPROVAL → llama orchestrate()
+[x] orchestrate(request): Promise<ApprovalResponse>
     → parallel: Promise.race() de todos los channels
     → sequential: await en orden, fallback si null
     → on resolve → cancela los demás channels
     → on all null → publica bus:ORDER_APPROVAL_TIMEOUT
-[ ] Publica bus:APPROVAL_RESOLVED + bus:ORDER_APPROVED on success
-[ ] dispose()
+[x] Publica bus:APPROVAL_RESOLVED + bus:ORDER_APPROVED on success
+[x] dispose()
 
 MANTENER packages/core/src/approval/types.ts:
-[ ] Re-exportar IApprovalChannel as IApprovalQueue (backwards compat)
-[ ] Re-exportar ApprovalRecord, ApprovalStatus (backwards compat)
+[x] Re-exportar IApprovalChannel as IApprovalQueue (backwards compat)
+[x] Re-exportar ApprovalRecord, ApprovalStatus (backwards compat)
 
 ACTUALIZAR packages/core/src/types/index.ts — AGREGAR:
-[ ] bus:APPROVAL_VOICE_REQUEST
-[ ] bus:APPROVAL_WEBHOOK_REQUEST
-[ ] bus:APPROVAL_EXTERNAL_REQUEST
-[ ] bus:APPROVAL_EXTERNAL_RESPONSE
-[ ] bus:APPROVAL_RESOLVED
-[ ] bus:DRAFT_CREATED
-[ ] bus:DRAFT_CONFIRMED
-[ ] bus:DRAFT_CANCELLED
+[x] bus:APPROVAL_VOICE_REQUEST
+[x] bus:APPROVAL_WEBHOOK_REQUEST
+[x] bus:APPROVAL_EXTERNAL_REQUEST
+[x] bus:APPROVAL_EXTERNAL_RESPONSE
+[x] bus:APPROVAL_RESOLVED
+[x] bus:DRAFT_CREATED
+[x] bus:DRAFT_CONFIRMED
+[x] bus:DRAFT_CANCELLED
 
 ACTUALIZAR packages/core/src/index.ts:
-[ ] Agregar exports de safety/: SafetyGuard, DraftStore, ApprovalOrchestrator,
+[x] Agregar exports de safety/: SafetyGuard, DraftStore, ApprovalOrchestrator,
     IApprovalChannel, VoiceApprovalChannel, WebhookApprovalChannel, ExternalToolChannel,
     HumanRole, HumanProfile, ApprovalLimits, SafetyLevel
 
 ACTUALIZAR packages/asynctools ToolRegistry:
-[ ] Aceptar campos safety, required_role, approval_channels, approval_strategy en ToolDefinition
+[x] Aceptar campos safety, required_role, approval_channels, approval_strategy en ToolDefinition
 
 TESTS:
-[ ] safety-guard.test.ts
+[x] safety-guard.test.ts
     → roleHasPermission: cashier puede pagar ≤50k, no puede reembolsar
     → roleHasPermission: manager puede reembolsar ≤100k, no puede hacerlo owner
     → evaluate: retorna allowed=true para SAFE independiente del rol
-[ ] draft-store.test.ts
+[x] draft-store.test.ts
     → create → update → confirm lifecycle
     → create → rollback → state anterior restaurado
     → TTL expiry → bus:DRAFT_CANCELLED publicado
-[ ] voice-channel.test.ts (mock bus:SPEECH_FINAL)
+[x] voice-channel.test.ts (mock bus:SPEECH_FINAL)
     → notify publica APPROVAL_VOICE_REQUEST
     → waitForResponse resuelve cuando speaker correcto dice "sí"
     → waitForResponse retorna null en timeout
-[ ] webhook-channel.test.ts
+[x] webhook-channel.test.ts
     → waitForResponse resuelve en bus:APPROVAL_WEBHOOK_RESPONSE
-[ ] external-tool-channel.test.ts (mock fetch)
+[x] external-tool-channel.test.ts (mock fetch)
     → notify llama HTTP con payload correcto
     → waitForResponse resuelve en bus:APPROVAL_EXTERNAL_RESPONSE
-[ ] approval-orchestrator.test.ts
+[x] approval-orchestrator.test.ts
     → parallel: primer canal en resolver gana, segundo se cancela
     → sequential: primer canal timeout → segundo canal responde
     → all timeout → APPROVAL_TIMEOUT publicado
-[ ] Regression: examples/voice-retail E2E tests sin cambios
+[x] Regression: examples/voice-retail E2E tests sin cambios
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
-[ ] docs/SAFETY-MODEL.md ✅ (ya existe + casos expandidos)
-[ ] docs/APPROVAL-CHANNELS.md ✅ (ya existe)
-[ ] docs/HUMAN-ROLES.md ✅ (ya existe)
+[x] pnpm -r build && pnpm -r test
+[x] docs/SAFETY-MODEL.md ✅ (ya existe + casos expandidos)
+[x] docs/APPROVAL-CHANNELS.md ✅ (ya existe)
+[x] docs/HUMAN-ROLES.md ✅ (ya existe)
 ```
 
 ---
@@ -229,32 +229,32 @@ CRITERIO DE DONE:
 
 ```
 CREAR packages/core/src/session/target-group.ts:
-[ ] type TargetState = 'idle' | 'targeted' | 'responding' | 'queued' | 'ambient'
-[ ] class TargetGroupStateMachine
-[ ] transition(speakerId, event): TargetState
-[ ] getTarget(): string | null
-[ ] getQueued(): string[]
-[ ] setAmbient(speakerId): void
+[x] type TargetState = 'idle' | 'targeted' | 'responding' | 'queued' | 'ambient'
+[x] class TargetGroupStateMachine
+[x] transition(speakerId, event): TargetState
+[x] getTarget(): string | null
+[x] getQueued(): string[]
+[x] setAmbient(speakerId): void
 
 EXTENDER packages/core/src/context/in-memory-context-store.ts:
-[ ] getAmbient(sessionId): Promise<AmbientContext | null>
-[ ] setAmbient(sessionId, data: AmbientContext): Promise<void>
-[ ] AmbientContext: { last_product_mentioned?, conversation_snippets[], timestamp }
+[x] getAmbient(sessionId): Promise<AmbientContext | null>
+[x] setAmbient(sessionId, data: AmbientContext): Promise<void>
+[x] AmbientContext: { last_product_mentioned?, conversation_snippets[], timestamp }
 
 ACTUALIZAR packages/core/src/types/index.ts — AGREGAR:
-[ ] bus:SPEECH_PARTIAL   { session_id, text, confidence, speaker_id? }
-[ ] bus:AMBIENT_CONTEXT  { session_id, speaker_id, text, timestamp }
-[ ] bus:TARGET_DETECTED  { session_id, speaker_id, store_id }
-[ ] bus:TARGET_QUEUED    { session_id, speaker_id, position }
-[ ] bus:TARGET_GROUP     { session_id, speaker_ids[], primary }
-[ ] bus:PROACTIVE_TRIGGER { session_id, reason, context }
+[x] bus:SPEECH_PARTIAL   { session_id, text, confidence, speaker_id? }
+[x] bus:AMBIENT_CONTEXT  { session_id, speaker_id, text, timestamp }
+[x] bus:TARGET_DETECTED  { session_id, speaker_id, store_id }
+[x] bus:TARGET_QUEUED    { session_id, speaker_id, position }
+[x] bus:TARGET_GROUP     { session_id, speaker_ids[], primary }
+[x] bus:PROACTIVE_TRIGGER { session_id, reason, context }
 
 TESTS:
-[ ] target-group.test.ts → transitions idle→targeted, targeted→queued (segundo cliente), etc.
-[ ] context-store ambient tests → setAmbient / getAmbient / persist across turns
+[x] target-group.test.ts → transitions idle→targeted, targeted→queued (segundo cliente), etc.
+[x] context-store ambient tests → setAmbient / getAmbient / persist across turns
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
@@ -268,35 +268,35 @@ CRITERIO DE DONE:
 
 ```
 CREAR packages/dispatcher/src/speculative-cache.ts:
-[ ] class SpeculativeCache
-[ ] set(sessionId, intentId, result, ttlMs): void      → SAFE tool result
-[ ] setDraft(sessionId, draftId, intentId): void       → STAGED draft ref
-[ ] setHint(sessionId, intentId, confidence): void     → PROTECTED/RESTRICTED hint
-[ ] get(sessionId, intentId): ToolResult | DraftRef | Hint | null
-[ ] getAny(sessionId): SpeculativeResult | null        → busca cualquier resultado
-[ ] invalidate(sessionId): void                        → limpiar al final de turno
-[ ] LRU con capacidad configurable (default 256 entries)
-[ ] TTL por entrada (SAFE: 30s, STAGED: TTL del draft)
+[x] class SpeculativeCache
+[x] set(sessionId, intentId, result, ttlMs): void      → SAFE tool result
+[x] setDraft(sessionId, draftId, intentId): void       → STAGED draft ref
+[x] setHint(sessionId, intentId, confidence): void     → PROTECTED/RESTRICTED hint
+[x] get(sessionId, intentId): ToolResult | DraftRef | Hint | null
+[x] getAny(sessionId): SpeculativeResult | null        → busca cualquier resultado
+[x] invalidate(sessionId): void                        → limpiar al final de turno
+[x] LRU con capacidad configurable (default 256 entries)
+[x] TTL por entrada (SAFE: 30s, STAGED: TTL del draft)
 
 ACTUALIZAR packages/dispatcher/src/node-dispatcher.ts:
-[ ] Inyectar: SafetyGuard, SpeculativeCache, DraftStore
-[ ] onSpeechPartial(event):
+[x] Inyectar: SafetyGuard, SpeculativeCache, DraftStore
+[x] onSpeechPartial(event):
     → classify(text) → si conf > 0.90 Y margin > 0.15:
         SAFE      → executorPool.execute(tool, params) → cache.set()
         STAGED    → draftStore.create() → cache.setDraft()
         PROTECTED → cache.setHint()
         RESTRICTED → cache.setHint()
-[ ] getSpeculativeResult(sessionId, intentId?): SpeculativeResult | null
+[x] getSpeculativeResult(sessionId, intentId?): SpeculativeResult | null
 
 TESTS:
-[ ] speculative-cache.test.ts → LRU eviction, TTL expiry, get/set/invalidate
-[ ] dispatcher integration: SPEECH_PARTIAL → SAFE → cache populated
-[ ] dispatcher integration: SPEECH_PARTIAL → STAGED → draft created
-[ ] dispatcher integration: SPEECH_PARTIAL → RESTRICTED → hint only (no execution)
+[x] speculative-cache.test.ts → LRU eviction, TTL expiry, get/set/invalidate
+[x] dispatcher integration: SPEECH_PARTIAL → SAFE → cache populated
+[x] dispatcher integration: SPEECH_PARTIAL → STAGED → draft created
+[x] dispatcher integration: SPEECH_PARTIAL → RESTRICTED → hint only (no execution)
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
-[ ] docs/DISPATCHER-SPECULATIVE.md creado
+[x] pnpm -r build && pnpm -r test
+[x] docs/DISPATCHER-SPECULATIVE.md creado
 ```
 
 ---
@@ -309,36 +309,36 @@ CRITERIO DE DONE:
 ```
 MIGRAR examples/agent-comparison/src/intent-teacher.ts
      → packages/dispatcher/src/intent-teacher.ts:
-[ ] Eliminar hardcoded business logic (tienda de zapatos)
-[ ] instructionPrompt: string inyectable por negocio
-[ ] Redis backend para persistir correcciones entre reinicios
-[ ] InMemory fallback para tests
-[ ] evaluate(query, wrong, correct): 'add' | 'skip' | 'flag'
-[ ] addExample(intentId, example): void → actualiza vector store en vivo
+[x] Eliminar hardcoded business logic (tienda de zapatos)
+[x] instructionPrompt: string inyectable por negocio
+[x] Redis backend para persistir correcciones entre reinicios
+[x] InMemory fallback para tests
+[x] evaluate(query, wrong, correct): 'add' | 'skip' | 'flag'
+[x] addExample(intentId, example): void → actualiza vector store en vivo
 
 MIGRAR examples/agent-comparison/src/intent-score-store.ts
      → packages/dispatcher/src/intent-score-store.ts:
-[ ] EMA (α=0.1) por intent_id
-[ ] Redis backend (production) + InMemory (tests)
-[ ] recordHit(intentId): void
-[ ] recordCorrection(intentId): void
-[ ] getScore(intentId): number (0-1)
-[ ] isProduction(intentId): boolean   → score ≥ 0.70
-[ ] suggestProductionSwitch(): string[] → intents con hit rate ≥ 90%
+[x] EMA (α=0.1) por intent_id
+[x] Redis backend (production) + InMemory (tests)
+[x] recordHit(intentId): void
+[x] recordCorrection(intentId): void
+[x] getScore(intentId): number (0-1)
+[x] isProduction(intentId): boolean   → score ≥ 0.70
+[x] suggestProductionSwitch(): string[] → intents con hit rate ≥ 90%
 
 ACTUALIZAR packages/dispatcher/src/index.ts:
-[ ] Exportar: IntentTeacher, IntentScoreStore, SpeculativeCache
+[x] Exportar: IntentTeacher, IntentScoreStore, SpeculativeCache
 
 TESTS:
-[ ] intent-teacher.test.ts (mock LLM provider)
+[x] intent-teacher.test.ts (mock LLM provider)
     → evaluate returns 'add' cuando la query pertenece al intent correcto
     → addExample actualiza classifier
-[ ] intent-score-store.test.ts
+[x] intent-score-store.test.ts
     → EMA converge correctamente con hits sucesivos
     → isProduction = false cuando score < 0.70
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
@@ -350,19 +350,19 @@ CRITERIO DE DONE:
 
 ```
 BORRAR:
-[ ] packages/dispatcher/src/node/fallback/  (LLMFallbackAgent)
-[ ] packages/dispatcher/src/node/bootstrapper/dispatcher-bootstrapper.ts
-[ ] packages/dispatcher/src/node/bootstrapper/  (directorio)
+[x] packages/dispatcher/src/node/fallback/  (LLMFallbackAgent)
+[x] packages/dispatcher/src/node/bootstrapper/dispatcher-bootstrapper.ts
+[x] packages/dispatcher/src/node/bootstrapper/  (directorio)
 
 ACTUALIZAR packages/dispatcher/src/index.ts:
-[ ] Remover exports eliminados
+[x] Remover exports eliminados
 
 ACTUALIZAR tests:
-[ ] Eliminar tests de DispatcherBootstrapper, LLMFallbackAgent
-[ ] Actualizar node-dispatcher.test.ts si tiene referencias eliminadas
+[x] Eliminar tests de DispatcherBootstrapper, LLMFallbackAgent
+[x] Actualizar node-dispatcher.test.ts si tiene referencias eliminadas
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
@@ -376,24 +376,24 @@ CRITERIO DE DONE:
 
 ```
 CREAR packages/core/src/agent/interaction-agent.ts:
-[ ] class InteractionAgent
-[ ] constructor({ toolRegistry, executorPool, llm, contextStore, dispatcher, ttsCallback, safetyGuard })
-[ ] handleSpeechFinal(event: SpeechFinalEvent): Promise<void>
+[x] class InteractionAgent
+[x] constructor({ toolRegistry, executorPool, llm, contextStore, dispatcher, ttsCallback, safetyGuard })
+[x] handleSpeechFinal(event: SpeechFinalEvent): Promise<void>
     → buildContext(sessionId) → [system, conversation_history, tool_results]
     → llm.stream({ tools, messages })
     → for await chunk:
         type='text'      → ttsCallback(chunk.text) (streaming inmediato)
         type='tool_call' → handleToolCall(chunk, sessionId, speculative)
-[ ] handleToolCall(call, sessionId, speculative): Promise<ToolResult>
+[x] handleToolCall(call, sessionId, speculative): Promise<ToolResult>
     → safety = toolRegistry.get(call.name).safety
     → SAFE:      cache hit? → return cached : executorPool.execute()
     → STAGED:    return {type:'draft_ready', draft, needs_confirmation:true}
     → PROTECTED: return {type:'needs_confirmation', prompt}
     → RESTRICTED: approvalOrchestrator.orchestrate() → await result
-[ ] Registra HIT/CORRECTION en teacher después de cada tool_call
+[x] Registra HIT/CORRECTION en teacher después de cada tool_call
 
 TESTS:
-[ ] interaction-agent.test.ts (mock LLM, mock executorPool):
+[x] interaction-agent.test.ts (mock LLM, mock executorPool):
     → SAFE tool → llama executorPool, retorna resultado
     → SAFE con cache → retorna cached sin llamar executor
     → STAGED → retorna draft_ready, no ejecuta
@@ -401,7 +401,7 @@ TESTS:
     → RESTRICTED → llama approvalOrchestrator, espera resultado
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
@@ -413,23 +413,23 @@ CRITERIO DE DONE:
 
 ```
 EXTENDER interaction-agent.ts:
-[ ] handleDraftFlow(sessionId, draftId): void
+[x] handleDraftFlow(sessionId, draftId): void
     → Escucha siguiente turno del cliente:
         "sí/dale/confirma" → DraftStore.confirm()  → ejecutar acción real
         "no/mejor/cambia"  → DraftStore.update()   → re-presentar
         "cancela/olvídalo" → DraftStore.cancel()
-[ ] TTL expiry handler: bus:DRAFT_CANCELLED → notificar cliente por TTS
-[ ] Manejar ambigüedad: "mejor en azul" → detectar campo modificado + llamar update()
+[x] TTL expiry handler: bus:DRAFT_CANCELLED → notificar cliente por TTS
+[x] Manejar ambigüedad: "mejor en azul" → detectar campo modificado + llamar update()
 
 TESTS:
-[ ] crear → confirmar
-[ ] crear → modificar color → confirmar
-[ ] crear → modificar N veces → cancelar
-[ ] TTL expiry → notificación al cliente
-[ ] multi-turno con barge-in durante presentación del draft
+[x] crear → confirmar
+[x] crear → modificar color → confirmar
+[x] crear → modificar N veces → cancelar
+[x] TTL expiry → notificación al cliente
+[x] multi-turno con barge-in durante presentación del draft
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
@@ -441,30 +441,30 @@ CRITERIO DE DONE:
 
 ```
 EXTENDER interaction-agent.ts:
-[ ] PROTECTED flow:
+[x] PROTECTED flow:
     → LLM detecta needs_confirmation → genera confirmation_prompt vía TTS
     → Espera siguiente turno: afirmativo → ejecutar tool : negativo → cancelar
-[ ] RESTRICTED flow:
+[x] RESTRICTED flow:
     → LLM llama tool → SafetyGuard → ApprovalOrchestrator.orchestrate()
     → Mientras espera: TTS "un momento, esperando aprobación"
     → bus:APPROVAL_RESOLVED → LLM reanuda con resultado
     → bus:ORDER_APPROVAL_TIMEOUT → LLM informa al cliente
-[ ] Suscribir bus:APPROVAL_RESOLVED por session_id
+[x] Suscribir bus:APPROVAL_RESOLVED por session_id
 
 ACTUALIZAR examples/voice-retail:
-[ ] Migrar ejemplos existentes a usar InteractionAgent + ApprovalOrchestrator
+[x] Migrar ejemplos existentes a usar InteractionAgent + ApprovalOrchestrator
 
 TESTS:
-[ ] PROTECTED: cliente confirma → tool se ejecuta
-[ ] PROTECTED: cliente niega → tool no se ejecuta, respuesta amigable
-[ ] RESTRICTED: VoiceChannel mock → aprueba → tool ejecuta
-[ ] RESTRICTED: timeout (todos los canales) → cliente informado
-[ ] RESTRICTED: sequential → voz timeout → webhook responde
-[ ] Regression: E2E voice-retail completo sin regresiones
+[x] PROTECTED: cliente confirma → tool se ejecuta
+[x] PROTECTED: cliente niega → tool no se ejecuta, respuesta amigable
+[x] RESTRICTED: VoiceChannel mock → aprueba → tool ejecuta
+[x] RESTRICTED: timeout (todos los canales) → cliente informado
+[x] RESTRICTED: sequential → voz timeout → webhook responde
+[x] Regression: E2E voice-retail completo sin regresiones
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
-[ ] examples/voice-retail E2E 73 tests pasando
+[x] pnpm -r build && pnpm -r test
+[x] examples/voice-retail E2E 73 tests pasando
 ```
 
 ---
@@ -478,34 +478,34 @@ CRITERIO DE DONE:
 
 ```
 COMPLETAR packages/core/src/agent/stream-agent.ts:
-[ ] abstract class StreamAgent
-[ ] subscribe(channel: string, handler: BusHandler): void
-[ ] unsubscribe(channel: string): void
-[ ] start(): Promise<void>    → subscribe a channels configurados
-[ ] stop(): Promise<void>     → unsubscribe todo
-[ ] dispose(): void           → stop() + cleanup
-[ ] Heartbeat configurable: publishHeartbeat(intervalMs)
-[ ] abstract onEvent(channel, payload): Promise<void>
+[x] abstract class StreamAgent
+[x] subscribe(channel: string, handler: BusHandler): void
+[x] unsubscribe(channel: string): void
+[x] start(): Promise<void>    → subscribe a channels configurados
+[x] stop(): Promise<void>     → unsubscribe todo
+[x] dispose(): void           → stop() + cleanup
+[x] Heartbeat configurable: publishHeartbeat(intervalMs)
+[x] abstract onEvent(channel, payload): Promise<void>
 
 BORRAR:
-[ ] packages/core/src/agent/nexus-agent.ts (deprecado en Sprint 1.1)
+[x] packages/core/src/agent/nexus-agent.ts (deprecado en Sprint 1.1)
 
 ACTUALIZAR packages/core/src/index.ts:
-[ ] Remover NexusAgent export
-[ ] StreamAgent ya exportado
+[x] Remover NexusAgent export
+[x] StreamAgent ya exportado
 
 ACTUALIZAR examples/voice-retail:
-[ ] Reemplazar NexusAgent con StreamAgent en todos los agentes del ejemplo
+[x] Reemplazar NexusAgent con StreamAgent en todos los agentes del ejemplo
 
 TESTS:
-[ ] stream-agent.test.ts
+[x] stream-agent.test.ts
     → start() → suscripción activa
     → stop() → suscripción cancelada
     → evento en bus → onEvent() invocado
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
-[ ] No quedan referencias a NexusAgent en el codebase
+[x] pnpm -r build && pnpm -r test
+[x] No quedan referencias a NexusAgent en el codebase
 ```
 
 ---
@@ -516,22 +516,22 @@ CRITERIO DE DONE:
 
 ```
 CREAR packages/core/src/agent/context-builder-agent.ts:
-[ ] class ContextBuilderAgent extends StreamAgent
-[ ] Suscribe: SPEECH_FINAL, AMBIENT_CONTEXT, ACTION_COMPLETED, DRAFT_CREATED, DRAFT_CONFIRMED, DRAFT_CANCELLED
-[ ] Mantiene por sesión:
+[x] class ContextBuilderAgent extends StreamAgent
+[x] Suscribe: SPEECH_FINAL, AMBIENT_CONTEXT, ACTION_COMPLETED, DRAFT_CREATED, DRAFT_CONFIRMED, DRAFT_CANCELLED
+[x] Mantiene por sesión:
     → conversation_history (últimos N turnos)
     → last_product_mentioned
     → pending_draft (si hay draft activo)
     → action_history (últimas N acciones completadas)
-[ ] getEnrichedContext(sessionId): ConversationContext para InteractionAgent
+[x] getEnrichedContext(sessionId): ConversationContext para InteractionAgent
 
 TESTS:
-[ ] context acumulado correctamente en multi-turno
-[ ] AMBIENT_CONTEXT enriquece contexto sin generar respuesta
-[ ] draft states reflejados en contexto
+[x] context acumulado correctamente en multi-turno
+[x] AMBIENT_CONTEXT enriquece contexto sin generar respuesta
+[x] draft states reflejados en contexto
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
@@ -542,20 +542,20 @@ CRITERIO DE DONE:
 
 ```
 CREAR packages/core/src/agent/proactive-agent.ts:
-[ ] class ProactiveAgent extends StreamAgent
-[ ] Detecta situaciones:
+[x] class ProactiveAgent extends StreamAgent
+[x] Detecta situaciones:
     → cliente sin respuesta > N segundos → PROACTIVE_TRIGGER (reason: 'idle_customer')
     → producto mencionado sin stock → PROACTIVE_TRIGGER (reason: 'out_of_stock')
     → draft expirado → PROACTIVE_TRIGGER (reason: 'draft_expired')
-[ ] Emite bus:PROACTIVE_TRIGGER { session_id, reason, context }
-[ ] InteractionAgent escucha y decide si hablar (evita ser intrusivo)
+[x] Emite bus:PROACTIVE_TRIGGER { session_id, reason, context }
+[x] InteractionAgent escucha y decide si hablar (evita ser intrusivo)
 
 TESTS:
-[ ] idle_customer → trigger después de timeout configurado
-[ ] out_of_stock → trigger cuando tool retorna stock=0
+[x] idle_customer → trigger después de timeout configurado
+[x] out_of_stock → trigger cuando tool retorna stock=0
 
 CRITERIO DE DONE:
-[ ] pnpm -r build && pnpm -r test
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
@@ -568,43 +568,59 @@ CRITERIO DE DONE:
 **Resultado:** NodeDispatcher suscribe `bus:SPEECH_PARTIAL` cuando tiene SpeculativeCache inyectado. Thresholds estrictos (0.90 confianza, 0.15 margen). SAFE→pre-ejecuta+cachea, STAGED/PROTECTED/RESTRICTED→cachea hint. SpeechPartialEvent type agregado. 12 tests nuevos (19 total en node-dispatcher). 7 test files, 107 tests. Build DTS clean. También se corrigió error pre-existente de DTS con `setInterval`/`clearInterval` y `process.env`.
 
 ```
-[ ] Dispatcher suscribe bus:SPEECH_PARTIAL
-[ ] onSpeechPartial(event): classify → speculate (ya implementado en Sprint 2.1)
-[ ] Tests: PARTIAL → speculative hit → FINAL usa cache (0ms tool wait)
-[ ] pnpm -r build && pnpm -r test
+[x] Dispatcher suscribe bus:SPEECH_PARTIAL
+[x] onSpeechPartial(event): classify → speculate (ya implementado en Sprint 2.1)
+[x] Tests: PARTIAL → speculative hit → FINAL usa cache (0ms tool wait)
+[x] pnpm -r build && pnpm -r test
 ```
 
 
-### Sprint 5.2 — Target Group State Machine
+### Sprint 5.2 — Target Group State Machine ✅ COMPLETADO 2026-03-06
+
+**Resultado:** TargetGroupBridge extends StreamAgent. Listens to SPEAKER_DETECTED/LOST/AMBIENT + RESPONSE_START/END. Creates sessions on target, sets priority 0 on queue, upgrades to 1 on promotion. Publishes bus:TARGET_GROUP_CHANGED snapshot after every transition. TargetGroupChangedEvent type+schema added. 14 tests. 20 test files, 297 tests. Build DTS clean.
 
 ```
-[ ] Completar TargetGroupStateMachine (placeholder de Sprint 1.3)
-[ ] Integrar con SessionManager:
-    → TARGET_DETECTED → SessionManager.createSession() si no existe
-    → TARGET_QUEUED   → SessionManager.setPriorityGroup(1)
-[ ] Tests: multi-speaker transitions
-[ ] pnpm -r build && pnpm -r test
+[x] Completar TargetGroupStateMachine (placeholder de Sprint 1.3)
+[x] Integrar con SessionManager:
+    → SPEAKER_DETECTED → SessionManager.createSession() si no existe
+    → queued           → SessionManager.setPriorityGroup(0)
+    → promoted         → SessionManager.setPriorityGroup(1)
+[x] TargetGroupChangedEvent schema en types/index.ts
+[x] TargetGroupBridge exportado desde index.ts
+[x] Tests: multi-speaker transitions (14 tests)
+[x] pnpm -r build && pnpm -r test
 ```
 
-### Sprint 5.3 — Ambient Context Pipeline
+### Sprint 5.3 — Ambient Context Pipeline ✅ COMPLETADO 2026-03-06
+
+**Resultado:** `handleAmbientContext()` en ContextBuilderAgent ahora detecta eventos con `text` → extrae product mention → llama `contextStore.setAmbient()` con snippets + `last_product_mentioned`. `getEnrichedContext()` usa ambient como fallback para `last_product_mentioned` y mergea snippets en `ambient_context`. 6 tests nuevos. 20 test files, 303 tests. Build DTS clean.
 
 ```
-[ ] bus:AMBIENT_CONTEXT → ContextBuilderAgent.setAmbient()
-[ ] Test: "¿los tienen en azul?" después de hablar de Nike → contexto resuelve product='Nike'
-[ ] pnpm -r build && pnpm -r test
+[x] bus:AMBIENT_CONTEXT con text → contextStore.setAmbient() con AmbientContext estructurado
+[x] Extrae product mention de texto ambient via extractProductMention()
+[x] getEnrichedContext: ambient last_product_mentioned como fallback
+[x] ambient.conversation_snippets visible en ambient_context del LLM
+[x] Test: "¿los tienen en azul?" después de "me gustan los tenis Nike" → contexto resuelve product
+[x] pnpm -r build && pnpm -r test
 ```
 
 ---
 
 ## Fase 6 — Production & Observability
 
-### Sprint 6.1 — Langfuse Integration
+### Sprint 6.1 — Langfuse Integration ✅ COMPLETADO 2026-03-06
+
+**Resultado:** `ITracer`/`ITrace`/`ISpan` + `NoopTracer` (default, zero deps) + `LangfuseTracer` (duck-type adapter, sin importar `langfuse` — usuario pasa su instancia). `InteractionAgent` instrumentado: trace por turno con span LLM + span por tool call + `generation()` con latencia + `traceId` en el resultado. `NodeDispatcher` instrumentado: `classifier_confidence` + `classifier_hit` (1=hit, 0=fallback) per-classification. 17 tests. core: 21 files, 320 tests; dispatcher: 7 files, 107 tests. Build DTS clean.
 
 ```
-[ ] LangfuseTracer inyectable en InteractionAgent y DispatcherV2
-[ ] Trace por turno: SPEECH_FINAL → tools → LLM → TTS con latencias
-[ ] Score de teacher como Langfuse score (HIT/CORRECTION)
-[ ] pnpm -r build && pnpm -r test
+[x] ITracer / ITrace / ISpan interfaces en packages/core/src/tracing/types.ts
+[x] NoopTracer — zero overhead, default si no se configura tracer
+[x] LangfuseTracer — duck-type adapter (sin dep langfuse, usuario pasa instancia)
+[x] InteractionAgent: tracer? en deps, startTrace/span/generation/end en handleSpeechFinal
+[x] NodeDispatcher: tracer? en deps, classifier_confidence + classifier_hit scores
+[x] Export desde packages/core/src/index.ts
+[x] tracer.test.ts — 17 tests (NoopTracer, LangfuseTracer, integration flows)
+[x] pnpm -r build && pnpm -r test
 ```
 
 ### Sprint 6.2 — FitalyInsights Dashboard

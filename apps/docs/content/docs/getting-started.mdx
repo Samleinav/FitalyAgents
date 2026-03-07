@@ -50,14 +50,30 @@ class ProductAgent extends NexusAgent {
   }
 
   async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
-    const { intent_id, slots, session_id } = task
+    const { intent_id, slots, task_id, session_id } = task
 
     if (intent_id === 'product_search') {
       const results = await this.searchProducts(slots)
-      return { status: 'completed', session_id, result: results }
+      return {
+        event: 'TASK_RESULT',
+        task_id,
+        session_id,
+        agent_id: this.manifest.agent_id,
+        status: 'completed',
+        result: results,
+        completed_at: Date.now(),
+      }
     }
 
-    return { status: 'failed', session_id, error: 'Unknown intent' }
+    return {
+      event: 'TASK_RESULT',
+      task_id,
+      session_id,
+      agent_id: this.manifest.agent_id,
+      status: 'failed',
+      error: 'Unknown intent',
+      completed_at: Date.now(),
+    }
   }
 }
 ```

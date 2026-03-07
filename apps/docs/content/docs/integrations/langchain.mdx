@@ -13,24 +13,51 @@ pnpm add langchain @langchain/core @langchain/openai
 pnpm add @langchain/anthropic
 ```
 
-## Use LangChain tools as async tools
+## Use LangChain tools inside an agent
 
-Any LangChain `StructuredTool` or `DynamicStructuredTool` can be wrapped and passed to `asyncTools` in a NexusAgent.
+Register LangChain tools in the `ToolRegistry` and attach a handler that calls `lcTool.invoke()`:
 
 ```typescript
-import { NexusAgent, type AsyncTool } from 'fitalyagents'
+import { ToolRegistry, ExecutorPool, registerFunctionHandler } from '@fitalyagents/asynctools'
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search'
 import { Calculator } from '@langchain/community/tools/calculator'
 
-function wrapLangChainTool(lcTool: { name: string; invoke(input: unknown): Promise<string> }): AsyncTool {
-  return {
-    name: lcTool.name,
-    async execute(input: unknown) {
-      const result = await lcTool.invoke(input)
-      return { result }
-    },
-  }
-}
+const registry = new ToolRegistry()
+
+const tavilyTool = new TavilySearchResults({ maxResults: 3 })
+const calculatorTool = new Calculator()
+
+registry.register({
+  tool_id: 'web_search',
+  description: 'Search the web for current information',
+  executor: { type: 'ts_fn' },
+  timeout_ms: 8000,
+})
+
+registerFunctionHandler('web_search', async (input) => {
+  const result = await tavilyTool.invoke(input)
+  return { result }
+})
+
+registry.register({
+  tool_id: 'calculator',
+  description: 'Evaluate mathematical expressions',
+  executor: { type: 'ts_fn' },
+  timeout_ms: 1000,
+})
+
+registerFunctionHandler('calculator', async (input) => {
+  const result = await calculatorTool.invoke(input)
+  return { result }
+})
+
+const pool = new ExecutorPool(registry)
+```
+
+Use `pool.execute()` inside `NexusAgent.process()`:
+
+```typescript
+import { NexusAgent } from 'fitalyagents'
 
 class ResearchAgent extends NexusAgent {
   manifest = {
@@ -40,21 +67,32 @@ class ResearchAgent extends NexusAgent {
     priority_group: 1,
   }
 
-  protected asyncTools = [
-    wrapLangChainTool(new TavilySearchResults({ maxResults: 3 })),
-    wrapLangChainTool(new Calculator()),
-  ]
+  async process(task) {
+    // Both tools fire simultaneously
+    const [searchResult, calcResult] = await Promise.all([
+      pool.execute('web_search',  `${task.task_id}_s`, { query: task.slots?.query }),
+      pool.execute('calculator',  `${task.task_id}_c`, { expression: task.slots?.expression }),
+    ])
+
+    return {
+      status: 'completed',
+      result: { search: searchResult.result, calc: calcResult.result },
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      completed_at: Date.now(),
+    }
+  }
 }
 ```
 
-Tools run in parallel automatically via `asyncTools` — each invocation is independent and non-blocking.
-
 ## LangChain as the Dispatcher LLM provider
 
-Implement the `LLMProvider` interface using any LangChain chat model:
+Implement the `LLMProvider` interface. The single method is `complete(system, user): Promise<string>`:
 
 ```typescript
-import { type LLMProvider, type ClassificationResult } from 'fitalyagents/dispatcher'
+import { type LLMProvider } from 'fitalyagents/dispatcher'
 import { ChatOpenAI } from '@langchain/openai'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 
@@ -65,33 +103,43 @@ export class LangChainLLMProvider implements LLMProvider {
     this.model = new ChatOpenAI({ model: modelName, temperature: 0 })
   }
 
-  async classify(utterance: string, agentManifests: string): Promise<ClassificationResult> {
+  async complete(system: string, user: string): Promise<string> {
     const response = await this.model.invoke([
-      new SystemMessage(
-        `You are an intent classifier. Given this utterance, return JSON:
-        { "agent_id": "...", "intent_id": "...", "confidence": 0.0-1.0 }
-        Available agents: ${agentManifests}`
-      ),
-      new HumanMessage(utterance),
+      new SystemMessage(system),
+      new HumanMessage(user),
     ])
-
-    return JSON.parse(response.content as string)
+    return response.content as string
   }
 }
 ```
 
-Register it with `DispatcherBootstrapper`:
+Register it with `DispatcherBootstrapper` to auto-generate training examples, then wire it into `NodeDispatcher`:
 
 ```typescript
-import { DispatcherBootstrapper } from 'fitalyagents/dispatcher'
+import {
+  NodeDispatcher,
+  InMemoryEmbeddingClassifier,
+  InMemoryIntentLibrary,
+  DispatcherBootstrapper,
+} from 'fitalyagents/dispatcher'
 
-const dispatcher = new DispatcherBootstrapper({
-  bus,
-  llmProvider: new LangChainLLMProvider('gpt-4o'),
-  agents: [researchAgent, orderAgent],
+const intentLibrary = new InMemoryIntentLibrary()
+const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
+
+const bootstrapper = new DispatcherBootstrapper({
+  intentLibrary,
+  llm: new LangChainLLMProvider('gpt-4o'),
 })
 
-dispatcher.start()
+await bootstrapper.bootstrapFromManifests([
+  researchAgent.manifest,
+  orderAgent.manifest,
+])
+
+await classifier.init()
+
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
+await dispatcher.start()
 ```
 
 ## Use LangChain memory with session context
@@ -102,7 +150,7 @@ Bind a `BufferMemory` per session using `InMemorySessionManager`:
 import { BufferMemory } from 'langchain/memory'
 import { InMemorySessionManager } from 'fitalyagents'
 
-const sessionManager = new InMemorySessionManager()
+const sessionManager = new InMemorySessionManager({ bus })
 const memories = new Map<string, BufferMemory>()
 
 function getMemory(sessionId: string): BufferMemory {
@@ -114,16 +162,21 @@ function getMemory(sessionId: string): BufferMemory {
 
 // Inside an agent's process():
 async process(task) {
-  const session = await sessionManager.getSession(task.session_id)
   const memory = getMemory(task.session_id)
-
   const history = await memory.loadMemoryVariables({})
 
-  // Use history.history in your LangChain chain...
   const chain = new LLMChain({ llm: model, memory })
-  const result = await chain.call({ input: task.slots.query })
+  const result = await chain.call({ input: task.slots?.query })
 
-  return { status: 'success', result: { answer: result.text } }
+  return {
+    status: 'completed',
+    result: { answer: result.text },
+    event: 'TASK_RESULT',
+    task_id: task.task_id,
+    session_id: task.session_id,
+    agent_id: this.manifest.agent_id,
+    completed_at: Date.now(),
+  }
 }
 ```
 
@@ -149,15 +202,23 @@ class SupportAgent extends NexusAgent {
   manifest = { agent_id: 'support-agent', capabilities: ['FAQ'], /* ... */ }
 
   async process(task) {
-    const answer = await chain.invoke({ question: task.slots.question })
-    return { status: 'success', result: { answer } }
+    const answer = await chain.invoke({ question: task.slots?.question })
+    return {
+      status: 'completed',
+      result: { answer },
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      completed_at: Date.now(),
+    }
   }
 }
 ```
 
 ## RAG with a LangChain retriever
 
-Plug a vector store retriever into an agent's async tools:
+Register a vector store retriever as a tool in `ToolRegistry`:
 
 ```typescript
 import { MemoryVectorStore } from 'langchain/vectorstores/memory'
@@ -169,13 +230,18 @@ const vectorStore = await MemoryVectorStore.fromDocuments(
   new OpenAIEmbeddings()
 )
 
-const retrieverTool: AsyncTool = {
-  name: 'knowledge_base',
-  async execute({ query }: { query: string }) {
-    const docs = await vectorStore.similaritySearch(query, 3)
-    return { documents: docs.map(d => d.pageContent) }
-  },
-}
+registry.register({
+  tool_id: 'knowledge_base',
+  description: 'Retrieve documents from the knowledge base',
+  executor: { type: 'ts_fn' },
+  timeout_ms: 3000,
+})
+
+registerFunctionHandler('knowledge_base', async (input) => {
+  const { query } = input as { query: string }
+  const docs = await vectorStore.similaritySearch(query, 3)
+  return { documents: docs.map(d => d.pageContent) }
+})
 ```
 
-Pass `retrieverTool` to `asyncTools` as shown in the first section.
+Use it with `pool.execute('knowledge_base', callId, { query })` in any agent.

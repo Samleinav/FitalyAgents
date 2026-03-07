@@ -1,0 +1,205 @@
+---
+title: Multi-Speaker Target Groups
+description: Track multiple simultaneous speakers, manage turn-taking, and route the right session to the right priority level.
+---
+
+In multi-person environments (a family shopping, a group at a restaurant kiosk), multiple people may speak at once. The **Target Group** system tracks who is talking, decides who gets the agent's attention, and manages session priorities automatically.
+
+---
+
+## Core concept
+
+The `TargetGroupStateMachine` (FSM) tracks each speaker through five states:
+
+```
+idle ──(SPEECH_START)──▶ targeted   ← primary speaker, gets full attention
+                              │
+                              ├─(SPEECH_START from another speaker)──▶ queued
+                              │    ← will get attention when primary is done
+                              │
+                              ├─(RESPONSE_START)──▶ responding
+                              │
+                              └─(TARGET_LOST)──▶ idle
+
+ambient  ←──(SPEECH_START, system busy)──  idle
+  ← overheard, feeds ambient context but doesn't interrupt
+```
+
+When the primary speaker leaves (`TARGET_LOST`), the first queued speaker is **promoted** to primary automatically.
+
+---
+
+## Setup
+
+`TargetGroupBridge` connects the FSM to the bus and session manager:
+
+```typescript
+import {
+  TargetGroupBridge,
+  InMemoryBus,
+  InMemorySessionManager,
+} from 'fitalyagents'
+
+const bus = new InMemoryBus()
+const sessionManager = new InMemorySessionManager(bus)
+
+const bridge = new TargetGroupBridge({
+  bus,
+  sessionManager,
+  storeId: 'store-001',   // used to namespace events
+})
+
+await bridge.start()
+```
+
+---
+
+## How sessions are created
+
+Sessions are created automatically based on speaker state transitions:
+
+| Transition | Effect |
+|---|---|
+| Speaker → `targeted` | `sessionManager.createSession()` with **PriorityGroup 1** (individual) |
+| Speaker → `queued` | `sessionManager.createSession()` with **PriorityGroup 0** (social/group) |
+| Speaker promoted queue → primary | Session upgraded to **PriorityGroup 1** |
+| Speaker → `ambient` | No session created — speech goes to ambient context |
+
+Priority groups affect how `InteractionAgent` handles simultaneous turns:
+
+| Group | Value | Meaning |
+|---|---|---|
+| Social / group | `0` | Lower priority — waiting in queue |
+| Individual | `1` | Normal — currently being served |
+| Employee | `2` | Elevated — interrupts customer flows |
+
+---
+
+## Publishing hardware events
+
+The bridge subscribes to low-level hardware events (from your STT / speaker diarization layer):
+
+```typescript
+// Speaker detected by microphone
+await bus.publish('bus:SPEAKER_DETECTED', {
+  store_id: 'store-001',
+  speaker_id: 'spk-001',
+  timestamp: Date.now(),
+})
+
+// Speaker left the detection zone
+await bus.publish('bus:SPEAKER_LOST', {
+  store_id: 'store-001',
+  speaker_id: 'spk-001',
+  timestamp: Date.now(),
+})
+
+// Speech detected from background (ambient zone)
+await bus.publish('bus:SPEAKER_AMBIENT', {
+  store_id: 'store-001',
+  speaker_id: 'spk-002',
+  timestamp: Date.now(),
+})
+
+// Agent started responding
+await bus.publish('bus:RESPONSE_START', {
+  store_id: 'store-001',
+  speaker_id: 'spk-001',
+  timestamp: Date.now(),
+})
+
+// Agent finished responding
+await bus.publish('bus:RESPONSE_END', {
+  store_id: 'store-001',
+  speaker_id: 'spk-001',
+  timestamp: Date.now(),
+})
+```
+
+---
+
+## Snapshot events
+
+After every state transition, the bridge publishes a `bus:TARGET_GROUP_CHANGED` snapshot:
+
+```typescript
+bus.subscribe('bus:TARGET_GROUP_CHANGED', (event) => {
+  console.log(event)
+  // {
+  //   event: 'TARGET_GROUP_CHANGED',
+  //   store_id: 'store-001',
+  //   primary: 'spk-001',          ← current primary speaker (or null)
+  //   queued: ['spk-003'],          ← waiting speakers
+  //   ambient: ['spk-002'],         ← overheard speakers
+  //   speakers: [
+  //     { speakerId: 'spk-001', state: 'responding' },
+  //     { speakerId: 'spk-002', state: 'ambient' },
+  //     { speakerId: 'spk-003', state: 'queued' },
+  //   ],
+  //   timestamp: 1709890234000
+  // }
+})
+```
+
+Use this to update a display (show a "You're next" indicator), alert staff, or feed a dashboard.
+
+---
+
+## Multi-speaker scenario walkthrough
+
+```
+Customer A walks up → bus:SPEAKER_DETECTED { speaker_id: 'A' }
+  Bridge: A → targeted, session A created (PriorityGroup 1)
+
+Customer B walks up → bus:SPEAKER_DETECTED { speaker_id: 'B' }
+  Bridge: A is primary → B → queued, session B created (PriorityGroup 0)
+  Snapshot: primary=A, queued=[B]
+
+Agent responds to A → bus:RESPONSE_START { speaker_id: 'A' }
+  Bridge: A → responding
+
+A leaves → bus:SPEAKER_LOST { speaker_id: 'A' }
+  Bridge: A → idle, B promoted to targeted (PriorityGroup 0 → 1)
+  Snapshot: primary=B, queued=[]
+
+Bystander C speaks nearby → bus:SPEAKER_AMBIENT { speaker_id: 'C' }
+  Bridge: C → ambient (no session, speech → ambient context only)
+  Snapshot: primary=B, ambient=[C]
+```
+
+---
+
+## Accessing state directly
+
+```typescript
+// Get all speakers and their current states
+const speakers = bridge.stateMachine.getAllSpeakers()
+// [{ speakerId: 'A', state: 'responding' }, ...]
+
+// Get ambient group
+const ambient = bridge.stateMachine.getAmbient()
+// [{ speakerId: 'C', state: 'ambient' }]
+
+// Get session for a specific speaker
+const session = bridge.getSessionForSpeaker('spk-001')
+// 'session-uuid' or null
+
+// Get the FSM directly for custom logic
+bridge.stateMachine.getState('spk-001')  // 'targeted' | 'queued' | ...
+```
+
+---
+
+## Bus events reference
+
+| Event (incoming) | Trigger |
+|---|---|
+| `bus:SPEAKER_DETECTED` | Microphone / diarization detects a new voice |
+| `bus:SPEAKER_LOST` | Speaker leaves detection zone |
+| `bus:SPEAKER_AMBIENT` | Voice detected in background zone |
+| `bus:RESPONSE_START` | Agent begins speaking to a speaker |
+| `bus:RESPONSE_END` | Agent finishes speaking |
+
+| Event (outgoing) | When |
+|---|---|
+| `bus:TARGET_GROUP_CHANGED` | After every state transition |

@@ -1,0 +1,174 @@
+---
+title: Voice Retail Assistant
+description: A hands-free, multi-speaker retail assistant that answers product questions, checks inventory, and processes orders — all while the customer is still talking.
+---
+
+## The scenario
+
+A shoe store kiosk. A family walks up. The teenager asks "do you have Nike Air Max in size 10?" while the parent is still talking to them. The system must:
+
+- Handle overlapping speakers without mixing sessions
+- Respond before the database query even finishes (filler audio)
+- Run product search + price check in parallel (not sequentially)
+- Create an order draft that requires manager approval
+- Keep context across turns ("do they have them in blue?" after a product was already mentioned)
+
+---
+
+## Architecture
+
+```
+STT / Mic array
+     │
+     ├─ bus:SPEAKER_DETECTED ──▶ TargetGroupBridge ──▶ SessionManager
+     │                                                  (creates sessions,
+     │                                                   manages priorities)
+     ├─ bus:SPEECH_FINAL ──▶ ContextBuilderAgent (accumulates history)
+     │                   └─▶ Dispatcher ──▶ classify intent
+     │                                        │
+     │                       bus:TASK_AVAILABLE
+     │                              │
+     │                    SimpleRouter ──▶ queue:work-agent:inbox
+     │                                           │
+     │                              WorkAgent (parallel tools)
+     │                              ├─ product_search
+     │                              └─ price_check      ← parallel
+     │                                    │
+     │                           bus:ACTION_COMPLETED
+     │                                    │
+     └─ InteractionAgent ◀───────────────┘
+          (streams TTS to speaker, plays filler while waiting)
+```
+
+---
+
+## Agent roster
+
+| Agent | Package | Responsibility |
+|---|---|---|
+| `TargetGroupBridge` | `fitalyagents` | Maps speakers → sessions, manages priority |
+| `ContextBuilderAgent` | `fitalyagents` | Maintains conversation history + ambient context |
+| `NodeDispatcher` | `fitalyagents/dispatcher` | Classifies utterances → intents |
+| `InteractionAgent` | app code | Streams LLM response + plays filler audio |
+| `WorkAgent` | app code | Runs async parallel tools |
+| `OrderAgent` | app code | Creates order drafts with human approval |
+
+---
+
+## Key implementation choices
+
+### Parallel product search + price check
+
+```typescript
+// WorkAgent — both tools fire simultaneously
+const [searchResult, priceResult] = await Promise.all([
+  pool.execute('product_search', `${task.task_id}_search`, task.slots),
+  pool.execute('price_check',    `${task.task_id}_price`,  { brand: task.slots?.brand }),
+])
+
+// Tool A (300ms) + Tool B (250ms) = ~300ms total, not 550ms
+```
+
+### Filler audio while tools run
+
+```typescript
+// InteractionAgent immediately plays a filler while WorkAgent runs
+await audioQueue.enqueue(session_id, {
+  type: 'filler',
+  text: 'Let me check that for you...',
+})
+
+// When bus:ACTION_COMPLETED arrives, play real response
+bus.subscribe('bus:ACTION_COMPLETED', async (event) => {
+  if (event.session_id === session_id) {
+    await audioQueue.enqueue(session_id, {
+      type: 'response',
+      text: buildResponse(event.result),
+    })
+  }
+})
+```
+
+### Ambient context for coreference resolution
+
+```typescript
+// Family member says (overheard): "I really want those Nike Jordans"
+await bus.publish('bus:AMBIENT_CONTEXT', {
+  session_id,
+  text: 'I really want those Nike Jordans',
+  speaker_id: 'spk-family-member',
+})
+
+// Teenager (direct speech): "do you have them in size 10?"
+await bus.publish('bus:SPEECH_FINAL', {
+  session_id,
+  text: 'do you have them in size 10?',
+})
+
+// ctx.last_product_mentioned → "Nike Jordans" (from ambient fallback)
+const ctx = await ctxAgent.getEnrichedContext(session_id)
+```
+
+### Order with manager approval
+
+```typescript
+// OrderAgent — safety: 'restricted', requires human approval
+registry.register({
+  tool_id: 'order_create',
+  executor: { type: 'ts_fn' },
+  safety: 'restricted',
+  required_role: 'cashier',
+  approval_channels: [{
+    type: 'webhook',
+    timeout_ms: 120_000,
+    config: { url: process.env.MANAGER_WEBHOOK_URL },
+  }],
+})
+```
+
+Manager gets a webhook notification. If not approved in 120 seconds, order is automatically cancelled.
+
+---
+
+## Observability
+
+```typescript
+import Langfuse from 'langfuse'
+import { LangfuseTracer } from 'fitalyagents'
+
+const tracer = new LangfuseTracer(new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+}))
+
+// Inject into dispatcher + interaction agent
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary, tracer })
+const interaction = new InteractionAgent({ bus, contextStore, tracer })
+```
+
+In Langfuse you'll see: classifier confidence scores, LLM latency per turn, tool results, and whether each classification was an embedding hit or LLM fallback.
+
+---
+
+## Hardening for production
+
+```typescript
+registry.register({
+  tool_id: 'product_search',
+  executor: { type: 'http', url: process.env.CATALOG_API_URL },
+  retry: { max_attempts: 2, backoff_ms: 200 },
+  rate_limit: { requests_per_second: 20 },
+  circuit_breaker: {
+    failure_threshold: 5,
+    reset_timeout_ms: 30_000,
+  },
+})
+```
+
+If the catalog API goes down, the circuit opens after 5 failures. The agent responds "product search is temporarily unavailable" instead of hanging for 10 seconds per customer.
+
+---
+
+## Full working example
+
+The complete code is in [`examples/voice-retail/`](/docs/examples/voice-retail) — 325 passing tests, E2E pipeline from STT event to TTS output.

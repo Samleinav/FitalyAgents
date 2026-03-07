@@ -559,214 +559,214 @@ Production: Groq + selective speculate → velocidad máxima → 250-450ms total
 ### Fase 1 — Simplificación de Core
 **Objetivo:** Eliminar código v1 obsoleto, agregar módulos v2.
 
-- [ ] **Sprint 1.1 — Limpieza**
-  - [ ] Eliminar `packages/core/src/routing/capability-router.ts`
-  - [ ] Eliminar `packages/core/src/routing/simple-router.ts`
-  - [ ] Eliminar `packages/core/src/routing/types.ts`
-  - [ ] Eliminar `packages/core/src/registry/agent-registry.ts`
-  - [ ] Eliminar `packages/core/src/locks/lock-manager.ts`
-  - [ ] Eliminar `packages/core/src/locks/types.ts`
-  - [ ] Eliminar `packages/core/src/tasks/task-queue.ts`
-  - [ ] Eliminar `packages/core/src/tasks/types.ts`
-  - [ ] Crear `packages/core/src/agent/stream-agent.ts` (reemplaza nexus-agent: subscribe a bus channels, no inbox/outbox)
-  - [ ] Deprecar `packages/core/src/agent/nexus-agent.ts` (marcar, no eliminar hasta Sprint 4.1)
-  - [ ] Actualizar `packages/core/src/index.ts` — remover exports eliminados
-  - [ ] Eliminar/actualizar tests afectados en `packages/core/src/**/*.test.ts`
-  - [ ] `pnpm -r build` sin errores
-  - [ ] `pnpm -r test` sin fallos en tests restantes
-  - [ ] Crear `docs/ARCHITECTURE-V2.md` — visión v2 con diagrama de capas
+- [x] **Sprint 1.1 — Limpieza**
+  - [x] Eliminar `packages/core/src/routing/capability-router.ts`
+  - [x] Eliminar `packages/core/src/routing/simple-router.ts`
+  - [x] Eliminar `packages/core/src/routing/types.ts`
+  - [x] Eliminar `packages/core/src/registry/agent-registry.ts`
+  - [x] Eliminar `packages/core/src/locks/lock-manager.ts`
+  - [x] Eliminar `packages/core/src/locks/types.ts`
+  - [x] Eliminar `packages/core/src/tasks/task-queue.ts`
+  - [x] Eliminar `packages/core/src/tasks/types.ts`
+  - [x] Crear `packages/core/src/agent/stream-agent.ts` (reemplaza nexus-agent: subscribe a bus channels, no inbox/outbox)
+  - [x] Deprecar `packages/core/src/agent/nexus-agent.ts` (marcar, no eliminar hasta Sprint 4.1)
+  - [x] Actualizar `packages/core/src/index.ts` — remover exports eliminados
+  - [x] Eliminar/actualizar tests afectados en `packages/core/src/**/*.test.ts`
+  - [x] `pnpm -r build` sin errores
+  - [x] `pnpm -r test` sin fallos en tests restantes
+  - [x] Crear `docs/ARCHITECTURE-V2.md` — visión v2 con diagrama de capas
 
-- [ ] **Sprint 1.2 — Safety Module + Multi-Channel Approval**
-  - [ ] Crear `packages/core/src/safety/safety-guard.ts`
+- [x] **Sprint 1.2 — Safety Module + Multi-Channel Approval**
+  - [x] Crear `packages/core/src/safety/safety-guard.ts`
     - `SafetyLevel: 'safe' | 'staged' | 'protected' | 'restricted'`
     - `SafetyGuard.evaluate(action, params, speaker, context): SafetyDecision`
     - `roleHasPermission(role, action, params): boolean`
     - `findNearbyApprover(requiredRole, storeId): Promise<HumanProfile | null>`
-  - [ ] Crear `packages/core/src/safety/draft-store.ts`
+  - [x] Crear `packages/core/src/safety/draft-store.ts`
     - `create(sessionId, draft): Promise<string>`
     - `update(draftId, changes): Promise<Draft>`
     - `confirm(draftId): Promise<Order>`
     - `cancel(draftId): Promise<void>`
     - `rollback(draftId): Promise<Draft>`
     - TTL automático en Redis, fallback InMemory para tests
-  - [ ] Crear `packages/core/src/safety/channels/types.ts`
+  - [x] Crear `packages/core/src/safety/channels/types.ts`
     - `IApprovalChannel` interface: `notify`, `waitForResponse`, `cancel`
     - `ApprovalRequest`, `ApprovalResponse` types
     - `HumanRole`, `HumanProfile`, `ApprovalLimits` types
     - `ApprovalStrategy: 'parallel' | 'sequential'`
-  - [ ] Crear `packages/core/src/safety/channels/voice-channel.ts`
+  - [x] Crear `packages/core/src/safety/channels/voice-channel.ts`
     - `notify()`: publica `bus:APPROVAL_VOICE_REQUEST` → AudioQueueService
     - `waitForResponse()`: suscribe `bus:SPEECH_FINAL`, verifica speaker + NLU yes/no
     - `cancel()`: unsuscribe + cleanup
-  - [ ] Crear `packages/core/src/safety/channels/webhook-channel.ts`
+  - [x] Crear `packages/core/src/safety/channels/webhook-channel.ts`
     - Migrar lógica de `approval/in-memory-approval-queue.ts`
     - `notify()`: publica `bus:APPROVAL_WEBHOOK_REQUEST`
     - `waitForResponse()`: espera `bus:APPROVAL_WEBHOOK_RESPONSE`
-  - [ ] Crear `packages/core/src/safety/channels/external-tool-channel.ts`
+  - [x] Crear `packages/core/src/safety/channels/external-tool-channel.ts`
     - Config: `{ url: string, method: 'POST' | 'GET', auth?: string }`
     - `notify()`: HTTP call a herramienta externa
     - `waitForResponse()`: suscribe `bus:APPROVAL_EXTERNAL_RESPONSE`
-  - [ ] Crear `packages/core/src/safety/approval-orchestrator.ts`
+  - [x] Crear `packages/core/src/safety/approval-orchestrator.ts`
     - `start()`: suscribe `bus:ORDER_PENDING_APPROVAL`
     - `orchestrate(request)`: parallel o sequential según config
     - Primer canal en responder → cancela los demás → publica `bus:ORDER_APPROVED`
     - Timeout global → `bus:ORDER_APPROVAL_TIMEOUT`
-  - [ ] Mantener `packages/core/src/approval/types.ts` como re-export (backwards compat)
-  - [ ] Agregar nuevos bus events a `packages/core/src/types/index.ts`:
+  - [x] Mantener `packages/core/src/approval/types.ts` como re-export (backwards compat)
+  - [x] Agregar nuevos bus events a `packages/core/src/types/index.ts`:
     - `bus:APPROVAL_VOICE_REQUEST`, `bus:APPROVAL_WEBHOOK_REQUEST`
     - `bus:APPROVAL_EXTERNAL_REQUEST`, `bus:APPROVAL_EXTERNAL_RESPONSE`
     - `bus:APPROVAL_RESOLVED` (incluye `channel_used`)
-  - [ ] Actualizar `packages/core/src/index.ts` con nuevos exports de `safety/`
-  - [ ] Extender `ToolRegistry` en asynctools: aceptar `safety`, `required_role`, `approval_channels`
-  - [ ] Tests: `safety-guard.test.ts`
-  - [ ] Tests: `draft-store.test.ts`
-  - [ ] Tests: `voice-channel.test.ts` (mock `bus:SPEECH_FINAL`)
-  - [ ] Tests: `webhook-channel.test.ts`
-  - [ ] Tests: `external-tool-channel.test.ts` (mock HTTP)
-  - [ ] Tests: `approval-orchestrator.test.ts` (parallel + sequential strategies)
-  - [ ] Regression: `examples/voice-retail` E2E tests siguen pasando
-  - [ ] `pnpm -r build && pnpm -r test`
-  - [ ] Crear `docs/SAFETY-MODEL.md`
-  - [ ] Crear `docs/APPROVAL-CHANNELS.md`
-  - [ ] Crear `docs/HUMAN-ROLES.md`
+  - [x] Actualizar `packages/core/src/index.ts` con nuevos exports de `safety/`
+  - [x] Extender `ToolRegistry` en asynctools: aceptar `safety`, `required_role`, `approval_channels`
+  - [x] Tests: `safety-guard.test.ts`
+  - [x] Tests: `draft-store.test.ts`
+  - [x] Tests: `voice-channel.test.ts` (mock `bus:SPEECH_FINAL`)
+  - [x] Tests: `webhook-channel.test.ts`
+  - [x] Tests: `external-tool-channel.test.ts` (mock HTTP)
+  - [x] Tests: `approval-orchestrator.test.ts` (parallel + sequential strategies)
+  - [x] Regression: `examples/voice-retail` E2E tests siguen pasando
+  - [x] `pnpm -r build && pnpm -r test`
+  - [x] Crear `docs/SAFETY-MODEL.md`
+  - [x] Crear `docs/APPROVAL-CHANNELS.md`
+  - [x] Crear `docs/HUMAN-ROLES.md`
 
-- [ ] **Sprint 1.3 — Session + Context v2**
-  - [ ] Crear `packages/core/src/session/target-group.ts`
+- [x] **Sprint 1.3 — Session + Context v2**
+  - [x] Crear `packages/core/src/session/target-group.ts`
     - `TargetGroup`: multi-speaker state machine (TARGET / AMBIENT / QUEUED)
     - Events: `TARGET_DETECTED`, `TARGET_QUEUED`, `TARGET_GROUP`
-  - [ ] Extender `packages/core/src/context/in-memory-context-store.ts` con ambient context
+  - [x] Extender `packages/core/src/context/in-memory-context-store.ts` con ambient context
     - `getAmbient(sessionId): Promise<AmbientContext>`
     - `setAmbient(sessionId, data): Promise<void>`
-  - [ ] Agregar tipos para nuevos bus events en `packages/core/src/types/index.ts`:
+  - [x] Agregar tipos para nuevos bus events en `packages/core/src/types/index.ts`:
     - `bus:SPEECH_PARTIAL`, `bus:AMBIENT_CONTEXT`
     - `bus:TARGET_DETECTED`, `bus:TARGET_QUEUED`, `bus:TARGET_GROUP`
     - `bus:DRAFT_CREATED`, `bus:DRAFT_CONFIRMED`, `bus:DRAFT_CANCELLED`
-  - [ ] Tests para TargetGroup state machine
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] Tests para TargetGroup state machine
+  - [x] `pnpm -r build && pnpm -r test`
 
 ### Fase 2 — Dispatcher v2
 **Objetivo:** Convertir dispatcher de "cerebro" a "acelerador especulativo".
 
-- [ ] **Sprint 2.1 — Speculative Cache**
-  - [ ] Crear `packages/dispatcher/src/speculative-cache.ts`
+- [x] **Sprint 2.1 — Speculative Cache**
+  - [x] Crear `packages/dispatcher/src/speculative-cache.ts`
     - `set(sessionId, intentId, result, ttlMs)` para SAFE tool results
     - `setDraft(sessionId, draftRef)` para STAGED
     - `setHint(sessionId, intent, confidence)` para PROTECTED/RESTRICTED
     - `get(sessionId, intentId): ToolResult | DraftRef | Hint | null`
     - LRU con capacidad configurable (default 256 entries)
-  - [ ] Integrar SafetyGuard en `packages/dispatcher/src/node-dispatcher.ts`
+  - [x] Integrar SafetyGuard en `packages/dispatcher/src/node-dispatcher.ts`
     - `safe` → ejecuta tool y guarda en SpeculativeCache
     - `staged` → crea draft en DraftStore + referencia en cache
     - `protected` / `restricted` → solo `setHint`
-  - [ ] Agregar método `getSpeculativeResult(sessionId): SpeculativeResult | null`
-  - [ ] Tests: `speculative-cache.test.ts`
-  - [ ] Tests: dispatcher integration con safety levels (mock SafetyGuard)
-  - [ ] `pnpm -r build && pnpm -r test`
-  - [ ] Crear `docs/DISPATCHER-SPECULATIVE.md`
+  - [x] Agregar método `getSpeculativeResult(sessionId): SpeculativeResult | null`
+  - [x] Tests: `speculative-cache.test.ts`
+  - [x] Tests: dispatcher integration con safety levels (mock SafetyGuard)
+  - [x] `pnpm -r build && pnpm -r test`
+  - [x] Crear `docs/DISPATCHER-SPECULATIVE.md`
 
-- [ ] **Sprint 2.2 — Migrar Teacher + ScoreStore**
-  - [ ] Migrar `examples/agent-comparison/src/intent-teacher.ts`
+- [x] **Sprint 2.2 — Migrar Teacher + ScoreStore**
+  - [x] Migrar `examples/agent-comparison/src/intent-teacher.ts`
     → `packages/dispatcher/src/intent-teacher.ts`
     - Hacer `instructionPrompt` inyectable (sin business logic hardcoded)
     - Redis backend para persistencia de correcciones
-  - [ ] Migrar `examples/agent-comparison/src/intent-score-store.ts`
+  - [x] Migrar `examples/agent-comparison/src/intent-score-store.ts`
     → `packages/dispatcher/src/intent-score-store.ts`
     - Redis backend (production) + InMemory fallback (tests)
-  - [ ] Actualizar `packages/dispatcher/src/index.ts` con nuevos exports
-  - [ ] Tests: `intent-teacher.test.ts` (mock LLM)
-  - [ ] Tests: `intent-score-store.test.ts`
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] Actualizar `packages/dispatcher/src/index.ts` con nuevos exports
+  - [x] Tests: `intent-teacher.test.ts` (mock LLM)
+  - [x] Tests: `intent-score-store.test.ts`
+  - [x] `pnpm -r build && pnpm -r test`
 
-- [ ] **Sprint 2.3 — Eliminar Código Viejo del Dispatcher**
-  - [ ] Eliminar `packages/dispatcher/src/node/fallback/` (llm-fallback-agent)
-  - [ ] Eliminar `packages/dispatcher/src/node/bootstrapper/dispatcher-bootstrapper.ts`
-  - [ ] Actualizar `packages/dispatcher/src/node-dispatcher.ts` con API speculative
-  - [ ] Actualizar `packages/dispatcher/src/index.ts` — remover exports eliminados
-  - [ ] Actualizar tests afectados
-  - [ ] `pnpm -r build && pnpm -r test`
+- [x] **Sprint 2.3 — Eliminar Código Viejo del Dispatcher**
+  - [x] Eliminar `packages/dispatcher/src/node/fallback/` (llm-fallback-agent)
+  - [x] Eliminar `packages/dispatcher/src/node/bootstrapper/dispatcher-bootstrapper.ts`
+  - [x] Actualizar `packages/dispatcher/src/node-dispatcher.ts` con API speculative
+  - [x] Actualizar `packages/dispatcher/src/index.ts` — remover exports eliminados
+  - [x] Actualizar tests afectados
+  - [x] `pnpm -r build && pnpm -r test`
 
 ### Fase 3 — Interaction Agent
 **Objetivo:** El componente cerebro — LLM streaming con tool calling.
 
-- [ ] **Sprint 3.1 — Interaction Agent Base**
-  - [ ] Crear `packages/core/src/agent/interaction-agent.ts`
+- [x] **Sprint 3.1 — Interaction Agent Base**
+  - [x] Crear `packages/core/src/agent/interaction-agent.ts`
     - Constructor: `{ toolRegistry, executorPool, llm, contextStore, dispatcher, ttsCallback }`
     - `handleSpeechFinal(event: SpeechFinalEvent): Promise<void>`
     - Consultar `dispatcher.getSpeculativeResult()` antes de llamar tools
     - Interceptar `tool_call` del LLM: verificar SafetyGuard antes de ejecutar
     - Streaming response → `ttsCallback(chunk)` para respuesta inmediata
     - Contexto persistente via `ContextStore`
-  - [ ] Tests: `interaction-agent.test.ts` con mock LLM + mock tools
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] Tests: `interaction-agent.test.ts` con mock LLM + mock tools
+  - [x] `pnpm -r build && pnpm -r test`
 
-- [ ] **Sprint 3.2 — Draft Flow multi-turno**
-  - [ ] Implementar STAGED flow completo en InteractionAgent:
+- [x] **Sprint 3.2 — Draft Flow multi-turno**
+  - [x] Implementar STAGED flow completo en InteractionAgent:
     - `draft_ready` → presentar resumen al cliente
     - Cliente confirma → `DraftStore.confirm(draftId)` → ejecutar acción real
     - Cliente modifica → `DraftStore.update(draftId, changes)` → re-presentar
     - Cliente cancela → `DraftStore.cancel(draftId)`
-  - [ ] TTL auto-cleanup: draft expira → InteractionAgent notifica al cliente
-  - [ ] Tests multi-turno: crear → modificar → confirmar
-  - [ ] Tests multi-turno: crear → modificar × N → cancelar
-  - [ ] Tests: TTL expiry notification
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] TTL auto-cleanup: draft expira → InteractionAgent notifica al cliente
+  - [x] Tests multi-turno: crear → modificar → confirmar
+  - [x] Tests multi-turno: crear → modificar × N → cancelar
+  - [x] Tests: TTL expiry notification
+  - [x] `pnpm -r build && pnpm -r test`
 
-- [ ] **Sprint 3.3 — PROTECTED + RESTRICTED Flows con ApprovalOrchestrator**
-  - [ ] PROTECTED: InteractionAgent genera confirmation prompt antes de ejecutar
+- [x] **Sprint 3.3 — PROTECTED + RESTRICTED Flows con ApprovalOrchestrator**
+  - [x] PROTECTED: InteractionAgent genera confirmation prompt antes de ejecutar
     - Tool result `needs_confirmation` → LLM pregunta al cliente
     - Cliente confirma → ejecutar tool directamente
-  - [ ] RESTRICTED: InteractionAgent llama `ApprovalOrchestrator.orchestrate()`
+  - [x] RESTRICTED: InteractionAgent llama `ApprovalOrchestrator.orchestrate()`
     - Canales configurados (voice + webhook en parallel)
     - Mientras espera: InteractionAgent informa al cliente que está procesando
     - `bus:APPROVAL_RESOLVED` → InteractionAgent notifica resultado
-  - [ ] Tests: PROTECTED confirmation flow (mock client response)
-  - [ ] Tests: RESTRICTED con VoiceChannel mock (resolve inmediato)
-  - [ ] Tests: RESTRICTED con timeout → fallback webhook
-  - [ ] Regression: E2E voice-retail tests
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] Tests: PROTECTED confirmation flow (mock client response)
+  - [x] Tests: RESTRICTED con VoiceChannel mock (resolve inmediato)
+  - [x] Tests: RESTRICTED con timeout → fallback webhook
+  - [x] Regression: E2E voice-retail tests
+  - [x] `pnpm -r build && pnpm -r test`
 
 ### Fase 4 — Agentes Autónomos
 **Objetivo:** Servicios que viven en el bus sin ser invocados por el LLM.
 
-- [ ] **Sprint 4.1 — StreamAgent Base Class**
-  - [ ] Crear `packages/core/src/agent/stream-agent.ts` (finalizar placeholder de Sprint 1.1)
+- [x] **Sprint 4.1 — StreamAgent Base Class**
+  - [x] Crear `packages/core/src/agent/stream-agent.ts` (finalizar placeholder de Sprint 1.1)
     - `subscribe(channel, handler)` — sin inbox/outbox, reacciona a bus events
     - Lifecycle: `start()`, `stop()`, `dispose()`
     - Health monitoring: heartbeat configurable
     - `StreamAgent` reemplaza completamente `NexusAgent`
-  - [ ] Eliminar `packages/core/src/agent/nexus-agent.ts` (deprecado en Sprint 1.1)
-  - [ ] Actualizar `examples/voice-retail` para usar `StreamAgent`
-  - [ ] Tests: `stream-agent.test.ts`
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] Eliminar `packages/core/src/agent/nexus-agent.ts` (deprecado en Sprint 1.1)
+  - [x] Actualizar `examples/voice-retail` para usar `StreamAgent`
+  - [x] Tests: `stream-agent.test.ts`
+  - [x] `pnpm -r build && pnpm -r test`
 
-- [ ] **Sprint 4.2 — ContextBuilderAgent**
-  - [ ] Crear `ContextBuilderAgent extends StreamAgent`
+- [x] **Sprint 4.2 — ContextBuilderAgent**
+  - [x] Crear `ContextBuilderAgent extends StreamAgent`
     - Suscribe: `SPEECH_FINAL`, `AMBIENT_CONTEXT`, `ACTION_COMPLETED`, `DRAFT_*`
     - Mantiene resumen de conversación + historial por sesión en `ContextStore`
     - Sirve contexto enriquecido al `InteractionAgent`
-  - [ ] Tests: `context-builder-agent.test.ts`
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] Tests: `context-builder-agent.test.ts`
+  - [x] `pnpm -r build && pnpm -r test`
 
-- [ ] **Sprint 4.3 — ProactiveAgent**
-  - [ ] Crear `ProactiveAgent extends StreamAgent`
+- [x] **Sprint 4.3 — ProactiveAgent**
+  - [x] Crear `ProactiveAgent extends StreamAgent`
     - Detecta: cliente esperando > N segundos, producto agotado, oferta relevante
     - Emite `bus:PROACTIVE_TRIGGER` → InteractionAgent decide si hablar
-  - [ ] Tests: `proactive-agent.test.ts`
-  - [ ] `pnpm -r build && pnpm -r test`
+  - [x] Tests: `proactive-agent.test.ts`
+  - [x] `pnpm -r build && pnpm -r test`
 
 ### Fase 5 — FitalyVoice Integration
 **Objetivo:** Pipeline de audio con speaker identification.
 
 > Ver `PLAN-FITALYVOICE.md` para especificación completa del pipeline Python.
 
-- [ ] **Sprint 5.1 — SPEECH_PARTIAL Support**
-  - [ ] Dispatcher suscribe `bus:SPEECH_PARTIAL`
-  - [ ] `onSpeechPartial(event)` → classify → si conf > 0.90 → `SpeculativeCache`
-  - [ ] Tests: partial → cache hit en SPEECH_FINAL
-  - [ ] `pnpm -r build && pnpm -r test`
+- [x] **Sprint 5.1 — SPEECH_PARTIAL Support**
+  - [x] Dispatcher suscribe `bus:SPEECH_PARTIAL`
+  - [x] `onSpeechPartial(event)` → classify → si conf > 0.90 → `SpeculativeCache`
+  - [x] Tests: partial → cache hit en SPEECH_FINAL
+  - [x] `pnpm -r build && pnpm -r test`
 
-- [ ] **Sprint 5.2 — Target Group State Machine**
-  - [ ] Finalizar `packages/core/src/session/target-group.ts` (placeholder de Sprint 1.3)
+- [x] **Sprint 5.2 — Target Group State Machine**
+  - [x] Finalizar `packages/core/src/session/target-group.ts` (placeholder de Sprint 1.3)
     - `TargetGroupStateMachine`: TARGET / AMBIENT / QUEUED states
     - Priority queue para múltiples clientes simultáneos
   - [ ] Integrar con `SessionManager`

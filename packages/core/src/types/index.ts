@@ -238,6 +238,22 @@ export const ProactiveTriggerEventSchema = z.object({
 })
 export type ProactiveTriggerEvent = z.infer<typeof ProactiveTriggerEventSchema>
 
+export const TargetGroupChangedEventSchema = z.object({
+  event: z.literal('TARGET_GROUP_CHANGED'),
+  store_id: z.string(),
+  primary: z.string().nullable(),
+  queued: z.array(z.string()),
+  ambient: z.array(z.string()),
+  speakers: z.array(
+    z.object({
+      speakerId: z.string(),
+      state: z.enum(['idle', 'targeted', 'responding', 'queued', 'ambient']),
+    }),
+  ),
+  timestamp: z.number(),
+})
+export type TargetGroupChangedEvent = z.infer<typeof TargetGroupChangedEventSchema>
+
 // ── IEventBus interface ──────────────────────────────────────────────────────
 
 /**

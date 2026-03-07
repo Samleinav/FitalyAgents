@@ -6,6 +6,10 @@
     "simple-router",
     "intent-training",
     "human-approval",
-    "session-management"
+    "session-management",
+    "ambient-context",
+    "target-group",
+    "observability",
+    "hardening"
   ]
 }

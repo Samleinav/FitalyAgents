@@ -1,0 +1,203 @@
+---
+title: Ambient Context Pipeline
+description: Capture background conversation — nearby speech, environmental signals — and surface it when the user speaks directly.
+---
+
+In real-world voice environments (retail stores, restaurants, reception desks), people talk to each other *before* addressing the system. **Ambient context** lets your agent understand what was said nearby — "I love Nike shoes" — and use it to answer later — "Do you have them in blue?"
+
+---
+
+## How it works
+
+`ContextBuilderAgent` listens on two channels:
+
+| Channel | Purpose |
+|---|---|
+| `bus:SPEECH_FINAL` | Direct speech to the system — adds to `conversation_history` |
+| `bus:AMBIENT_CONTEXT` | Background signal — stored separately, never pollutes the main dialogue |
+
+When `bus:AMBIENT_CONTEXT` contains a `text` field, the agent:
+1. Extracts a product mention (heuristic, overridable)
+2. Stores it as a `ConversationSnippet` in the typed `AmbientContext`
+3. When `getEnrichedContext()` is called later, surfaces it as a fallback `last_product_mentioned`
+
+---
+
+## Setup
+
+`ContextBuilderAgent` is part of `fitalyagents`:
+
+```typescript
+import {
+  ContextBuilderAgent,
+  InMemoryContextStore,
+  InMemoryBus,
+} from 'fitalyagents'
+
+const bus = new InMemoryBus()
+const contextStore = new InMemoryContextStore()
+
+const ctxAgent = new ContextBuilderAgent({
+  bus,
+  contextStore,
+  config: {
+    maxTurns: 20,    // keep last 20 conversation turns
+    maxActions: 10,  // keep last 10 tool results
+  },
+})
+
+await ctxAgent.start()
+```
+
+---
+
+## Publishing ambient events
+
+### Text-bearing ambient event (overheard speech)
+
+```typescript
+await bus.publish('bus:AMBIENT_CONTEXT', {
+  session_id: 'ses-001',
+  text: 'I was looking for Nike running shoes for my son',
+  speaker_id: 'spk-nearby-1',  // optional, for multi-speaker tracking
+})
+```
+
+### Signal-only ambient event (environmental sensors)
+
+```typescript
+await bus.publish('bus:AMBIENT_CONTEXT', {
+  session_id: 'ses-001',
+  noise_level: 'high',
+  speaker_count: 3,
+  zone: 'footwear',
+})
+```
+
+Signal-only events merge into the flat `ambient_context` map — useful for LLM context injection. They do **not** create a `ConversationSnippet`.
+
+---
+
+## Reading enriched context
+
+```typescript
+const ctx = await ctxAgent.getEnrichedContext('ses-001')
+
+// Direct speech product (highest priority)
+ctx.last_product_mentioned   // "Nike running shoes" if user said it directly
+
+// Ambient product fallback (if user never mentioned a product in direct speech)
+ctx.ambient_context.last_product_mentioned  // "Nike running shoes for my son"
+
+// All overheard snippets
+ctx.ambient_context.conversation_snippets
+// [{ text: 'I was looking for Nike...', speaker_id: 'spk-nearby-1', timestamp: ... }]
+```
+
+The fallback chain is:
+```
+ctx.last_product_mentioned
+  = direct speech product mention
+  OR ambient last_product_mentioned
+  OR null
+```
+
+---
+
+## Using context in your agent
+
+Pass `getEnrichedContext()` into the InteractionAgent or your own agent:
+
+```typescript
+class MyInteractionAgent extends NexusAgent {
+  async process(task: TaskPayloadEvent): Promise<TaskResultEvent> {
+    const ctx = await this.ctxAgent.getEnrichedContext(task.session_id)
+
+    // The LLM gets full context — direct history + ambient signals
+    const systemPrompt = buildSystemPrompt(ctx)
+
+    const response = await this.llm.generate([
+      { role: 'system', content: systemPrompt },
+      ...ctx.conversation_history.map(turn => ({
+        role: turn.role,
+        content: turn.content,
+      })),
+      { role: 'user', content: task.slots?.text as string },
+    ])
+
+    return { status: 'completed', result: { text: response }, /* ... */ }
+  }
+}
+```
+
+---
+
+## Customizing product detection
+
+The default heuristic matches patterns like "busco tenis Nike", "quiero los zapatos Adidas". Override for your domain:
+
+```typescript
+import { ContextBuilderAgent } from 'fitalyagents'
+
+class RetailContextAgent extends ContextBuilderAgent {
+  protected extractProductMention(text: string): string | null {
+    // Your domain-specific NER, or a small LLM call
+    const match = text.match(/\b(Nike|Adidas|Puma|New Balance)\b/i)
+    return match ? match[0] : null
+  }
+}
+```
+
+---
+
+## ConversationContext shape
+
+```typescript
+interface ConversationContext {
+  session_id: string
+
+  // Last N direct-speech turns (user + assistant)
+  conversation_history: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    timestamp: number
+  }>
+
+  // Most recent product mentioned (direct speech wins over ambient)
+  last_product_mentioned: string | null
+
+  // Active draft order waiting for confirmation
+  pending_draft: {
+    draft_id: string
+    intent_id: string
+    items: Record<string, unknown>
+  } | null
+
+  // Last N completed tool actions
+  action_history: Array<{
+    intent_id: string
+    result: unknown
+    timestamp: number
+  }>
+
+  // Merged flat ambient signals + structured ambient data
+  ambient_context: Record<string, unknown>
+}
+```
+
+---
+
+## Bus events that update context automatically
+
+`ContextBuilderAgent` subscribes to all of these:
+
+| Event | Effect |
+|---|---|
+| `bus:SPEECH_FINAL` | Adds user turn to `conversation_history`; detects product mention |
+| `bus:AMBIENT_CONTEXT` | Merges signals; if `text` present, creates snippet + detects product |
+| `bus:ACTION_COMPLETED` | Appends to `action_history`; if result has `text`, adds assistant turn |
+| `bus:DRAFT_CREATED` | Sets `pending_draft` |
+| `bus:DRAFT_CONFIRMED` | Clears `pending_draft` |
+| `bus:DRAFT_CANCELLED` | Clears `pending_draft` |
+
+No additional wiring required — just start the agent and publish events.

@@ -17,26 +17,23 @@ pnpm add @ai-sdk/google        # Gemini
 
 ## LLM provider for the Dispatcher
 
-Implement `LLMProvider` using `generateText`:
+Implement `LLMProvider` using `generateText`. The single method is `complete(system, user): Promise<string>`:
 
 ```typescript
-import { type LLMProvider, type ClassificationResult } from 'fitalyagents/dispatcher'
+import { type LLMProvider } from 'fitalyagents/dispatcher'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 
 export class VercelAIProvider implements LLMProvider {
   constructor(private model = openai('gpt-4o-mini')) {}
 
-  async classify(utterance: string, agentManifests: string): Promise<ClassificationResult> {
+  async complete(system: string, user: string): Promise<string> {
     const { text } = await generateText({
       model: this.model,
-      system: `You are an intent classifier. Return only JSON:
-        { "agent_id": "...", "intent_id": "...", "confidence": 0.0-1.0 }
-        Available agents:\n${agentManifests}`,
-      prompt: utterance,
+      system,
+      prompt: user,
     })
-
-    return JSON.parse(text)
+    return text
   }
 }
 ```
@@ -54,52 +51,88 @@ new VercelAIProvider(anthropic('claude-3-5-haiku-20241022'))
 new VercelAIProvider(google('gemini-2.0-flash'))
 ```
 
-Register with `DispatcherBootstrapper`:
+Wire it into `DispatcherBootstrapper` and start `NodeDispatcher`:
 
 ```typescript
-import { DispatcherBootstrapper } from 'fitalyagents/dispatcher'
+import {
+  NodeDispatcher,
+  InMemoryEmbeddingClassifier,
+  InMemoryIntentLibrary,
+  DispatcherBootstrapper,
+} from 'fitalyagents/dispatcher'
 
-const dispatcher = new DispatcherBootstrapper({
-  bus,
-  llmProvider: new VercelAIProvider(),
-  agents: [interactionAgent, workAgent, orderAgent],
+const intentLibrary = new InMemoryIntentLibrary()
+const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
+
+const bootstrapper = new DispatcherBootstrapper({
+  intentLibrary,
+  llm: new VercelAIProvider(),
 })
 
-dispatcher.start()
+await bootstrapper.bootstrapFromManifests([
+  interactionAgent.manifest,
+  workAgent.manifest,
+  orderAgent.manifest,
+])
+
+await classifier.init()
+
+const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
+await dispatcher.start()
 ```
 
-## Use `tool()` definitions as async tools
+## Use AI SDK tools inside an agent
 
-The AI SDK `tool()` schema is compatible with FitalyAgents' `AsyncTool`. Wrap them with a thin adapter:
+Register tools from the AI SDK in `ToolRegistry` using `registerFunctionHandler`:
 
 ```typescript
+import { ToolRegistry, ExecutorPool, registerFunctionHandler } from '@fitalyagents/asynctools'
 import { tool } from 'ai'
 import { z } from 'zod'
-import { type AsyncTool } from 'fitalyagents'
 
-const getWeather = tool({
+const registry = new ToolRegistry()
+
+// Define the tool schema with AI SDK
+const getWeatherSchema = z.object({ city: z.string() })
+
+registry.register({
+  tool_id: 'get_weather',
   description: 'Get current weather for a city',
-  parameters: z.object({ city: z.string() }),
-  execute: async ({ city }) => {
-    const res = await fetch(`https://wttr.in/${city}?format=j1`)
-    const data = await res.json()
-    return { temperature: data.current_condition[0].temp_C }
-  },
+  executor: { type: 'ts_fn' },
+  timeout_ms: 5000,
 })
 
-function fromAISDKTool(name: string, t: ReturnType<typeof tool>): AsyncTool {
-  return {
-    name,
-    async execute(input: unknown) {
-      return t.execute!(input as never, { messages: [], toolCallId: name })
-    },
-  }
-}
+registerFunctionHandler('get_weather', async (input) => {
+  const { city } = getWeatherSchema.parse(input)
+  const res = await fetch(`https://wttr.in/${city}?format=j1`)
+  const data = await res.json()
+  return { temperature: data.current_condition[0].temp_C }
+})
+
+const pool = new ExecutorPool(registry)
+```
+
+Use with `pool.execute()` in any agent's `process()`:
+
+```typescript
+import { NexusAgent } from 'fitalyagents'
 
 class WeatherAgent extends NexusAgent {
   manifest = { agent_id: 'weather-agent', capabilities: ['WEATHER'], /* ... */ }
 
-  protected asyncTools = [fromAISDKTool('get_weather', getWeather)]
+  async process(task) {
+    const result = await pool.execute('get_weather', task.task_id, { city: task.slots?.city })
+
+    return {
+      status: 'completed',
+      result: result.result,
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      completed_at: Date.now(),
+    }
+  }
 }
 ```
 
@@ -110,6 +143,7 @@ For long-running responses, stream partial text events to the bus so subscribers
 ```typescript
 import { streamText } from 'ai'
 import { openai } from '@ai-sdk/openai'
+import { NexusAgent } from 'fitalyagents'
 
 class StreamingAgent extends NexusAgent {
   manifest = { agent_id: 'streaming-agent', capabilities: ['CHAT'], /* ... */ }
@@ -117,14 +151,13 @@ class StreamingAgent extends NexusAgent {
   async process(task) {
     const { textStream } = streamText({
       model: openai('gpt-4o-mini'),
-      prompt: task.slots.message as string,
+      prompt: task.slots?.message as string,
     })
 
     let fullText = ''
 
     for await (const chunk of textStream) {
       fullText += chunk
-      // Emit partial updates for real-time UI
       await this.bus.publish('bus:AGENT_STREAM_CHUNK', {
         session_id: task.session_id,
         agent_id: this.manifest.agent_id,
@@ -132,7 +165,15 @@ class StreamingAgent extends NexusAgent {
       })
     }
 
-    return { status: 'success', result: { text: fullText } }
+    return {
+      status: 'completed',
+      result: { text: fullText },
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      completed_at: Date.now(),
+    }
   }
 }
 ```
@@ -167,10 +208,18 @@ class ParseAgent extends NexusAgent {
     const { object } = await generateObject({
       model: openai('gpt-4o'),
       schema: OrderSchema,
-      prompt: `Extract order details from: "${task.slots.utterance}"`,
+      prompt: `Extract order details from: "${task.slots?.utterance}"`,
     })
 
-    return { status: 'success', result: object }
+    return {
+      status: 'completed',
+      result: object,
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      completed_at: Date.now(),
+    }
   }
 }
 ```
@@ -180,19 +229,29 @@ class ParseAgent extends NexusAgent {
 Because `LanguageModelV1` is the common interface, you can inject the model at bootstrap time:
 
 ```typescript
-import { type LanguageModelV1 } from 'ai'
+import { generateText, type LanguageModelV1 } from 'ai'
+import { anthropic } from '@ai-sdk/anthropic'
+import { NexusAgent, type IEventBus } from 'fitalyagents'
 
 class FlexibleAgent extends NexusAgent {
-  constructor(private model: LanguageModelV1, bus: InMemoryBus) {
-    super(bus)
+  constructor(private model: LanguageModelV1, options: { bus: IEventBus }) {
+    super(options)
   }
 
   async process(task) {
-    const { text } = await generateText({ model: this.model, prompt: task.slots.query as string })
-    return { status: 'success', result: { text } }
+    const { text } = await generateText({ model: this.model, prompt: task.slots?.query as string })
+    return {
+      status: 'completed',
+      result: { text },
+      event: 'TASK_RESULT',
+      task_id: task.task_id,
+      session_id: task.session_id,
+      agent_id: this.manifest.agent_id,
+      completed_at: Date.now(),
+    }
   }
 }
 
 // At startup — swap without touching agent code:
-const agent = new FlexibleAgent(anthropic('claude-3-5-sonnet-20241022'), bus)
+const agent = new FlexibleAgent(anthropic('claude-3-5-sonnet-20241022'), { bus })
 ```
