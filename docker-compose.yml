@@ -1,0 +1,138 @@
+version: '3.9'
+
+# FitalyAgents — Full GPU Demo Stack
+#
+# Services:
+#   redis         — Event bus (pub/sub + queues)
+#   fitaly-agent  — TypeScript agents (WorkAgent + Claude intent classification)
+#   fitaly-voice  — Python pipeline: TEN VAD → RNNoise → SortFormer → TitaNet → STT
+#
+# Requirements:
+#   - Docker Desktop with WSL2 backend
+#   - NVIDIA Container Toolkit (nvidia-container-toolkit)
+#   - GTX 1660 Super (or any CUDA 12.x capable GPU)
+#   - ANTHROPIC_API_KEY in .env
+#
+# Usage:
+#   1. cp .env.example .env  →  set ANTHROPIC_API_KEY
+#   2. docker compose up --build
+#   3. On host: python audio_bridge.py       ← streams mic to container via UDP
+#
+# First run downloads NeMo models (~560MB) — cached in nemo_cache volume.
+
+services:
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  # ── FitalyAgents TypeScript service ───────────────────────────────────────
+  fitaly-agent:
+    build:
+      context: .
+      dockerfile: examples/voice-retail/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+      STORE_ID: ${STORE_ID:-store-001}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      NODE_ENV: production
+    env_file:
+      - .env
+
+  # ── fitaly-voice — Full NeMo pipeline with GPU ────────────────────────────
+  fitaly-voice:
+    build:
+      context: fitaly-voice
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      fitaly-agent:
+        condition: service_started
+
+    # NVIDIA GPU access (requires nvidia-container-toolkit on host)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Expose UDP port for audio_bridge.py (host mic → container)
+    ports:
+      - "5005:5005/udp"
+
+    environment:
+      REDIS_URL: redis://redis:6379
+      STORE_ID: ${STORE_ID:-store-001}
+      BUS_MODE: redis
+
+      # Full NeMo SortFormer diarizer (CUDA)
+      DIARIZER_BACKEND: nemo
+      DIARIZER_DEVICE: cuda
+      DIARIZER_MODEL: ${DIARIZER_MODEL:-diar_streaming_sortformer_4spk-v2.1}
+
+      # TitaNet speaker embeddings (CUDA)
+      EMBEDDER_MODEL: ${EMBEDDER_MODEL:-titanet_large}
+      EMBEDDER_BACKEND: nemo
+
+      # STT — faster-whisper small on GPU
+      STT_ENABLED: "true"
+      STT_MODEL: ${STT_MODEL:-small}
+      STT_DEVICE: cuda
+      STT_LANGUAGE: ${STT_LANGUAGE:-}
+
+      # Denoiser
+      DENOISER_BACKEND: rnnoise
+
+      # VAD
+      VAD_THRESHOLD: "0.5"
+      VAD_MIN_SPEECH_MS: "300"
+      VAD_MAX_SILENCE_MS: "500"
+
+      # AOSC speaker cache (mounted below)
+      AOSC_CACHE_PATH: /data/aosc_cache.npz
+
+    volumes:
+      # Persist NeMo model cache (~560MB) across restarts
+      - nemo_cache:/root/.cache
+      # Shared data dir: AOSC cache, WAV files for testing
+      - ./demo:/data
+
+    # Listen for UDP audio from audio_bridge.py running on host
+    command:
+      - python
+      - -m
+      - fitaly_voice
+      - run
+      - --mode
+      - redis
+      - --source
+      - udp
+      - --udp-port
+      - "5005"
+      - --session
+      - session-001
+      - --store
+      - ${STORE_ID:-store-001}
+
+volumes:
+  redis_data:
+  # NeMo model cache — avoids re-downloading models on every restart
+  nemo_cache:

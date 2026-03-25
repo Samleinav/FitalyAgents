@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fitaly-voice"
+version = "0.1.0"
+description = "Local audio diarization and speaker identification pipeline for FitalyAgents"
+readme = "README.md"
+license = { text = "AGPL-3.0-only WITH Commons-Clause" }
+requires-python = ">=3.10"
+dependencies = [
+    # VAD — TEN Framework (ONNX-based, ~306KB model, no PyTorch needed)
+    "ten-vad @ git+https://github.com/TEN-framework/ten-vad.git",
+    # Diarization + Speaker ID — NeMo (needed once for model load or ONNX export)
+    "nemo_toolkit[asr]>=2.0",
+    # Denoising
+    "rnnoise-python>=0.1",
+    "noisereduce>=3.0",
+    "scipy>=1.11",
+    # Bus
+    "redis[hiredis]>=5.0",
+    # Core
+    "numpy>=1.24",
+    "sounddevice>=0.4",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Lightweight runtime after ONNX export (no full NeMo needed)
+onnx = [
+    "onnxruntime-gpu>=1.17",
+]
+# Production streaming STT via Deepgram
+deepgram = [
+    "deepgram-sdk>=3.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.12",
+]
+
+[project.scripts]
+fitaly-voice = "fitaly_voice.__main__:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fitaly_voice"]
