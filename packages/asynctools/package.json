@@ -29,7 +29,14 @@
         "parallel",
         "llm"
     ],
-    "license": "AGPL-3.0-only",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/samleinav/FitalyAgents.git",
+        "directory": "packages/asynctools"
+    },
+    "homepage": "https://github.com/samleinav/FitalyAgents#readme",
+    "bugs": { "url": "https://github.com/samleinav/FitalyAgents/issues" },
+    "license": "MIT",
     "dependencies": {
         "zod": "^3.24.2"
     },

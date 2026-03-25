@@ -166,6 +166,12 @@ export class InteractionAgent {
     }
   >()
 
+  /**
+   * Tracks paused sessions (StaffAgent override).
+   * Key: sessionId, Value: staff_id that paused it.
+   */
+  private readonly pausedSessions = new Map<string, string>()
+
   constructor(deps: InteractionAgentDeps) {
     this.bus = deps.bus
     this.llm = deps.llm
@@ -201,6 +207,12 @@ export class InteractionAgent {
     traceId: string
   }> {
     const { session_id, text, speaker_id } = event
+
+    // ── PAUSE check: if session is paused by StaffAgent, return early ────────
+    if (this.pausedSessions.has(session_id)) {
+      return { textChunks: [], toolResults: [], traceId: 'paused' }
+    }
+
     const textChunks: string[] = []
     const toolResults: ToolCallResult[] = []
     const t0 = Date.now()
@@ -738,5 +750,53 @@ export class InteractionAgent {
     return () => {
       for (const unsub of unsubs) unsub()
     }
+  }
+
+  // ── PAUSE/RESUME (Sprint E1.2) ──────────────────────────────────────
+
+  /**
+   * Subscribe to INTERACTION_PAUSE and INTERACTION_RESUME bus events.
+   * When paused, handleSpeechFinal() returns early without processing.
+   *
+   * Returns an unsubscribe function. Call once on startup.
+   *
+   * @example
+   * ```typescript
+   * const unsub = agent.subscribePauseResume()
+   * // StaffAgent publishes INTERACTION_PAUSE → handleSpeechFinal returns early
+   * // StaffAgent publishes INTERACTION_RESUME → handleSpeechFinal works again
+   * ```
+   */
+  subscribePauseResume(): () => void {
+    const unsubs: Array<() => void> = []
+
+    unsubs.push(
+      this.bus.subscribe('bus:INTERACTION_PAUSE', (data) => {
+        const event = data as { session_id: string; staff_id: string }
+        if (event.session_id) {
+          this.pausedSessions.set(event.session_id, event.staff_id ?? 'unknown')
+        }
+      }),
+    )
+
+    unsubs.push(
+      this.bus.subscribe('bus:INTERACTION_RESUME', (data) => {
+        const event = data as { session_id: string }
+        if (event.session_id) {
+          this.pausedSessions.delete(event.session_id)
+        }
+      }),
+    )
+
+    return () => {
+      for (const unsub of unsubs) unsub()
+    }
+  }
+
+  /**
+   * Check if a session is currently paused by a StaffAgent override.
+   */
+  isSessionPaused(sessionId: string): boolean {
+    return this.pausedSessions.has(sessionId)
   }
 }

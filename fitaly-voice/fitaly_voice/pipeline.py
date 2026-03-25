@@ -248,7 +248,9 @@ class FitalyVoicePipeline:
                 try:
                     loop = _aio.get_running_loop()
                     loop.create_task(
-                        bus.publish_speech_partial(sid, text, speaker_id, confidence)
+                        bus.publish_speech_final(
+                            sid, text, confidence=confidence, speaker_id=speaker_id
+                        )
                     )
                 except RuntimeError:
                     pass  # no running loop — ignore (e.g. during shutdown)
@@ -377,7 +379,9 @@ class FitalyVoicePipeline:
             None, self._stt.transcribe, audio, self.config.sample_rate
         )
         if text:
-            await self._bus.publish_speech_partial(session_id, speaker_id, text)
+            await self._bus.publish_speech_final(
+                session_id, text, confidence=1.0, speaker_id=speaker_id
+            )
 
     def _extract_segment(self, chunk: np.ndarray, seg: DiarizationSegment) -> np.ndarray:
         """Slice the audio chunk to the segment's time range."""

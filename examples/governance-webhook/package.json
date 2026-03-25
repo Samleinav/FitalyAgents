@@ -1,0 +1,16 @@
+{
+  "name": "governance-webhook-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fitalyagents": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

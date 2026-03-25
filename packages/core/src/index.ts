@@ -35,12 +35,17 @@ export type {
   ApprovalExternalResponseEvent,
   ApprovalResolvedEvent,
   SpeechPartialEvent,
+  SpeechFinalEvent,
   AmbientContextEvent,
   TargetDetectedEvent,
   TargetQueuedEvent,
   TargetGroupEvent,
   ProactiveTriggerEvent,
   TargetGroupChangedEvent,
+  InteractionPauseEvent,
+  InteractionResumeEvent,
+  StaffCommandEvent,
+  UIUpdateEvent,
   BusHandler,
   PatternBusHandler,
   Unsubscribe,
@@ -72,12 +77,17 @@ export {
   ApprovalExternalResponseEventSchema,
   ApprovalResolvedEventSchema,
   SpeechPartialEventSchema,
+  SpeechFinalEventSchema,
   AmbientContextEventSchema,
   TargetDetectedEventSchema,
   TargetQueuedEventSchema,
   TargetGroupEventSchema,
   ProactiveTriggerEventSchema,
   TargetGroupChangedEventSchema,
+  InteractionPauseEventSchema,
+  InteractionResumeEventSchema,
+  StaffCommandEventSchema,
+  UIUpdateEventSchema,
 } from './types/index.js'
 
 // Bus
@@ -89,6 +99,16 @@ export { AgentBundle } from './agent/agent-bundle.js'
 export type { AgentBundleOptions, Disposable, IAgent } from './agent/agent-bundle.js'
 export { StreamAgent } from './agent/stream-agent.js'
 export { InteractionAgent } from './agent/interaction-agent.js'
+export { StaffAgent } from './agent/staff-agent.js'
+export type { StaffAgentConfig, StaffAgentDeps, StaffSpeechPayload } from './agent/staff-agent.js'
+export { UIAgent } from './agent/ui-agent.js'
+export type { UIUpdatePayload, UIEventHandler, UIAgentDeps } from './agent/ui-agent.js'
+export { AmbientAgent } from './agent/ambient-agent.js'
+export type {
+  AmbientAnalysis,
+  AmbientAgentConfig,
+  AmbientAgentDeps,
+} from './agent/ambient-agent.js'
 export { ContextBuilderAgent } from './agent/context-builder-agent.js'
 export type {
   ConversationContext,

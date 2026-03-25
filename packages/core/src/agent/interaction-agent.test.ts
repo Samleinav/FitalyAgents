@@ -560,4 +560,154 @@ describe('InteractionAgent', () => {
       }
     })
   })
+
+  // ── PAUSE/RESUME (Sprint E1.2) ──────────────────────────────────
+
+  describe('PAUSE/RESUME', () => {
+    it('handleSpeechFinal works normally when not paused', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Hola' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, bus: _bus } = createAgent({ llm })
+      agent.subscribePauseResume()
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'hola',
+      })
+
+      expect(result.textChunks).toEqual(['Hola'])
+      expect(result.traceId).not.toBe('paused')
+    })
+
+    it('INTERACTION_PAUSE → handleSpeechFinal returns early', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'This should NOT appear' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, bus, ttsLog } = createAgent({ llm })
+      agent.subscribePauseResume()
+
+      // Pause the session
+      await bus.publish('bus:INTERACTION_PAUSE', {
+        event: 'INTERACTION_PAUSE',
+        session_id: 'session-1',
+        reason: 'staff_override',
+        staff_id: 'spk_cashier',
+      })
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'quiero comprar tenis',
+      })
+
+      expect(result.textChunks).toEqual([])
+      expect(result.toolResults).toEqual([])
+      expect(result.traceId).toBe('paused')
+      expect(ttsLog).toHaveLength(0)
+      expect(agent.isSessionPaused('session-1')).toBe(true)
+    })
+
+    it('INTERACTION_RESUME → handleSpeechFinal works again', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Bienvenido de vuelta' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, bus, ttsLog } = createAgent({ llm })
+      agent.subscribePauseResume()
+
+      // Pause
+      await bus.publish('bus:INTERACTION_PAUSE', {
+        event: 'INTERACTION_PAUSE',
+        session_id: 'session-1',
+        reason: 'staff_override',
+        staff_id: 'spk_cashier',
+      })
+
+      expect(agent.isSessionPaused('session-1')).toBe(true)
+
+      // Resume
+      await bus.publish('bus:INTERACTION_RESUME', {
+        event: 'INTERACTION_RESUME',
+        session_id: 'session-1',
+      })
+
+      expect(agent.isSessionPaused('session-1')).toBe(false)
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: '¿qué me decías?',
+      })
+
+      expect(result.textChunks).toEqual(['Bienvenido de vuelta'])
+      expect(result.traceId).not.toBe('paused')
+      expect(ttsLog).toHaveLength(1)
+    })
+
+    it('pause of session A does NOT affect session B', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Session B response' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, bus } = createAgent({ llm })
+      agent.subscribePauseResume()
+
+      // Pause session A
+      await bus.publish('bus:INTERACTION_PAUSE', {
+        event: 'INTERACTION_PAUSE',
+        session_id: 'session-A',
+        reason: 'staff_override',
+        staff_id: 'spk_cashier',
+      })
+
+      // Session A should be paused
+      const resultA = await agent.handleSpeechFinal({
+        session_id: 'session-A',
+        text: 'hola',
+      })
+      expect(resultA.traceId).toBe('paused')
+
+      // Session B should NOT be paused
+      const resultB = await agent.handleSpeechFinal({
+        session_id: 'session-B',
+        text: 'hola',
+      })
+      expect(resultB.textChunks).toEqual(['Session B response'])
+      expect(resultB.traceId).not.toBe('paused')
+    })
+
+    it('unsubscribe stops listening to pause/resume events', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Working' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, bus } = createAgent({ llm })
+      const unsub = agent.subscribePauseResume()
+
+      // Unsubscribe
+      unsub()
+
+      // Pause event should be ignored after unsubscribe
+      await bus.publish('bus:INTERACTION_PAUSE', {
+        event: 'INTERACTION_PAUSE',
+        session_id: 'session-1',
+        reason: 'staff_override',
+        staff_id: 'spk_cashier',
+      })
+
+      expect(agent.isSessionPaused('session-1')).toBe(false)
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'hola',
+      })
+      expect(result.textChunks).toEqual(['Working'])
+    })
+  })
 })

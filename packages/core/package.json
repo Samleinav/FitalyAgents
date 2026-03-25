@@ -8,16 +8,6 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.cjs"
-        },
-        "./asynctools": {
-            "import": "../asynctools/dist/index.mjs",
-            "require": "../asynctools/dist/index.cjs",
-            "types": "../asynctools/dist/index.d.ts"
-        },
-        "./dispatcher": {
-            "import": "../dispatcher/dist/index.mjs",
-            "require": "../dispatcher/dist/index.cjs",
-            "types": "../dispatcher/dist/index.d.ts"
         }
     },
     "main": "./dist/index.cjs",
@@ -40,7 +30,14 @@
         "llm",
         "ai"
     ],
-    "license": "AGPL-3.0-only",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/samleinav/FitalyAgents.git",
+        "directory": "packages/core"
+    },
+    "homepage": "https://github.com/samleinav/FitalyAgents#readme",
+    "bugs": { "url": "https://github.com/samleinav/FitalyAgents/issues" },
+    "license": "MIT",
     "dependencies": {
         "ioredis": "^5.4.2",
         "zod": "^3.24.2"

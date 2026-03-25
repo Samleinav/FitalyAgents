@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FitalyAgents — Approval Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f9fafb;
+      padding: 2rem;
+      color: #111;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    header { margin-bottom: 2rem; }
+    header h1 { font-size: 1.15rem; font-weight: 600; }
+    header p  { font-size: 0.85rem; color: #6b7280; margin-top: 0.25rem; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: #fef9c3; color: #854d0e;
+      border: 1px solid #fde68a;
+      padding: 3px 8px; border-radius: 99px;
+      margin-bottom: 0.75rem;
+    }
+    .badge::before {
+      content: '';
+      display: inline-block; width: 6px; height: 6px;
+      background: #eab308; border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .field {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-bottom: 0.4rem;
+      display: flex; gap: 0.5rem;
+    }
+    .field strong { color: #111; min-width: 110px; flex-shrink: 0; }
+    .field code {
+      font-family: monospace; font-size: 0.8rem;
+      background: #f3f4f6; padding: 1px 5px; border-radius: 4px;
+      color: #374151;
+    }
+
+    .amount { font-size: 1.4rem; font-weight: 700; color: #111; margin: 0.75rem 0; }
+
+    .actions { display: flex; gap: 0.5rem; margin-top: 1.25rem; align-items: center; flex-wrap: wrap; }
+
+    .approver-input {
+      padding: 0.45rem 0.75rem;
+      border: 1px solid #d1d5db; border-radius: 6px;
+      font-size: 0.875rem; flex: 1; min-width: 140px;
+    }
+    .approver-input:focus { outline: 2px solid #6366f1; border-color: transparent; }
+
+    button {
+      padding: 0.5rem 1.1rem; border: none; border-radius: 6px;
+      font-size: 0.875rem; font-weight: 500; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+    button:active { opacity: 0.7; }
+
+    .btn-approve { background: #16a34a; color: white; }
+    .btn-reject  { background: #dc2626; color: white; }
+
+    .empty {
+      text-align: center; padding: 3rem 1rem;
+      color: #9ca3af; font-size: 0.9rem;
+    }
+    .empty .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+    .status-bar {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      background: #111; color: white; font-size: 0.85rem;
+      padding: 0.6rem 1.25rem; border-radius: 8px;
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none; white-space: nowrap;
+    }
+    .status-bar.show { opacity: 1; }
+    .status-bar.ok   { background: #16a34a; }
+    .status-bar.err  { background: #dc2626; }
+
+    .poll-indicator {
+      font-size: 0.75rem; color: #9ca3af; text-align: right;
+      margin-bottom: 0.5rem;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FitalyAgents — Approval Dashboard</h1>
+    <p>
+      Pending actions that require human authorization.<br>
+      This page represents any external system: app, web app, or existing platform.
+    </p>
+  </header>
+
+  <div class="poll-indicator" id="poll-indicator">Polling for requests...</div>
+  <div id="list"></div>
+  <div class="status-bar" id="status-bar"></div>
+
+  <script>
+    // ── State ─────────────────────────────────────────────────────────────────
+    let knownIds = new Set()
+    let statusTimer = null
+
+    // ── Polling ───────────────────────────────────────────────────────────────
+    async function loadPending() {
+      try {
+        const res = await fetch('/pending')
+        const items = await res.json()
+
+        const indicator = document.getElementById('poll-indicator')
+        indicator.textContent = `Last checked: ${new Date().toLocaleTimeString()}`
+
+        const list = document.getElementById('list')
+
+        if (items.length === 0) {
+          list.innerHTML = `
+            <div class="empty">
+              <div class="icon">&#10003;</div>
+              <div>No pending approvals.</div>
+              <div>Waiting for new requests...</div>
+            </div>`
+          return
+        }
+
+        // Render only new or updated cards (avoid clearing input focus)
+        const incomingIds = new Set(items.map(i => i.request_id))
+
+        // Remove cards that are no longer pending
+        for (const id of knownIds) {
+          if (!incomingIds.has(id)) {
+            document.getElementById(`card-${id}`)?.remove()
+            knownIds.delete(id)
+          }
+        }
+
+        // Add new cards
+        for (const item of items) {
+          if (!knownIds.has(item.request_id)) {
+            knownIds.add(item.request_id)
+            const card = buildCard(item)
+            list.insertAdjacentHTML('beforeend', card)
+          }
+        }
+      } catch {
+        document.getElementById('poll-indicator').textContent = 'Connection error — retrying...'
+      }
+    }
+
+    function buildCard(item) {
+      const amountHtml = item.amount !== undefined
+        ? `<div class="amount">$${Number(item.amount).toLocaleString()}</div>`
+        : ''
+
+      return `
+        <div class="card" id="card-${item.request_id}">
+          <div class="badge">Pending Approval</div>
+          ${amountHtml}
+          <div class="field"><strong>Action</strong> ${item.action}</div>
+          <div class="field"><strong>Required role</strong> ${item.required_role}</div>
+          <div class="field"><strong>Session</strong> <code>${item.session_id}</code></div>
+          <div class="field"><strong>Request ID</strong> <code>${item.request_id}</code></div>
+          <div class="actions">
+            <input
+              class="approver-input"
+              id="approver-${item.request_id}"
+              placeholder="Your approver ID"
+              value="manager_001"
+            >
+            <button class="btn-approve" onclick="approve('${item.request_id}')">Approve</button>
+            <button class="btn-reject"  onclick="reject('${item.request_id}')">Reject</button>
+          </div>
+        </div>`
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+    async function approve(requestId) {
+      const input = document.getElementById(`approver-${requestId}`)
+      const approverId = input?.value?.trim() || 'web_approver'
+
+      try {
+        const res = await fetch('/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_id: requestId, approver_id: approverId }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json()
+          showStatus(data.error || 'Approval failed', 'err')
+          return
+        }
+
+        document.getElementById(`card-${requestId}`)?.remove()
+        knownIds.delete(requestId)
+        showStatus(`Approved by ${approverId} — action will execute.`, 'ok')
+      } catch {
+        showStatus('Network error sending approval.', 'err')
+      }
+    }
+
+    async function reject(requestId) {
+      const reason = prompt('Reason for rejection (optional):') ?? 'Rejected via web'
+
+      try {
+        const res = await fetch('/reject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_id: requestId, reason }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json()
+          showStatus(data.error || 'Rejection failed', 'err')
+          return
+        }
+
+        document.getElementById(`card-${requestId}`)?.remove()
+        knownIds.delete(requestId)
+        showStatus(`Rejected: ${reason}`, 'err')
+      } catch {
+        showStatus('Network error sending rejection.', 'err')
+      }
+    }
+
+    function showStatus(msg, type) {
+      const bar = document.getElementById('status-bar')
+      bar.textContent = msg
+      bar.className = `status-bar show ${type}`
+      clearTimeout(statusTimer)
+      statusTimer = setTimeout(() => { bar.className = 'status-bar' }, 4000)
+    }
+
+    // Poll every 2 seconds
+    loadPending()
+    setInterval(loadPending, 2000)
+  </script>
+</body>
+</html>

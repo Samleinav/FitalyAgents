@@ -3,7 +3,7 @@
 > Standalone async parallel tool execution for any LLM agent — no Redis, no bus, just wrap your agent and get parallel async tools.
 
 [![npm version](https://img.shields.io/npm/v/@fitalyagents/asynctools)](https://www.npmjs.com/package/@fitalyagents/asynctools)
-[![License: Apache 2.0 + Commons Clause](https://img.shields.io/badge/License-Apache%202.0%20%2B%20Commons%20Clause-blue.svg)](https://github.com/your-org/fitalyagents/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 
 ## Overview
 
@@ -291,4 +291,4 @@ class OpenAIAdapter implements IInnerAgent {
 
 ## License
 
-Apache 2.0 + Commons Clause © FitalyAgents
+MIT © FitalyAgents Contributors

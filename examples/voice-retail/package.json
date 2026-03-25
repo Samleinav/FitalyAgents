@@ -4,9 +4,15 @@
     "type": "module",
     "scripts": {
         "test": "vitest run --passWithNoTests",
-        "type-check": "tsc --noEmit"
+        "type-check": "tsc --noEmit",
+        "service": "node --experimental-vm-modules --loader ts-node/esm src/service.ts",
+        "service:build": "tsc --project tsconfig.service.json && node dist/service.js"
     },
     "dependencies": {
-        "fitalyagents": "workspace:*"
+        "fitalyagents": "workspace:*",
+        "@anthropic-ai/sdk": "^0.39.0"
+    },
+    "devDependencies": {
+        "ts-node": "^10.9.2"
     }
 }

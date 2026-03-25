@@ -17,6 +17,7 @@ from fitaly_voice.config import PipelineConfig
 from fitaly_voice.diarizer import DiarizationSegment
 from fitaly_voice.pipeline import FitalyVoicePipeline
 from fitaly_voice.speaker_cache import KnownSpeaker
+from fitaly_voice.tracker import SpeakerTracker
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -26,6 +27,22 @@ def _config(bus_mode="stdout") -> PipelineConfig:
     cfg.bus_mode = bus_mode
     cfg.diarizer_device = "cpu"
     return cfg
+
+
+def _init_pipeline_extras(pipeline, cache=None):
+    """Set attributes that __new__ skips (tracker, STT, counters)."""
+    if cache is not None:
+        pipeline._tracker = MagicMock()
+        pipeline._tracker.resolve.side_effect = lambda label, emb, sid: (
+            cache.identify.return_value.speaker_id
+            if cache.identify(emb) is not None
+            else f"trk:0:{label}"
+        )
+        pipeline._tracker.forget_inactive = MagicMock()
+    pipeline._stt = None
+    pipeline._stt_is_streaming = False
+    pipeline._chunk_count = 0
+    pipeline._speech_buffers = {}
 
 
 def _make_source(*chunks: np.ndarray):
@@ -93,6 +110,7 @@ class TestProcessSession:
         ])
         emb = make_random_embedding(seed=1)
         pipeline._cache = _patch_cache(emb, known_speaker=None)
+        _init_pipeline_extras(pipeline, cache=pipeline._cache)
 
         noise1 = make_noise(100, amplitude=0.3)
         noise2 = make_noise(100, amplitude=0.3)
@@ -126,6 +144,7 @@ class TestProcessSession:
             embedding=emb,
         )
         pipeline._cache = _patch_cache(emb, known_speaker=known)
+        _init_pipeline_extras(pipeline, cache=pipeline._cache)
 
         source = _make_source(make_noise(100, amplitude=0.3))
         await pipeline.process_session("s-001", source)
@@ -156,6 +175,7 @@ class TestProcessSession:
         ])
         emb = make_random_embedding(seed=1)
         pipeline._cache = _patch_cache(emb, known_speaker=None)
+        _init_pipeline_extras(pipeline, cache=pipeline._cache)
 
         source = _make_source(
             make_noise(100, amplitude=0.3),  # speech
@@ -181,6 +201,7 @@ class TestProcessSession:
         pipeline._vad = _patch_vad(lambda chunk: False)  # always silent
         pipeline._diarizer = _patch_diarizer([])
         pipeline._cache = _patch_cache(make_random_embedding())
+        _init_pipeline_extras(pipeline, cache=pipeline._cache)
 
         source = _make_source(*[make_silence(100) for _ in range(5)])
         await pipeline.process_session("s-001", source)
@@ -204,6 +225,7 @@ class TestProcessSession:
             [DiarizationSegment("speaker_0", 0.0, 0.5)],
         ])
         pipeline._cache = _patch_cache(make_random_embedding())
+        _init_pipeline_extras(pipeline, cache=pipeline._cache)
 
         source = _make_source(*[make_noise(100, amplitude=0.3) for _ in range(5)])
         await pipeline.process_session("s-001", source)

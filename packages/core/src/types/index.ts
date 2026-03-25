@@ -197,6 +197,16 @@ export const SpeechPartialEventSchema = z.object({
 })
 export type SpeechPartialEvent = z.infer<typeof SpeechPartialEventSchema>
 
+export const SpeechFinalEventSchema = z.object({
+  event: z.literal('SPEECH_FINAL'),
+  session_id: z.string(),
+  text: z.string(),
+  confidence: z.number().optional(),
+  speaker_id: z.string().optional(),
+  role: z.enum(['customer', 'staff', 'cashier', 'manager', 'owner']).nullable().optional(),
+})
+export type SpeechFinalEvent = z.infer<typeof SpeechFinalEventSchema>
+
 export const AmbientContextEventSchema = z.object({
   event: z.literal('AMBIENT_CONTEXT'),
   session_id: z.string(),
@@ -253,6 +263,41 @@ export const TargetGroupChangedEventSchema = z.object({
   timestamp: z.number(),
 })
 export type TargetGroupChangedEvent = z.infer<typeof TargetGroupChangedEventSchema>
+
+// ── Multi-Agent Ecosystem Events ─────────────────────────────────────────────
+
+export const InteractionPauseEventSchema = z.object({
+  event: z.literal('INTERACTION_PAUSE'),
+  session_id: z.string(),
+  reason: z.string(),
+  staff_id: z.string(),
+})
+export type InteractionPauseEvent = z.infer<typeof InteractionPauseEventSchema>
+
+export const InteractionResumeEventSchema = z.object({
+  event: z.literal('INTERACTION_RESUME'),
+  session_id: z.string(),
+})
+export type InteractionResumeEvent = z.infer<typeof InteractionResumeEventSchema>
+
+export const StaffCommandEventSchema = z.object({
+  event: z.literal('STAFF_COMMAND'),
+  session_id: z.string(),
+  command: z.string(),
+  staff_id: z.string(),
+  params: z.record(z.unknown()),
+  result: z.unknown().optional(),
+  timestamp: z.number(),
+})
+export type StaffCommandEvent = z.infer<typeof StaffCommandEventSchema>
+
+export const UIUpdateEventSchema = z.object({
+  event: z.literal('UI_UPDATE'),
+  component: z.string(),
+  action: z.enum(['show', 'hide', 'update', 'confirmed']),
+  data: z.record(z.unknown()).optional(),
+})
+export type UIUpdateEvent = z.infer<typeof UIUpdateEventSchema>
 
 // ── IEventBus interface ──────────────────────────────────────────────────────
 

@@ -186,4 +186,4 @@ pytest tests/ -v
 
 ## License
 
-AGPL-3.0-only WITH Commons-Clause — same as FitalyAgents.
+MIT — see [LICENSE](../LICENSE)
