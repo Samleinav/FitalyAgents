@@ -21,21 +21,43 @@ export class InMemoryBus implements IEventBus {
   private queueWaiters: Map<string, Array<(value: unknown | null) => void>> = new Map()
 
   async publish(channel: string, payload: unknown): Promise<void> {
+    const pending: Array<Promise<void>> = []
+    const errors: unknown[] = []
+
+    const invoke = (fn: () => void | Promise<void>) => {
+      pending.push(
+        Promise.resolve()
+          .then(fn)
+          .catch((error) => {
+            errors.push(error)
+          }),
+      )
+    }
+
     // Exact channel subscribers
     const channelHandlers = this.handlers.get(channel)
     if (channelHandlers) {
-      for (const handler of channelHandlers) {
-        handler(payload)
+      for (const handler of [...channelHandlers]) {
+        invoke(() => handler(payload))
       }
     }
 
     // Pattern subscribers
     for (const [pattern, pHandlers] of this.patternHandlers) {
       if (this.matchPattern(pattern, channel)) {
-        for (const handler of pHandlers) {
-          handler(channel, payload)
+        for (const handler of [...pHandlers]) {
+          invoke(() => handler(channel, payload))
         }
       }
+    }
+
+    await Promise.all(pending)
+
+    if (errors.length === 1) {
+      throw errors[0]
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(errors, `Multiple handlers failed while publishing ${channel}`)
     }
   }
 
@@ -98,19 +120,27 @@ export class InMemoryBus implements IEventBus {
       if (!this.queueWaiters.has(key)) {
         this.queueWaiters.set(key, [])
       }
-      this.queueWaiters.get(key)!.push(resolve)
 
       const timer = setTimeout(() => {
         const waiters = this.queueWaiters.get(key)
         if (waiters) {
-          const idx = waiters.indexOf(resolve)
+          const idx = waiters.indexOf(wrappedResolve)
           if (idx !== -1) {
             waiters.splice(idx, 1)
             if (waiters.length === 0) this.queueWaiters.delete(key)
-            resolve(null)
+            wrappedResolve(null)
           }
         }
       }, timeoutSeconds * 1000)
+
+      let settled = false
+      const wrappedResolve = (value: unknown | null) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(value)
+      }
+      this.queueWaiters.get(key)!.push(wrappedResolve)
 
       if (typeof timer === 'object' && 'unref' in timer) {
         timer.unref()

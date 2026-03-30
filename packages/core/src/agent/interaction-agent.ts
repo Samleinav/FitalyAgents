@@ -433,6 +433,7 @@ export class InteractionAgent {
       id: speakerId ?? 'unknown',
       name: speakerId ?? 'Unknown',
       role: resolvedRole,
+      org_id: 'default',
       store_id: 'default',
       approval_limits: {},
     }

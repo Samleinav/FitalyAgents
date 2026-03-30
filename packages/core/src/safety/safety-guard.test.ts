@@ -47,6 +47,7 @@ function makeProfile(
     id: `user_${overrides.role}`,
     name: overrides.role.charAt(0).toUpperCase() + overrides.role.slice(1),
     role: overrides.role,
+    org_id: 'org_001',
     store_id: 'store_001',
     approval_limits: defaultLimits[overrides.role],
     ...overrides,
@@ -109,6 +110,21 @@ describe('SafetyGuard', () => {
       const decision = guard.evaluate('refund_create', { amount: 50_000 }, manager)
 
       expect(decision).toEqual({ allowed: true, execute: true })
+    })
+
+    it('accepts README generic roles and org_id without retail aliases', () => {
+      const operator = makeProfile({
+        role: 'operator',
+        org_id: 'org_main',
+        store_id: undefined,
+      })
+      const decision = guard.evaluate('refund_create', { amount: 15_000 }, operator)
+
+      expect(decision).toMatchObject({
+        allowed: false,
+        reason: 'needs_approval',
+        escalate_to: 'manager',
+      })
     })
 
     it('returns needs_approval for unknown tools', () => {
@@ -196,6 +212,18 @@ describe('SafetyGuard', () => {
       })
       expect(guard.roleHasPermission(cashier, 'payment_process', { amount: 80_000 })).toBe(true)
     })
+
+    it('operator shares cashier-level permissions', () => {
+      const operator = makeProfile({ role: 'operator' })
+      expect(guard.roleHasPermission(operator, 'payment_process', { amount: 50_000 })).toBe(true)
+      expect(guard.roleHasPermission(operator, 'refund_create', { amount: 1 })).toBe(false)
+    })
+
+    it('supervisor shares manager-level permissions', () => {
+      const supervisor = makeProfile({ role: 'supervisor' })
+      expect(guard.roleHasPermission(supervisor, 'refund_create', { amount: 100_000 })).toBe(true)
+      expect(guard.roleHasPermission(supervisor, 'discount_apply', { percentage: 30 })).toBe(true)
+    })
   })
 
   // ── getToolConfig() ────────────────────────────────────────────────
@@ -222,9 +250,18 @@ describe('SafetyGuard', () => {
       expect(defaultLimits.cashier.payment_max).toBe(50_000)
     })
 
+    it('operator matches cashier defaults', () => {
+      expect(defaultLimits.operator.payment_max).toBe(50_000)
+    })
+
     it('manager has refund_max 100k and can override price', () => {
       expect(defaultLimits.manager.refund_max).toBe(100_000)
       expect(defaultLimits.manager.can_override_price).toBe(true)
+    })
+
+    it('supervisor matches manager defaults', () => {
+      expect(defaultLimits.supervisor.refund_max).toBe(100_000)
+      expect(defaultLimits.supervisor.can_override_price).toBe(true)
     })
 
     it('owner has infinite limits', () => {

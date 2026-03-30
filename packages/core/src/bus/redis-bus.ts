@@ -42,7 +42,7 @@ export class RedisBus implements IEventBus {
       try {
         const data = JSON.parse(message)
         for (const handler of handlers) {
-          handler(data)
+          void Promise.resolve(handler(data)).catch(() => {})
         }
       } catch {
         // Ignore malformed messages
@@ -55,7 +55,7 @@ export class RedisBus implements IEventBus {
       try {
         const data = JSON.parse(message)
         for (const handler of handlers) {
-          handler(channel, data)
+          void Promise.resolve(handler(channel, data)).catch(() => {})
         }
       } catch {
         // Ignore malformed messages

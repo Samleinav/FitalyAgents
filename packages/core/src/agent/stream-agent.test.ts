@@ -23,6 +23,16 @@ class TestAgent extends StreamAgent {
   }
 }
 
+class FailingAgent extends StreamAgent {
+  protected get channels(): string[] {
+    return ['bus:SPEECH_FINAL']
+  }
+
+  async onEvent(): Promise<void> {
+    throw new Error('stream failure')
+  }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('StreamAgent', () => {
@@ -158,6 +168,28 @@ describe('StreamAgent', () => {
       for (let i = 0; i < 5; i++) {
         expect(agent.receivedEvents[i].payload).toEqual({ index: i })
       }
+    })
+
+    it('publishes AGENT_ERROR when a handler throws', async () => {
+      bus = new InMemoryBus()
+      const errors: unknown[] = []
+      bus.subscribe('bus:AGENT_ERROR', (data) => {
+        errors.push(data)
+      })
+
+      const agent = new FailingAgent(bus)
+      await agent.start()
+
+      await expect(bus.publish('bus:SPEECH_FINAL', { text: 'boom' })).rejects.toThrow(
+        'stream failure',
+      )
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toMatchObject({
+        event: 'AGENT_ERROR',
+        agent_id: 'FailingAgent',
+        channel: 'bus:SPEECH_FINAL',
+        error: 'stream failure',
+      })
     })
   })
 

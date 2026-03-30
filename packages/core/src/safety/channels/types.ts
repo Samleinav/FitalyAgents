@@ -1,12 +1,24 @@
 import type { IEventBus } from '../../types/index.js'
 
-// ── Safety Levels ─────────────────────────────────────────────────────────────
+// Safety levels
 
 export type SafetyLevel = 'safe' | 'staged' | 'protected' | 'restricted'
 
-// ── Human Roles ───────────────────────────────────────────────────────────────
+// Human roles
 
-export type HumanRole = 'customer' | 'staff' | 'cashier' | 'manager' | 'owner'
+export const HUMAN_ROLE_VALUES = [
+  'customer',
+  'user',
+  'staff',
+  'agent',
+  'cashier',
+  'operator',
+  'manager',
+  'supervisor',
+  'owner',
+] as const
+
+export type HumanRole = (typeof HUMAN_ROLE_VALUES)[number]
 
 export interface ApprovalLimits {
   /** Max payment amount (undefined = no permission) */
@@ -25,13 +37,16 @@ export interface HumanProfile {
   id: string
   name: string
   role: HumanRole
-  store_id: string
+  /** Preferred tenant/org identifier used by the README and generic deployments. */
+  org_id?: string
+  /** Legacy retail alias retained for backwards compatibility. */
+  store_id?: string
   voice_embedding?: Float32Array
   approval_limits: ApprovalLimits
   is_present?: boolean
 }
 
-// ── Approval Channel Interface ────────────────────────────────────────────────
+// Approval channel interface
 
 export type ApprovalChannelType = 'voice' | 'webhook' | 'external_tool'
 
@@ -67,7 +82,7 @@ export interface ChannelConfig {
 }
 
 /**
- * IApprovalChannel — interface for approval channels.
+ * IApprovalChannel - interface for approval channels.
  *
  * Each channel represents a way to reach a human approver:
  * voice, webhook (push notification), or external tool (API call).
@@ -94,7 +109,7 @@ export interface IApprovalChannel {
   cancel(requestId: string): void
 }
 
-// ── SafetyDecision ────────────────────────────────────────────────────────────
+// SafetyDecision
 
 export type SafetyDecision =
   | { allowed: true; execute: true }
@@ -107,7 +122,7 @@ export type SafetyDecision =
       channels: ChannelConfig[]
     }
 
-// ── ApprovalOrchestrator deps ─────────────────────────────────────────────────
+// ApprovalOrchestrator deps
 
 export interface ApprovalOrchestratorDeps {
   bus: IEventBus

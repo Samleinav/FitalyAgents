@@ -9,7 +9,15 @@ import type { HumanProfile, HumanRole } from '../safety/channels/types.js'
 
 const RESUME_PATTERNS = /\b(continúa|continua|resume|listo|termina|eso es todo)\b/i
 
-const DEFAULT_STAFF_ROLES: HumanRole[] = ['staff', 'cashier', 'manager', 'owner']
+const DEFAULT_STAFF_ROLES: HumanRole[] = [
+  'staff',
+  'agent',
+  'cashier',
+  'operator',
+  'manager',
+  'supervisor',
+  'owner',
+]
 const DEFAULT_ACTIVATION_KEYWORDS = ['fitaly', 'sistema']
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -259,6 +267,7 @@ export class StaffAgent extends StreamAgent {
       id: staffId,
       name: staffId,
       role,
+      org_id: 'default',
       store_id: 'default',
       approval_limits: defaultLimits[role] ?? {},
     }

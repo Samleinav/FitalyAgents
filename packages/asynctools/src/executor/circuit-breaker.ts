@@ -10,11 +10,11 @@ export interface CircuitBreakerCallbacks {
 }
 
 /**
- * Circuit breaker — three-state FSM per tool.
+ * Circuit breaker - three-state FSM per tool.
  *
  * - **CLOSED** (normal): requests pass through, failures counted.
  * - **OPEN** (tripped): all requests rejected immediately until `reset_timeout_ms` elapses.
- * - **HALF_OPEN** (probe): one request allowed through; success → CLOSED, failure → OPEN.
+ * - **HALF_OPEN** (probe): one request allowed through; success -> CLOSED, failure -> OPEN.
  *
  * @example
  * ```typescript
@@ -39,6 +39,7 @@ export class CircuitBreaker {
   private state: CircuitState = 'CLOSED'
   private consecutiveFailures = 0
   private openedAt: number | null = null
+  private probeInflight = false
 
   private readonly threshold: number
   private readonly resetTimeoutMs: number
@@ -63,13 +64,19 @@ export class CircuitBreaker {
     if (this.state === 'OPEN') {
       if (this.openedAt !== null && now - this.openedAt >= this.resetTimeoutMs) {
         this.state = 'HALF_OPEN'
-        return true // probe request
+        this.probeInflight = false
+      } else {
+        return false
       }
-      return false
     }
 
-    // HALF_OPEN — only one probe allowed at a time
-    return true
+    if (this.state === 'HALF_OPEN') {
+      if (this.probeInflight) return false
+      this.probeInflight = true
+      return true
+    }
+
+    return false
   }
 
   /** Record a successful execution. May close an open circuit. */
@@ -78,6 +85,7 @@ export class CircuitBreaker {
     if (this.state === 'HALF_OPEN') {
       this.state = 'CLOSED'
       this.openedAt = null
+      this.probeInflight = false
       this.callbacks.onClose?.(this.toolId)
     }
   }
@@ -87,9 +95,10 @@ export class CircuitBreaker {
     this.consecutiveFailures++
 
     if (this.state === 'HALF_OPEN') {
-      // Probe failed — back to OPEN, reset timer
+      // Probe failed - back to OPEN, reset timer
       this.state = 'OPEN'
       this.openedAt = now
+      this.probeInflight = false
       this.callbacks.onOpen?.(this.toolId, this.consecutiveFailures)
       return
     }
@@ -97,6 +106,7 @@ export class CircuitBreaker {
     if (this.state === 'CLOSED' && this.consecutiveFailures >= this.threshold) {
       this.state = 'OPEN'
       this.openedAt = now
+      this.probeInflight = false
       this.callbacks.onOpen?.(this.toolId, this.consecutiveFailures)
     }
   }

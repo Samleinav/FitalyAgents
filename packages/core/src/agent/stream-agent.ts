@@ -49,8 +49,13 @@ export abstract class StreamAgent {
     this.started = true
 
     for (const channel of this.channels) {
-      const handler: BusHandler = (data) => {
-        this.onEvent(channel, data).catch(() => {})
+      const handler: BusHandler = async (data) => {
+        try {
+          await this.onEvent(channel, data)
+        } catch (error) {
+          await this.reportEventError(channel, data, error).catch(() => {})
+          throw error
+        }
       }
       const unsub = this.bus.subscribe(channel, handler)
       this.subscriptions.push(unsub)
@@ -104,5 +109,22 @@ export abstract class StreamAgent {
     if (typeof this.heartbeatTimer === 'object' && 'unref' in this.heartbeatTimer) {
       this.heartbeatTimer.unref()
     }
+  }
+
+  protected async reportEventError(
+    channel: string,
+    payload: unknown,
+    error: unknown,
+  ): Promise<void> {
+    if (channel === 'bus:AGENT_ERROR') return
+
+    await this.bus.publish('bus:AGENT_ERROR', {
+      event: 'AGENT_ERROR',
+      agent_id: this.constructor.name,
+      channel,
+      error: error instanceof Error ? error.message : String(error),
+      payload,
+      timestamp: Date.now(),
+    })
   }
 }

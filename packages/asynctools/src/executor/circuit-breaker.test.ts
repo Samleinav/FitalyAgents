@@ -75,6 +75,15 @@ describe('CircuitBreaker', () => {
       expect(onClose).toHaveBeenCalledWith('test_tool')
     })
 
+    it('allows only one in-flight probe at a time', () => {
+      const { cb } = openThenHalfOpen()
+
+      expect(cb.allowRequest()).toBe(false)
+
+      cb.recordSuccess()
+      expect(cb.allowRequest()).toBe(true)
+    })
+
     it('re-opens on probe failure', () => {
       const { cb, onOpen } = openThenHalfOpen()
       cb.recordFailure()

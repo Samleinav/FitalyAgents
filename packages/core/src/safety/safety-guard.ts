@@ -11,9 +11,13 @@ import type {
 
 const ROLE_HIERARCHY: Record<HumanRole, number> = {
   customer: 0,
+  user: 0,
   staff: 1,
+  agent: 1,
   cashier: 2,
+  operator: 2,
   manager: 3,
+  supervisor: 3,
   owner: 4,
 }
 
@@ -21,11 +25,23 @@ const ROLE_HIERARCHY: Record<HumanRole, number> = {
 
 export const defaultLimits: Record<HumanRole, ApprovalLimits> = {
   customer: {},
+  user: {},
   staff: {},
+  agent: {},
   cashier: {
     payment_max: 50_000,
   },
+  operator: {
+    payment_max: 50_000,
+  },
   manager: {
+    payment_max: Infinity,
+    discount_max_pct: 30,
+    refund_max: 100_000,
+    can_override_price: true,
+    can_adjust_inventory: true,
+  },
+  supervisor: {
     payment_max: Infinity,
     discount_max_pct: 30,
     refund_max: 100_000,

@@ -108,6 +108,16 @@ export const ActionCompletedEventSchema = z.object({
 })
 export type ActionCompletedEvent = z.infer<typeof ActionCompletedEventSchema>
 
+export const AgentErrorEventSchema = z.object({
+  event: z.literal('AGENT_ERROR'),
+  agent_id: z.string(),
+  channel: z.string(),
+  error: z.string(),
+  payload: z.unknown().optional(),
+  timestamp: z.number(),
+})
+export type AgentErrorEvent = z.infer<typeof AgentErrorEventSchema>
+
 // ── Safety Bus Events (v2) ───────────────────────────────────────────────────
 
 export const DraftCreatedEventSchema = z.object({
@@ -203,7 +213,20 @@ export const SpeechFinalEventSchema = z.object({
   text: z.string(),
   confidence: z.number().optional(),
   speaker_id: z.string().optional(),
-  role: z.enum(['customer', 'staff', 'cashier', 'manager', 'owner']).nullable().optional(),
+  role: z
+    .enum([
+      'customer',
+      'user',
+      'staff',
+      'agent',
+      'cashier',
+      'operator',
+      'manager',
+      'supervisor',
+      'owner',
+    ])
+    .nullable()
+    .optional(),
 })
 export type SpeechFinalEvent = z.infer<typeof SpeechFinalEventSchema>
 
@@ -304,12 +327,12 @@ export type UIUpdateEvent = z.infer<typeof UIUpdateEventSchema>
 /**
  * Subscription handler for a specific channel.
  */
-export type BusHandler = (data: unknown) => void
+export type BusHandler = (data: unknown) => void | Promise<void>
 
 /**
  * Pattern subscription handler — receives the actual channel name and data.
  */
-export type PatternBusHandler = (channel: string, data: unknown) => void
+export type PatternBusHandler = (channel: string, data: unknown) => void | Promise<void>
 
 /**
  * Unsubscribe function returned by subscribe/psubscribe.
