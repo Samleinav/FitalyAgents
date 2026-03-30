@@ -28,7 +28,10 @@
         "tools",
         "parallel",
         "llm"
-    ],     "url": "https://github.com/samleinav/FitalyAgents.git",
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/samleinav/FitalyAgents.git",
         "directory": "packages/asynctools"
     },
     "homepage": "https://github.com/samleinav/FitalyAgents#readme",
