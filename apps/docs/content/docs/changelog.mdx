@@ -4,6 +4,22 @@ description: All notable changes to FitalyAgents, newest first.
 full: true
 ---
 
+## Unreleased - 2026-03-30
+
+### Changed
+
+- Human role compatibility now accepts generic aliases (`user`, `agent`, `operator`, `supervisor`) alongside the original retail names, and `HumanProfile` accepts `org_id` in addition to `store_id`.
+- `StaffAgent` default roles now cover both alias families, and activation utterances such as `Fitaly, aplica...` can execute an inline operational command when the phrase clearly looks actionable.
+- Governance, human-role, and hardening docs were aligned with current runtime behavior, including `bus:AGENT_ERROR` and the real `HALF_OPEN` semantics.
+
+### Fixed
+
+- `CircuitBreaker` now allows only one concurrent probe in `HALF_OPEN`.
+- `InMemoryBus.publish()` now keeps dispatching after a handler failure, still awaits async handlers, and no longer defers synchronous subscribers to a later microtask.
+- `StreamAgent` now emits `bus:AGENT_ERROR` when `onEvent()` fails instead of swallowing the failure silently.
+- TTL expiry in `DraftStore` once again publishes `bus:DRAFT_CANCELLED` deterministically on `InMemoryBus`.
+- Multi-agent staff handoff flows now surface `STAFF_COMMAND` updates correctly in the UI path.
+
 ## v1.2.0 — 2026-03-06
 
 Major v2 rewrite. All new components are available in `fitalyagents` unless noted otherwise.
@@ -23,6 +39,7 @@ Changed from Apache 2.0 + Commons Clause to **AGPL-3.0**. Source-available, open
 **`SafetyGuard`** — evaluates tool actions against speaker role and approval limits.
 
 **`DraftStore`** (in-memory + Redis) — multi-turn order modification with TTL:
+
 ```typescript
 const draftId = await draftStore.create(sessionId, orderInput)
 await draftStore.update(draftId, { color: 'blue' })
@@ -30,6 +47,7 @@ await draftStore.confirm(draftId)
 ```
 
 **`ApprovalOrchestrator`** — multi-channel human approval (`parallel` or `sequential`):
+
 - `VoiceApprovalChannel` — waits for `bus:SPEECH_FINAL` from the designated approver
 - `WebhookApprovalChannel` — posts to a URL, waits for `bus:APPROVAL_WEBHOOK_RESPONSE`
 - `ExternalToolChannel` — HTTP callback pattern
@@ -47,6 +65,7 @@ await draftStore.confirm(draftId)
 **`StreamAgent`** — abstract base class replacing `NexusAgent`. Handles subscribe/unsubscribe lifecycle, heartbeat, and `onEvent()` dispatch.
 
 **`InteractionAgent`** — streaming LLM agent with full safety pipeline:
+
 - Streams TTS token-by-token via `ttsCallback`
 - Routes tool calls through `SafetyGuard` (safe/staged/protected/restricted)
 - Integrates speculative cache, `ApprovalOrchestrator`, and `IntentTeacher`
@@ -97,13 +116,13 @@ New `ToolResult.status` values: `'rate_limited'`, `'circuit_open'`.
 
 ### Test coverage
 
-| Package | Tests |
-|---|---|
-| `packages/core` | 320 |
-| `packages/dispatcher` | 107 |
-| `@fitalyagents/asynctools` | 110 |
-| `examples/voice-retail` | 64 |
-| **Total** | **601** |
+| Package                    | Tests   |
+| -------------------------- | ------- |
+| `packages/core`            | 320     |
+| `packages/dispatcher`      | 107     |
+| `@fitalyagents/asynctools` | 110     |
+| `examples/voice-retail`    | 64      |
+| **Total**                  | **601** |
 
 ---
 
@@ -159,12 +178,12 @@ await classifier.init()
 
 ### Test coverage
 
-| Package | Tests |
-|---|---|
-| `packages/core` | 212 (+19) |
-| `packages/dispatcher` | 40 (+24) |
-| `examples/voice-retail` | 73 |
-| **Total** | **325** |
+| Package                 | Tests     |
+| ----------------------- | --------- |
+| `packages/core`         | 212 (+19) |
+| `packages/dispatcher`   | 40 (+24)  |
+| `examples/voice-retail` | 73        |
+| **Total**               | **325**   |
 
 ---
 

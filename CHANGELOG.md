@@ -20,23 +20,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bus events eliminados: `bus:TASK_AVAILABLE`, `bus:DISPATCH_FALLBACK`, `bus:INTENT_UPDATED`
 - Channels eliminados: `queue:*:inbox`, `queue:*:outbox`
 
+### Changed
+
+- `HumanRole` y `HumanProfile` ahora aceptan aliases genÃ©ricos (`user`, `agent`, `operator`, `supervisor`) ademÃ¡s del modelo retail legacy (`customer`, `staff`, `cashier`, `manager`), y soportan `org_id` junto con `store_id`
+- `StaffAgent` amplÃ­a sus roles por defecto para cubrir aliases genÃ©ricos y puede ejecutar un comando inline en la misma frase de activaciÃ³n cuando la intervenciÃ³n sÃ­ parece una orden operativa
+- DocumentaciÃ³n de governance, human roles y hardening alineada con el runtime actual, incluyendo `bus:AGENT_ERROR` y el comportamiento real de `HALF_OPEN`
+
+### Fixed
+
+- `CircuitBreaker` en `@fitalyagents/asynctools` ahora deja pasar un solo probe concurrente en `HALF_OPEN`
+- `InMemoryBus.publish()` ya no bloquea el resto de handlers cuando uno falla, sigue esperando handlers async y vuelve a despachar handlers sync en el mismo tick
+- `StreamAgent` deja de tragar errores silenciosamente y publica `bus:AGENT_ERROR` cuando `onEvent()` falla
+- `DraftStore` vuelve a publicar de forma determinÃ­stica `bus:DRAFT_CANCELLED` en expiraciÃ³n TTL sobre `InMemoryBus`
+- Flujos integrados con `StaffAgent` y `UIAgent` vuelven a reflejar correctamente `STAFF_COMMAND` en escenarios multi-agent
+
 ### Added
 
 #### Core — Safety Module (`packages/core/src/safety/`)
 
 **SafetyGuard**
+
 - Tool-level risk classification: `safe | staged | protected | restricted`
 - `SafetyGuard.evaluate(action, params, speaker, context)` → `SafetyDecision`
 - `roleHasPermission(role, action, params)` — verifica límites numéricos y porcentuales
 - `findNearbyApprover(requiredRole, storeId)` — busca aprobador presente en tienda
 
 **DraftStore**
+
 - Drafts mutables con TTL automático (Redis/InMemory)
 - Lifecycle completo: `create`, `update`, `confirm`, `cancel`, `rollback`
 - Historial de cambios para rollback granular
 - Cliente puede modificar N veces antes de confirmar sin crear órdenes fantasma
 
 **Multi-Channel Approval (ApprovalOrchestrator)**
+
 - `IApprovalChannel` interface: `notify(request, approver)` + `waitForResponse(request, timeoutMs)` + `cancel(requestId)`
 - `VoiceApprovalChannel` — aprobación por voz; integra `VoiceIdentifierAgent`; escucha `bus:SPEECH_FINAL` con NLU yes/no
 - `WebhookApprovalChannel` — HTTP webhook (migra `InMemoryApprovalQueue`); notifica vía `bus:APPROVAL_WEBHOOK_REQUEST`
@@ -47,12 +64,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuración por tool: `approval_channels: [{ type, timeout_ms }]`, `approval_strategy`
 
 **Human Role Model**
+
 - `HumanRole: 'customer' | 'staff' | 'cashier' | 'manager' | 'owner'`
 - `HumanProfile` con `voice_embedding` (registrado por `VoiceIdentifierAgent`) y `approval_limits`
 - `ApprovalLimits`: `payment_max`, `discount_max_pct`, `refund_max` por rol
 - Roles en humanos (no en agentes IA) — define quién puede aprobar qué y con qué límites
 
 **New Bus Events**
+
 - `bus:APPROVAL_VOICE_REQUEST` — solicitud de aprobación por voz al empleado identificado
 - `bus:APPROVAL_WEBHOOK_REQUEST` — notificación push para app móvil
 - `bus:APPROVAL_EXTERNAL_REQUEST` / `bus:APPROVAL_EXTERNAL_RESPONSE` — canal externo configurable
@@ -66,41 +85,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Core — Session + Context v2
 
 **TargetGroup**
+
 - `TargetGroupStateMachine` — multi-speaker: TARGET (habla al agente), AMBIENT (conversación de fondo), QUEUED (espera)
 - Priority queue para múltiples clientes simultáneos
 
 **ContextStore ambient**
+
 - `getAmbient(sessionId)` / `setAmbient(sessionId, data)` — contexto de conversación no dirigida
 
 #### Core — Agentes Autónomos
 
 **StreamAgent** (reemplaza NexusAgent)
+
 - Subscribe to bus channels directamente, sin inbox/outbox
 - Lifecycle: `start()`, `stop()`, `dispose()` con health monitoring
 
 **ContextBuilderAgent**
+
 - Consume `SPEECH_FINAL`, `AMBIENT_CONTEXT`, `ACTION_COMPLETED`, `DRAFT_*`
 - Mantiene resumen de conversación y contexto enriquecido por sesión
 
 **ProactiveAgent**
+
 - Detecta: cliente esperando, producto agotado, oferta relevante
 - Emite `bus:PROACTIVE_TRIGGER` → `InteractionAgent` decide cuándo hablar
 
 #### Dispatcher — Speculative Engine (`packages/dispatcher/`)
 
 **SpeculativeCache**
+
 - Pre-ejecuta SAFE tools en `SPEECH_PARTIAL` antes de que el LLM los pida (ahorro ~250ms)
 - STAGED: crea draft especulativo con TTL y referencia en cache
 - PROTECTED/RESTRICTED: solo registra hint (no ejecuta nada)
 - LRU con capacidad configurable (default 256 entries)
 
 **IntentTeacher** (migrado desde `examples/agent-comparison/`)
+
 - `instructionPrompt` inyectable por negocio — sin business logic hardcoded
 - Evalúa correcciones del LLM: `add | skip | flag`
 - Actualiza vector store en vivo via `addExample()`
 - Redis backend para persistencia de correcciones
 
 **IntentScoreStore** (migrado desde `examples/agent-comparison/`)
+
 - EMA (α=0.1) por tool para tracking de accuracy
 - Training mode (siempre especula) → Production mode (solo si score ≥ 0.70)
 - Auto-suggest switch a production cuando hit rate ≥ 90%
@@ -133,12 +160,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Test Coverage (objetivo al cierre de Sprint 3.3)
 
-| Package | Actual | Objetivo |
-|---|---|---|
-| `packages/core` | 212 | 300+ |
-| `packages/dispatcher` | 40 | 90+ |
-| `examples/voice-retail` | 73 | 73 (sin regresiones) |
-| **Total** | **325** | **463+** |
+| Package                 | Actual  | Objetivo             |
+| ----------------------- | ------- | -------------------- |
+| `packages/core`         | 212     | 300+                 |
+| `packages/dispatcher`   | 40      | 90+                  |
+| `examples/voice-retail` | 73      | 73 (sin regresiones) |
+| **Total**               | **325** | **463+**             |
 
 ---
 
@@ -147,17 +174,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### License
+
 - Changed from MIT to **Apache 2.0 + Commons Clause** — source-available, use freely to build products, cannot sell the SDK itself
 
 #### Core (`fitalyagents`) — DX utilities
 
 **SimpleRouter**
+
 - `SimpleRouter` — subscribes to `bus:TASK_AVAILABLE` and routes to `queue:<agent-id>:inbox` via `bus.lpush`
 - `routes: Record<string, string>` — maps `intent_id` → `agent_id`
 - `alwaysNotify?: string[]` — agents that always receive a copy (e.g. InteractionAgent for filler audio)
 - Replaces the manually-written `createSimpleRouter()` pattern that was re-implemented across every E2E test
 
 **AgentBundle**
+
 - `AgentBundle` — lifecycle manager for a group of `NexusAgent` instances and disposable resources
 - `start()` — starts all agents in registration order
 - `shutdown()` — shuts down all agents in reverse order
@@ -166,14 +196,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Dispatcher (`fitalyagents/dispatcher`) — LLM enhancements
 
 **LLMProvider interface**
+
 - `LLMProvider` — minimal `complete(system, user): Promise<string>` interface; wraps any LLM backend
 
 **ClaudeLLMProvider**
+
 - `ClaudeLLMProvider` — wraps `@anthropic-ai/sdk`; reads `ANTHROPIC_API_KEY` from env
 - Defaults to `claude-haiku-4-5-20251001` (fast + cheap for classification tasks)
 - Optional: configure `apiKey`, `model`, `maxTokens`
 
 **DispatcherBootstrapper**
+
 - `DispatcherBootstrapper` — generates intent training examples from agent manifests using an LLM
 - `bootstrapFromManifests(manifests)` — reads capabilities/scope/domain, calls LLM, populates intent library
 - `bootstrapFromRegistry(registry)` — reads all registered agent manifests from `AgentRegistry`
@@ -182,6 +215,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Publishes `bus:INTENT_UPDATED` after each intent for hot-reload
 
 **LLMDirectClassifier**
+
 - `LLMDirectClassifier` — drop-in `IEmbeddingClassifier` replacement that classifies via LLM
 - `init()` — loads intent metadata (no embeddings computed)
 - `classify(text)` — sends intent list + utterance to LLM, returns `ClassifyResult`
@@ -195,12 +229,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Test Coverage
 
-| Package | Tests |
-|---|---|
-| `packages/core` | **212** (+19 SimpleRouter + AgentBundle) |
-| `packages/dispatcher` | **40** (+24 Bootstrapper + LLMDirectClassifier) |
-| `examples/voice-retail` | **73** (no regressions) |
-| **Total** | **325** |
+| Package                 | Tests                                           |
+| ----------------------- | ----------------------------------------------- |
+| `packages/core`         | **212** (+19 SimpleRouter + AgentBundle)        |
+| `packages/dispatcher`   | **40** (+24 Bootstrapper + LLMDirectClassifier) |
+| `examples/voice-retail` | **73** (no regressions)                         |
+| **Total**               | **325**                                         |
 
 ---
 
@@ -211,23 +245,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Core (`fitalyagents`)
 
 **Bus**
+
 - `InMemoryBus` — in-memory event bus with pub/sub and Redis-style queue simulation (`lpush`/`brpop`)
 - `RedisBus` / `createBus(options)` — Redis-backed event bus for production use
 
 **NexusAgent**
+
 - `NexusAgent` base class — all agents extend this; handles inbox listening via `brpop`, start/shutdown lifecycle
 
 **AgentRegistry**
+
 - `AgentRegistry` — registers and queries agent manifests; supports filtering by scope, capability, domain
 
 **ContextStore**
+
 - `InMemoryContextStore` — session-scoped key/value store with access control
 - `enforceAccess()` / `AccessDeniedError` — enforces `ContextAccess` rules
 
 **LockManager**
+
 - `InMemoryLockManager` — distributed-style lock management with TTL and expiry callbacks
 
 **SessionManager**
+
 - `InMemorySessionManager` — full session lifecycle: create, get, assign group, set priority group, pause, resume, terminate
 - `PriorityGroup` type: `0` (social), `1` (individual, default), `2` (employee/system)
 - Employee Interrupt Protocol: `pauseSession(sessionId, pausedBy?)` / `resumeSession(sessionId)`
@@ -236,17 +276,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `onTerminated(callback)` — register cleanup hooks fired on `terminateSession()`
 
 **TaskQueue**
+
 - `InMemoryTaskQueue` — publish, claim, start, complete, fail, cancel tasks; priority ordering; lock integration
 
 **CapabilityRouter**
+
 - `CapabilityRouter` — routes tasks to the correct agent based on capabilities; integrates with TaskQueue and LockManager
 
 **AudioQueueService**
+
 - `InMemoryAudioQueueService` — priority-based audio segment queue with barge-in support
 - `bus:BARGE_IN` event interrupts active audio for a session
 - `start()` returns `Unsubscribe` for clean teardown
 
-**ApprovalQueue** *(new in 1.0.0)*
+**ApprovalQueue** _(new in 1.0.0)_
+
 - `InMemoryApprovalQueue` — human-in-the-loop approval queue for orders and refunds
 - `start()` subscribes to `bus:ORDER_PENDING_APPROVAL`
 - `approve(draftId, approverId)` → publishes `bus:ORDER_APPROVED` + `bus:ACTION_COMPLETED`
@@ -255,6 +299,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ApprovalNotFoundError` / `ApprovalAlreadyResolvedError` error types
 
 **Types & Schemas**
+
 - Full Zod schemas for all event types: `TaskPayloadEvent`, `TaskResultEvent`, `ActionCompletedEvent`, `HeartbeatEvent`, etc.
 - `AgentManifest`, `Domain`, `AgentRole`, `ContextMode`, `ContextAccess` schemas and types
 - `TaskStatus`: `'completed' | 'failed' | 'waiting_approval' | 'cancelled'`
@@ -289,21 +334,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Compatibility
 
-| Component | Minimum | Recommended |
-|---|---|---|
-| Node.js | 18.x | 20.x LTS |
-| Redis | 6.x | 7.x |
-| TypeScript | 5.0 | 5.5+ |
-| pnpm | 8.x | 9.x |
+| Component  | Minimum | Recommended |
+| ---------- | ------- | ----------- |
+| Node.js    | 18.x    | 20.x LTS    |
+| Redis      | 6.x     | 7.x         |
+| TypeScript | 5.0     | 5.5+        |
+| pnpm       | 8.x     | 9.x         |
 
 ### Test Coverage
 
-| Package | Tests |
-|---|---|
-| `packages/core` | 193 tests |
-| `packages/asynctools` | (included in core test run) |
-| `examples/voice-retail` | 73 tests |
-| **Total** | **266 tests** |
+| Package                 | Tests                       |
+| ----------------------- | --------------------------- |
+| `packages/core`         | 193 tests                   |
+| `packages/asynctools`   | (included in core test run) |
+| `examples/voice-retail` | 73 tests                    |
+| **Total**               | **266 tests**               |
 
 ---
 
