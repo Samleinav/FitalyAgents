@@ -18,6 +18,27 @@ describe('InMemoryBus', () => {
     expect(calls).toEqual(['first', 'second'])
   })
 
+  it('runs synchronous subscribers in the same tick while still awaiting async ones', async () => {
+    const bus = new InMemoryBus()
+    const calls: string[] = []
+
+    bus.subscribe('bus:test', () => {
+      calls.push('sync')
+    })
+    bus.subscribe('bus:test', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      calls.push('async')
+    })
+
+    const publishPromise = bus.publish('bus:test', { ok: true })
+
+    expect(calls).toEqual(['sync'])
+
+    await publishPromise
+
+    expect(calls).toEqual(['sync', 'async'])
+  })
+
   it('awaits async exact and pattern subscribers', async () => {
     const bus = new InMemoryBus()
     const calls: string[] = []

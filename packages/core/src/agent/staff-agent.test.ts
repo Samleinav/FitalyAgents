@@ -440,6 +440,62 @@ describe('StaffAgent', () => {
       })
     })
 
+    it('processes an inline command in the activation utterance', async () => {
+      const bus = new InMemoryBus()
+      const staffCmdEvents: unknown[] = []
+      bus.subscribe('bus:STAFF_COMMAND', (d) => staffCmdEvents.push(d))
+
+      const executor = createMockExecutor({
+        apply_discount: { discount_applied: true, new_total: 16_650 },
+      })
+
+      const llm = createMockLLM([
+        {
+          type: 'tool_call',
+          id: 'tc_1',
+          name: 'apply_discount',
+          input: { percentage: 10 },
+        },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const safetyGuard = buildSafetyGuard([
+        { name: 'apply_discount', safety: 'restricted', required_role: 'cashier' },
+      ])
+
+      const cashierProfile: HumanProfile = {
+        id: 'spk_cashier',
+        name: 'Cashier',
+        role: 'cashier',
+        store_id: 'store_001',
+        approval_limits: { discount_max_pct: 10, payment_max: 50_000 },
+      }
+
+      const { agent } = createStaffAgent({
+        bus,
+        llm,
+        executor,
+        safetyGuard,
+        toolRegistry: buildTools({
+          id: 'apply_discount',
+          safety: 'restricted',
+          required_role: 'cashier',
+        }),
+        staffProfiles: new Map([['spk_cashier', cashierProfile]]),
+      } as any)
+
+      await fireSpeechFinal(agent, {
+        session_id: 'session-1',
+        text: 'Fitaly, aplica 10% descuento',
+        speaker_id: 'spk_cashier',
+        role: 'cashier',
+      })
+
+      expect(agent.isSessionActivated('session-1')).toBe(true)
+      expect(executor.execute).toHaveBeenCalledWith('apply_discount', { percentage: 10 })
+      expect(staffCmdEvents).toHaveLength(1)
+    })
+
     it('rejects tool call when staff has insufficient permissions', async () => {
       const bus = new InMemoryBus()
       const staffCmdEvents: unknown[] = []

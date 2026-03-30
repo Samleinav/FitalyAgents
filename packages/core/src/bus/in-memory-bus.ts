@@ -25,13 +25,18 @@ export class InMemoryBus implements IEventBus {
     const errors: unknown[] = []
 
     const invoke = (fn: () => void | Promise<void>) => {
-      pending.push(
-        Promise.resolve()
-          .then(fn)
-          .catch((error) => {
-            errors.push(error)
-          }),
-      )
+      try {
+        const result = fn()
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          pending.push(
+            Promise.resolve(result).catch((error) => {
+              errors.push(error)
+            }),
+          )
+        }
+      } catch (error) {
+        errors.push(error)
+      }
     }
 
     // Exact channel subscribers

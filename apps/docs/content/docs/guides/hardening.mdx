@@ -5,11 +5,11 @@ description: Protect external services with rate limiting, circuit breakers, and
 
 `@fitalyagents/asynctools` lets you attach fault-tolerance policies directly to each `ToolDefinition`. No extra wiring needed — `ExecutorPool` enforces them automatically.
 
-| Policy | What it prevents |
-|---|---|
-| **Retry** | Transient failures (network blip, 500 once) |
-| **Rate limiter** | Exceeding external API quotas |
-| **Circuit breaker** | Cascading failures when a service is down |
+| Policy              | What it prevents                            |
+| ------------------- | ------------------------------------------- |
+| **Retry**           | Transient failures (network blip, 500 once) |
+| **Rate limiter**    | Exceeding external API quotas               |
+| **Circuit breaker** | Cascading failures when a service is down   |
 
 All three work together and are configured in the same `ToolDefinition` object.
 
@@ -24,8 +24,8 @@ registry.register({
   tool_id: 'inventory_check',
   executor: { type: 'http', url: 'https://api.store.com/inventory' },
   retry: {
-    max_attempts: 3,   // attempt 1, then 2 retries
-    backoff_ms: 200,   // 200ms → 400ms → 800ms (exponential)
+    max_attempts: 3, // attempt 1, then 2 retries
+    backoff_ms: 200, // 200ms → 400ms → 800ms (exponential)
   },
 })
 ```
@@ -43,7 +43,7 @@ registry.register({
   tool_id: 'product_search',
   executor: { type: 'http', url: 'https://api.store.com/search' },
   rate_limit: {
-    requests_per_second: 10,  // max 10 calls per sliding second
+    requests_per_second: 10, // max 10 calls per sliding second
   },
 })
 ```
@@ -88,13 +88,15 @@ CLOSED ──(N failures)──▶ OPEN ──(reset_timeout_ms)──▶ HALF_O
                    OPEN (timer reset)
 ```
 
+In `HALF_OPEN`, only one concurrent probe is allowed through. Extra requests stay blocked until that probe either succeeds and closes the circuit, or fails and re-opens it.
+
 ```typescript
 registry.register({
   tool_id: 'order_create',
   executor: { type: 'http', url: 'https://erp.internal/orders' },
   circuit_breaker: {
-    failure_threshold: 5,       // open after 5 consecutive failures
-    reset_timeout_ms: 30_000,   // try a probe after 30s
+    failure_threshold: 5, // open after 5 consecutive failures
+    reset_timeout_ms: 30_000, // try a probe after 30s
   },
 })
 ```
@@ -142,17 +144,17 @@ registry.register({
   execution_mode: 'async',
   timeout_ms: 8_000,
   retry: {
-    max_attempts: 2,     // one retry on transient error
+    max_attempts: 2, // one retry on transient error
     backoff_ms: 500,
   },
   rate_limit: {
-    requests_per_second: 5,   // 5 RPS max (payment processor limit)
+    requests_per_second: 5, // 5 RPS max (payment processor limit)
   },
   circuit_breaker: {
-    failure_threshold: 3,     // open after 3 failures
+    failure_threshold: 3, // open after 3 failures
     reset_timeout_ms: 60_000, // 1 minute cooldown for payments
   },
-  safety: 'restricted',       // requires human approval
+  safety: 'restricted', // requires human approval
   required_role: 'cashier',
 })
 ```
@@ -172,12 +174,16 @@ if (!limiter.tryAcquire()) {
   throw new Error('Rate limit exceeded')
 }
 
-const cb = new CircuitBreaker('my_service', {
-  failure_threshold: 5,
-  reset_timeout_ms: 30_000,
-}, {
-  onOpen: (id) => alert(`${id} is down`),
-})
+const cb = new CircuitBreaker(
+  'my_service',
+  {
+    failure_threshold: 5,
+    reset_timeout_ms: 30_000,
+  },
+  {
+    onOpen: (id) => alert(`${id} is down`),
+  },
+)
 
 if (!cb.allowRequest()) {
   return cachedResponse()
@@ -197,12 +203,12 @@ try {
 
 ## Tool status reference
 
-| Status | Meaning |
-|---|---|
-| `completed` | Tool ran successfully |
-| `failed` | Tool threw an error (after all retries) |
-| `timed_out` | AbortController cancelled the request |
+| Status         | Meaning                                         |
+| -------------- | ----------------------------------------------- |
+| `completed`    | Tool ran successfully                           |
+| `failed`       | Tool threw an error (after all retries)         |
+| `timed_out`    | AbortController cancelled the request           |
 | `rate_limited` | Rejected before execution — sliding window full |
-| `circuit_open` | Rejected before execution — circuit is OPEN |
+| `circuit_open` | Rejected before execution — circuit is OPEN     |
 
 All statuses are typed via `ToolStatus` from `fitalyagents/asynctools`.

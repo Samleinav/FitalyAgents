@@ -8,6 +8,8 @@ import type { HumanProfile, HumanRole } from '../safety/channels/types.js'
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const RESUME_PATTERNS = /\b(continúa|continua|resume|listo|termina|eso es todo)\b/i
+const INLINE_COMMAND_PATTERNS =
+  /^(aplica|apply|ajusta|actualiza|busca|search|cambia|confirma|confirm|crea|create|haz|muestra|muestrame|muéstrame|procesa|reembolsa|refund|revisa)\b/i
 
 const DEFAULT_STAFF_ROLES: HumanRole[] = [
   'staff',
@@ -170,6 +172,15 @@ export class StaffAgent extends StreamAgent {
         })
 
         this.startAutoResumeTimer(session_id)
+
+        const inlineCommand = this.extractInlineCommand(text)
+        if (
+          inlineCommand &&
+          !this.isResumeCommand(inlineCommand) &&
+          this.isInlineCommand(inlineCommand)
+        ) {
+          await this.processStaffCommand(session_id, inlineCommand, staffId, role)
+        }
       }
       return
     }
@@ -208,6 +219,29 @@ export class StaffAgent extends StreamAgent {
 
   private isResumeCommand(text: string): boolean {
     return RESUME_PATTERNS.test(text)
+  }
+
+  private extractInlineCommand(text: string): string | null {
+    const lower = text.toLowerCase()
+
+    for (const keyword of this.activationKeywords) {
+      const normalizedKeyword = keyword.toLowerCase()
+      const index = lower.indexOf(normalizedKeyword)
+      if (index === -1) continue
+
+      const remainder = text
+        .slice(index + keyword.length)
+        .replace(/^[\s,.:;!?-]+/, '')
+        .trim()
+
+      return remainder.length > 0 ? remainder : null
+    }
+
+    return null
+  }
+
+  private isInlineCommand(text: string): boolean {
+    return INLINE_COMMAND_PATTERNS.test(text)
   }
 
   // ── Activation lifecycle ───────────────────────────────────────────────────

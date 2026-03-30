@@ -30,12 +30,12 @@ Layer 3 — Approval Channels
 
 ### The four levels
 
-| Level | Meaning | Dispatcher behavior | LLM behavior |
-|---|---|---|---|
-| `safe` | Read-only. No side effects. | Executes speculatively on SPEECH_PARTIAL | Uses cached result directly |
-| `staged` | Creates a reversible draft. Never commits without confirmation. | Creates draft speculatively | Presents draft to user, waits for confirm |
-| `protected` | Modifies real state. Requires explicit user confirmation. | Does not execute; marks a hint | Asks the user: "Confirm X?" |
-| `restricted` | High impact. Requires a human with the right role. | Does not execute; marks a hint | Collects context, then routes to ApprovalOrchestrator |
+| Level        | Meaning                                                         | Dispatcher behavior                      | LLM behavior                                          |
+| ------------ | --------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------- |
+| `safe`       | Read-only. No side effects.                                     | Executes speculatively on SPEECH_PARTIAL | Uses cached result directly                           |
+| `staged`     | Creates a reversible draft. Never commits without confirmation. | Creates draft speculatively              | Presents draft to user, waits for confirm             |
+| `protected`  | Modifies real state. Requires explicit user confirmation.       | Does not execute; marks a hint           | Asks the user: "Confirm X?"                           |
+| `restricted` | High impact. Requires a human with the right role.              | Does not execute; marks a hint           | Collects context, then routes to ApprovalOrchestrator |
 
 ### Declaring safety on a tool
 
@@ -68,7 +68,7 @@ const toolConfigs: ToolSafetyConfig[] = [
     safety: 'restricted',
     required_role: 'manager',
     approval_channels: [
-      { type: 'voice',   timeout_ms: 15_000 },
+      { type: 'voice', timeout_ms: 15_000 },
       { type: 'webhook', timeout_ms: 90_000 },
     ],
     approval_strategy: 'parallel',
@@ -111,26 +111,30 @@ switch (decision.allowed) {
 
 ```typescript
 type SafetyDecision =
-  | { allowed: true;  execute: true }
-  | { allowed: true;  execute: false; action: 'draft' }
+  | { allowed: true; execute: true }
+  | { allowed: true; execute: false; action: 'draft' }
   | { allowed: false; reason: 'needs_confirmation'; prompt?: string }
-  | { allowed: false; reason: 'needs_approval';
-      escalate_to: HumanRole; channels: ChannelConfig[] }
+  | { allowed: false; reason: 'needs_approval'; escalate_to: HumanRole; channels: ChannelConfig[] }
 ```
 
 ---
 
 ## Layer 2 — Role Hierarchy
 
-### The five roles
+### The five permission levels
+
+The runtime accepts two naming schemes for the same hierarchy:
 
 ```
-customer   No approval permissions. Can interact with the agent.
-staff      No approval permissions. Can ask the agent for help.
-cashier    Can approve payments up to payment_max.
-manager    Can approve refunds, discounts, price overrides (within limits).
-owner      Approves everything. No restrictions.
+user / customer         No approval permissions. Can interact with the agent.
+agent / staff           No approval permissions. Can ask the agent for help.
+operator / cashier      Can approve payments up to payment_max.
+supervisor / manager    Can approve refunds, discounts, price overrides (within limits).
+owner                   Approves everything. No restrictions.
 ```
+
+Use the generic names (`user`, `agent`, `operator`, `supervisor`) in multi-tenant or non-retail systems.
+Retail aliases (`customer`, `staff`, `cashier`, `manager`) remain fully supported.
 
 ### HumanProfile
 
@@ -138,17 +142,18 @@ owner      Approves everything. No restrictions.
 interface HumanProfile {
   id: string
   name: string
-  role: HumanRole          // 'customer' | 'staff' | 'cashier' | 'manager' | 'owner'
-  store_id: string
+  role: HumanRole // 'user'|'customer' | 'agent'|'staff' | 'operator'|'cashier' | 'supervisor'|'manager' | 'owner'
+  org_id?: string // preferred generic tenant/org identifier
+  store_id?: string // legacy retail alias, still supported
   approval_limits: ApprovalLimits
-  voice_embedding?: Float32Array  // registered by VoiceIdentifierAgent
-  is_present?: boolean            // true if identified by voice recently
+  voice_embedding?: Float32Array // registered by VoiceIdentifierAgent
+  is_present?: boolean // true if identified by voice recently
 }
 
 interface ApprovalLimits {
-  payment_max?: number        // max payment amount (undefined = no permission)
-  discount_max_pct?: number   // max discount percentage
-  refund_max?: number         // max refund amount
+  payment_max?: number // max payment amount (undefined = no permission)
+  discount_max_pct?: number // max discount percentage
+  refund_max?: number // max refund amount
   can_override_price?: boolean
   can_adjust_inventory?: boolean
 }
@@ -168,9 +173,13 @@ import { defaultLimits } from 'fitalyagents'
 //                            can_adjust_inventory: true }
 ```
 
-Limits are per-employee and configurable. A cashier can be given a higher `payment_max` than the default.
+Limits are per-employee and configurable.
+`operator` shares the same defaults as `cashier`, and `supervisor` shares the same defaults as `manager`.
+A cashier can be given a higher `payment_max` than the default.
 
 ### Short-circuit: the speaker IS the approval
+
+The examples below use the retail aliases (`customer`, `cashier`, `manager`), but the same logic applies to `user`, `operator`, and `supervisor`.
 
 If the speaker already holds the required role and is within their limits, `SafetyGuard` returns `{ allowed: true, execute: true }` directly — no `ApprovalOrchestrator` needed.
 
@@ -186,17 +195,20 @@ speaker = owner       → YES → always executes directly
 
 ### Permission matrix
 
-| Action | customer | staff | cashier | manager | owner |
-|---|:---:|:---:|:---:|:---:|:---:|
-| product_search | YES | YES | YES | YES | YES |
-| order_create (draft) | YES | YES | YES | YES | YES |
-| payment_process ≤ limit | NO | NO | YES | YES | YES |
-| payment_process > limit | NO | NO | NO | YES | YES |
-| refund_create ≤ 100k | NO | NO | NO | YES | YES |
-| refund_create > 100k | NO | NO | NO | NO | YES |
-| discount_apply ≤ 30% | NO | NO | NO | YES | YES |
-| price_override | NO | NO | NO | YES | YES |
-| config_agent | NO | NO | NO | NO | YES |
+Columns below use the retail aliases. The equivalent generic levels are:
+`customer=user`, `staff=agent`, `cashier=operator`, `manager=supervisor`.
+
+| Action                  | customer | staff | cashier | manager | owner |
+| ----------------------- | :------: | :---: | :-----: | :-----: | :---: |
+| product_search          |   YES    |  YES  |   YES   |   YES   |  YES  |
+| order_create (draft)    |   YES    |  YES  |   YES   |   YES   |  YES  |
+| payment_process ≤ limit |    NO    |  NO   |   YES   |   YES   |  YES  |
+| payment_process > limit |    NO    |  NO   |   NO    |   YES   |  YES  |
+| refund_create ≤ 100k    |    NO    |  NO   |   NO    |   YES   |  YES  |
+| refund_create > 100k    |    NO    |  NO   |   NO    |   NO    |  YES  |
+| discount_apply ≤ 30%    |    NO    |  NO   |   NO    |   YES   |  YES  |
+| price_override          |    NO    |  NO   |   NO    |   YES   |  YES  |
+| config_agent            |    NO    |  NO   |   NO    |   NO    |  YES  |
 
 ---
 
@@ -217,7 +229,7 @@ import {
 const orchestrator = new ApprovalOrchestrator({
   bus,
   channelRegistry: new Map([
-    ['voice',   new VoiceApprovalChannel({ bus, audioQueue })],
+    ['voice', new VoiceApprovalChannel({ bus, audioQueue })],
     ['webhook', new WebhookApprovalChannel({ bus })],
   ]),
   defaultTimeoutMs: 120_000,
@@ -278,6 +290,7 @@ new ExternalToolChannel({
 ```
 
 Configuration:
+
 ```typescript
 {
   type: 'external_tool',
@@ -327,18 +340,20 @@ Use when: there is a preferred channel (voice) and a fallback (app).
 
 ```
 bus:DRAFT_CREATED            {draft_id, session_id, intent_id, summary, ttl}
-bus:DRAFT_CONFIRMED          {draft_id, session_id, order_id}
+bus:DRAFT_CONFIRMED          {draft_id, session_id, intent_id, items, total?}
 bus:DRAFT_CANCELLED          {draft_id, session_id, reason}
-bus:ORDER_PENDING_APPROVAL   {draft_id, session_id, action, amount, required_role}
+bus:ORDER_PENDING_APPROVAL   {request, channels, strategy, approver}
 bus:APPROVAL_VOICE_REQUEST   {request_id, draft_id, approver_id, prompt_text}
-bus:APPROVAL_WEBHOOK_REQUEST {request_id, draft_id, required_role, amount}
+bus:APPROVAL_WEBHOOK_REQUEST {request_id, draft_id, required_role, action, amount?, session_id}
 bus:APPROVAL_EXTERNAL_REQUEST  {request_id, draft_id, payload}
 bus:APPROVAL_EXTERNAL_RESPONSE {request_id, approved, approver_id, reason?}
-bus:APPROVAL_RESOLVED        {request_id, draft_id, approved, approver_id, channel_used}
+bus:APPROVAL_RESOLVED        {request_id, draft_id, approved, approver_id, channel_used, timestamp}
 bus:ORDER_APPROVED           {draft_id, session_id, approved_by, channel_used}
-bus:ORDER_APPROVAL_REJECTED  {draft_id, session_id, reason}
-bus:ORDER_APPROVAL_TIMEOUT   {draft_id, session_id}
+bus:ORDER_APPROVAL_TIMEOUT   {draft_id, session_id, request_id}
+bus:AGENT_ERROR              {agent_id, channel, error, payload?, timestamp}
 ```
+
+`StreamAgent` emits `bus:AGENT_ERROR` whenever `onEvent()` throws, so failures are observable instead of being silently swallowed.
 
 ---
 
@@ -420,9 +435,7 @@ const guard = new SafetyGuard({ toolConfigs })
 
 const orchestrator = new ApprovalOrchestrator({
   bus,
-  channelRegistry: new Map([
-    ['webhook', new WebhookApprovalChannel({ bus })],
-  ]),
+  channelRegistry: new Map([['webhook', new WebhookApprovalChannel({ bus })]]),
 })
 
 orchestrator.start()
@@ -458,13 +471,16 @@ const guard = new SafetyGuard({ toolConfigs })
 const orchestrator = new ApprovalOrchestrator({
   bus,
   channelRegistry: new Map([
-    ['voice',         new VoiceApprovalChannel({ bus, audioQueue })],
-    ['webhook',       new WebhookApprovalChannel({ bus })],
-    ['external_tool', new ExternalToolChannel({
+    ['voice', new VoiceApprovalChannel({ bus, audioQueue })],
+    ['webhook', new WebhookApprovalChannel({ bus })],
+    [
+      'external_tool',
+      new ExternalToolChannel({
         bus,
         url: process.env.APPROVAL_API_URL!,
         auth: process.env.APPROVAL_API_TOKEN!,
-      })],
+      }),
+    ],
   ]),
 })
 
@@ -480,7 +496,7 @@ new UIAgent({ bus }).start()
 
 ## StaffAgent — Employee Override
 
-`StaffAgent` extends the governance model to employees speaking to the system. When an employee says an activation keyword (e.g., *"fitaly"*), the InteractionAgent is paused and the StaffAgent takes control.
+`StaffAgent` extends the governance model to employees speaking to the system. When an employee says an activation keyword (e.g., _"fitaly"_), the InteractionAgent is paused and the StaffAgent takes control.
 
 ```
 Employee: "fitaly, apply 20% discount to this order"
@@ -512,9 +528,9 @@ const staffAgent = new StaffAgent({
   bus,
   llm,
   safetyGuard: guard,
-  activationKeywords: ['fitaly', 'system'],  // default
-  staffRoles: ['staff', 'cashier', 'manager', 'owner'],
-  autoResumeAfterMs: 30_000,  // auto-resume if employee goes silent
+  activationKeywords: ['fitaly', 'system'], // default
+  staffRoles: ['staff', 'agent', 'cashier', 'operator', 'manager', 'supervisor', 'owner'],
+  autoResumeTimeoutMs: 30_000, // auto-resume if employee goes silent
 })
 ```
 

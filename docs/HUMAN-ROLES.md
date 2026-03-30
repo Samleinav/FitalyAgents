@@ -1,62 +1,79 @@
-# Human Roles — FitalyAgents v2
+# Human Roles - FitalyAgents v2
 
-> En v1, los roles estaban en los agentes IA (WorkAgent.role = 'DISPATCHER').
-> En v2, los roles están en los **humanos** que interactúan con el sistema.
-> Los roles definen **quién puede aprobar qué** y con qué límites.
-
----
-
-## Los 5 Roles
-
-```
-customer   → Cliente de la tienda. Sin permisos de aprobación.
-staff      → Vendedor de piso. Sin permisos de aprobación. Puede pedir ayuda al agente.
-cashier    → Cajero. Puede aprobar cobros hasta payment_max. Confirma órdenes.
-manager    → Gerente de tienda. Puede aprobar reembolsos, descuentos, overrides (con límites).
-owner      → Dueño / administrador. Aprueba todo sin restricción. Configura el sistema.
-```
+> In v2, roles belong to the humans interacting with the system, not to the AI agents.
+> They define who can approve what, and with which limits.
 
 ---
 
-## Tipos
+## The 5 permission levels
+
+The runtime accepts two naming schemes for the same hierarchy:
+
+```
+user / customer         No approval permissions. Can interact with the agent.
+agent / staff           No approval permissions. Can ask the agent for help.
+operator / cashier      Can approve payments up to payment_max.
+supervisor / manager    Can approve refunds, discounts, and overrides.
+owner                   Full permissions.
+```
+
+Use the generic names in multi-tenant or non-retail systems.
+Use the retail aliases in store workflows.
+Both are valid and map to the same effective levels.
+
+---
+
+## Types
 
 ```typescript
-type HumanRole = 'customer' | 'staff' | 'cashier' | 'manager' | 'owner'
+type HumanRole =
+  | 'user'
+  | 'customer'
+  | 'agent'
+  | 'staff'
+  | 'operator'
+  | 'cashier'
+  | 'supervisor'
+  | 'manager'
+  | 'owner'
 
 interface HumanProfile {
   id: string
   name: string
   role: HumanRole
-  store_id: string
-  voice_embedding?: Float32Array   // Registrado por VoiceIdentifierAgent
+  org_id?: string // preferred for generic deployments
+  store_id?: string // retail alias, still supported
+  voice_embedding?: Float32Array
   approval_limits: ApprovalLimits
-  is_present?: boolean             // true si VoiceIdentifier lo detectó recientemente
+  is_present?: boolean
 }
 
 interface ApprovalLimits {
-  payment_max?: number             // Monto máximo para cobros (undefined = sin permiso)
-  discount_max_pct?: number        // Porcentaje máximo de descuento
-  refund_max?: number              // Monto máximo para reembolsos
-  can_override_price?: boolean     // Puede hacer price override
-  can_adjust_inventory?: boolean   // Puede ajustar inventario
+  payment_max?: number
+  discount_max_pct?: number
+  refund_max?: number
+  can_override_price?: boolean
+  can_adjust_inventory?: boolean
 }
 ```
 
+`org_id` is the preferred identifier in generic or multi-tenant deployments.
+`store_id` remains valid for retail deployments and backwards compatibility.
+
 ---
 
-## Límites por Defecto
+## Default limits
 
 ```typescript
 const defaultLimits: Record<HumanRole, ApprovalLimits> = {
   customer: {},
+  user: {},
 
   staff: {},
-  // Vendedor de piso: no aprueba nada, pero puede preguntar al agente
+  agent: {},
 
-  cashier: {
-    payment_max: 50_000,
-    // Puede cobrar hasta ₡50,000 sin aprobación adicional
-  },
+  cashier: { payment_max: 50_000 },
+  operator: { payment_max: 50_000 },
 
   manager: {
     payment_max: Infinity,
@@ -64,7 +81,13 @@ const defaultLimits: Record<HumanRole, ApprovalLimits> = {
     refund_max: 100_000,
     can_override_price: true,
     can_adjust_inventory: true,
-    // ₡100,000 límite en reembolsos — más grande requiere owner
+  },
+  supervisor: {
+    payment_max: Infinity,
+    discount_max_pct: 30,
+    refund_max: 100_000,
+    can_override_price: true,
+    can_adjust_inventory: true,
   },
 
   owner: {
@@ -73,214 +96,105 @@ const defaultLimits: Record<HumanRole, ApprovalLimits> = {
     refund_max: Infinity,
     can_override_price: true,
     can_adjust_inventory: true,
-    // Sin restricciones
   },
 }
 ```
 
-Los límites son configurables por tienda en el dashboard de FitalyStore.
+`operator` and `cashier` share defaults.
+`supervisor` and `manager` share defaults.
+Limits can still be customized per human.
 
 ---
 
-## Cómo se Identifica el Rol
+## How roles are identified
 
-### 1. Por voz (VoiceIdentifierAgent)
+### 1. Voice identification
 
-Los empleados se registran con su voz (3-5 frases de ejemplo en el dashboard):
+Employees can be enrolled with sample phrases.
+The system stores `voice_embedding + name + role + org_id/store_id`.
+When someone speaks, the voice identifier resolves a `HumanProfile` if there is a match.
 
-```
-Setup:
-  Gerente abre dashboard → "Registrar empleado"
-  → Empleado dice 3-5 frases al micrófono
-  → Sistema genera voice_embedding (parecido a como face ID funciona)
-  → Asocia: embedding + nombre + rol + store_id
+### 2. App or dashboard session
 
-En operación:
-  Alguien habla → VoiceIdentifierAgent
-    → cosine similarity vs embeddings registrados
-    → ¿match? → speaker = HumanProfile (con rol)
-    → ¿no match? → speaker = { role: 'customer', id: 'anon_xxx' }
-```
+A signed-in employee can have an active `HumanProfile` associated with the current `org_id` or `store_id`.
 
-### 2. Por sesión (dashboard o app)
+### 3. Fallback
 
-El empleado inicia sesión en la app → su `HumanProfile` queda activo para el `store_id`.
-
-### 3. Fallback: desconocido = customer
-
-Si `VoiceIdentifierAgent` no reconoce la voz → `role = 'customer'` → sin permisos de aprobación.
+Unknown speakers default to `customer` / `user`.
 
 ---
 
-## SafetyGuard + Roles
+## How SafetyGuard uses roles
 
-`SafetyGuard.evaluate()` usa el rol del speaker para decidir si puede ejecutar directamente o necesita escalar:
+`SafetyGuard.evaluate()` checks:
+
+1. The tool safety level.
+2. The required role for the action.
+3. The speaker's approval limits.
+
+If the speaker already has the required role and is within limits, the action executes directly.
+If not, the action escalates to approval.
+
+Examples:
 
 ```typescript
-// roleHasPermission compara tool.required_role con speaker.role + limits
-function roleHasPermission(
-  speaker: HumanProfile,
-  toolName: string,
-  params: Record<string, unknown>
-): boolean {
-  const tool = toolRegistry.get(toolName)
-  const limits = speaker.approval_limits
+// operator/cashier can process payments within payment_max
+guard.roleHasPermission(profile, 'payment_process', { amount: 25_000 })
 
-  // Ejemplo: payment_process
-  if (toolName === 'payment_process') {
-    return (limits.payment_max ?? 0) >= (params.amount as number)
-  }
-
-  // Ejemplo: refund_create
-  if (toolName === 'refund_create') {
-    return (limits.refund_max ?? 0) >= (params.amount as number)
-  }
-
-  // Ejemplo: price_override
-  if (toolName === 'price_override') {
-    return limits.can_override_price === true
-  }
-
-  // rol owner siempre puede
-  if (speaker.role === 'owner') return true
-
-  return false
-}
+// supervisor/manager can refund within refund_max
+guard.roleHasPermission(profile, 'refund_create', { amount: 80_000 })
 ```
 
 ---
 
-## Permisos por Acción
+## Permission matrix
 
-| Acción | customer | staff | cashier | manager | owner |
-|---|:---:|:---:|:---:|:---:|:---:|
-| product_search | ✅ | ✅ | ✅ | ✅ | ✅ |
-| price_check | ✅ | ✅ | ✅ | ✅ | ✅ |
-| order_create (draft) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| payment_process ≤ ₡50k | ❌ | ❌ | ✅ | ✅ | ✅ |
-| payment_process > ₡50k | ❌ | ❌ | ❌ | ✅ | ✅ |
-| order_confirm | ❌ | ❌ | ✅ | ✅ | ✅ |
-| refund_create ≤ ₡100k | ❌ | ❌ | ❌ | ✅ | ✅ |
-| refund_create > ₡100k | ❌ | ❌ | ❌ | ❌ | ✅ |
-| discount_apply ≤ 30% | ❌ | ❌ | ❌ | ✅ | ✅ |
-| discount_apply > 30% | ❌ | ❌ | ❌ | ❌ | ✅ |
-| price_override | ❌ | ❌ | ❌ | ✅ | ✅ |
-| inventory_adjustment | ❌ | ❌ | ❌ | ✅ | ✅ |
-| config_agent | ❌ | ❌ | ❌ | ❌ | ✅ |
-| manage_employees | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Action                   | user/customer | agent/staff | operator/cashier | supervisor/manager | owner |
+| ------------------------ | :-----------: | :---------: | :--------------: | :----------------: | :---: |
+| product_search           |      YES      |     YES     |       YES        |        YES         |  YES  |
+| order_create (draft)     |      YES      |     YES     |       YES        |        YES         |  YES  |
+| payment_process <= limit |      NO       |     NO      |       YES        |        YES         |  YES  |
+| payment_process > limit  |      NO       |     NO      |        NO        |        YES         |  YES  |
+| refund_create <= 100k    |      NO       |     NO      |        NO        |        YES         |  YES  |
+| refund_create > 100k     |      NO       |     NO      |        NO        |         NO         |  YES  |
+| discount_apply <= 30%    |      NO       |     NO      |        NO        |        YES         |  YES  |
+| price_override           |      NO       |     NO      |        NO        |        YES         |  YES  |
+| inventory_adjustment     |      NO       |     NO      |        NO        |        YES         |  YES  |
+| config_agent             |      NO       |     NO      |        NO        |         NO         |  YES  |
 
 ---
 
-## Escalación Automática
+## Example scenarios
 
-Cuando el speaker no tiene el rol requerido, `SafetyGuard` devuelve una decisión de escalación:
+### Customer requests a payment
 
-```
-Escalación:
-  1. ¿Hay alguien con el rol requerido identificado por voz en la tienda?
-     → SÍ: VoiceChannel pregunta por voz ("María, ¿apruebas...?")
-     → NO: WebhookChannel notifica por app
+`customer` / `user` has no approval permissions.
+The request escalates to an `operator` / `cashier` or higher.
 
-  2. Si múltiples canales configurados → ApprovalOrchestrator.orchestrate()
-     → parallel: voz + app al mismo tiempo, primero que responde gana
-     → sequential: voz primero, app como fallback
+### Cashier requests a refund
 
-  3. Si nadie responde en approval_timeout_ms:
-     → bus:ORDER_APPROVAL_TIMEOUT
-     → InteractionAgent: "No fue posible obtener aprobación. Intente más tarde."
-```
+`cashier` / `operator` can process payments, but cannot approve refunds.
+The request escalates to `manager` / `supervisor`.
 
----
+### Manager requests a 25% discount
 
-## Escenarios Concretos
+`manager` / `supervisor` can approve it directly because the default discount limit is 30%.
 
-### Escenario A: Cliente pide cobro (sin empleado en piso)
+### Manager requests a 40% discount
 
-```
-Cliente: "Cóbrame"
-→ SafetyGuard: speaker=customer → NO tiene permiso para payment_process
-→ ApprovalOrchestrator: busca cajero o gerente
-→ is_present=false para todos → WebhookChannel
-→ Notificación push a app del cajero/gerente
-→ "No hay cajero disponible ahora. Le notificaré cuando alguien apruebe."
-```
-
-### Escenario B: Cajero identifica su voz y pide cobro
-
-```
-Cajero (María): "Fitaly, cobra la orden 4521"
-→ VoiceIdentifierAgent: speaker=María, role=cashier, payment_max=50_000
-→ SafetyGuard: amount=15_000 ≤ 50_000 → SÍ tiene permiso
-→ Ejecutar directamente
-→ "Cobro de ₡15,000 procesado. Orden 4521."
-```
-
-### Escenario C: Cajero pide reembolso (no tiene permiso)
-
-```
-Cajero (María): "Fitaly, reembolso de la orden 4521"
-→ SafetyGuard: payment_process → cashier ok | refund_create → cashier NO
-→ ApprovalOrchestrator: required_role=manager
-→ VoiceChannel: "Don Carlos, ¿aprueba reembolso de ₡15,000?"
-→ WebhookChannel: notificación app (en paralelo)
-→ Don Carlos responde por voz: "Sí, aprobado"
-→ "El reembolso fue aprobado por el gerente."
-```
-
-### Escenario D: Gerente da descuento del 25%
-
-```
-Gerente (Carlos): "Fitaly, dale 25% de descuento a este cliente"
-→ VoiceIdentifierAgent: speaker=Carlos, role=manager, discount_max_pct=30
-→ SafetyGuard: 25% ≤ 30% → SÍ tiene permiso
-→ Ejecutar directamente
-→ "Descuento del 25% aplicado. Total: ₡11,250."
-```
-
-### Escenario E: Gerente intenta descuento del 40% (fuera de límite)
-
-```
-Gerente (Carlos): "Fitaly, dale 40% de descuento"
-→ SafetyGuard: 40% > 30% (límite del manager) → NO tiene permiso
-→ ApprovalOrchestrator: required_role=owner
-→ VoiceChannel + WebhookChannel
-→ "Descuentos mayores al 30% requieren aprobación del dueño."
-```
+That exceeds the default limit.
+The request escalates to `owner`.
 
 ---
 
-## Dashboard por Rol
+## Registration
 
-| Vista | customer | staff | cashier | manager | owner |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Ver conversación activa | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Aprobar/rechazar (tap) | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Ver órdenes del día | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Ver métricas del día | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Aprobar remotamente (app) | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Ver analytics (Insights) | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Gestionar empleados | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Configurar agente | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Ver todos los locales | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Facturación | ❌ | ❌ | ❌ | ❌ | ✅ |
+When registering an employee, store:
 
----
+1. Name
+2. Role
+3. Voice embedding
+4. `org_id` or `store_id`
+5. Any customized approval limits
 
-## Registro de Empleados
-
-El dueño registra empleados desde el dashboard de FitalyStore:
-
-```
-1. Dashboard → Empleados → Agregar
-2. Ingresar nombre y rol
-3. "Registrar voz": empleado dice 5 frases al micrófono
-   → VoiceIdentifierAgent genera voice_embedding
-   → Guarda en HumanProfile con store_id
-4. Confirmar límites (usar defaults o personalizar)
-5. Empleado queda activo — VoiceIdentifierAgent lo reconoce automáticamente
-```
-
-Los límites por defecto son los del rol, pero el dueño puede ajustarlos por empleado:
-```
-María (cajero) → payment_max personalizado: ₡80,000 (en lugar de ₡50,000 default)
-```
+That is enough for `SafetyGuard`, approval channels, and voice-driven approval flows.
