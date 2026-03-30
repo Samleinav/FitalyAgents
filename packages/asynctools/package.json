@@ -1,6 +1,6 @@
 {
     "name": "@fitalyagents/asynctools",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Standalone async parallel tool execution for any LLM agent",
     "type": "module",
     "exports": {

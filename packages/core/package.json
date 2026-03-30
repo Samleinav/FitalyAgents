@@ -1,6 +1,6 @@
 {
     "name": "fitalyagents",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Multi-agent framework for async parallel tool orchestration and intelligent task dispatch",
     "type": "module",
     "exports": {
