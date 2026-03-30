@@ -1,0 +1,19 @@
+{
+  "name": "openai-agent-example",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "tsx run.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fitalyagents": "workspace:*",
+    "openai": "^4.86.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}

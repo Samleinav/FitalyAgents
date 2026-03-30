@@ -1,0 +1,28 @@
+---
+title: Integrations
+description: Current framework integrations and runnable adapter examples for FitalyAgents.
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card'
+
+FitalyAgents keeps orchestration, safety, approvals, and session state in the runtime. These integrations show how to plug different model SDKs into `InteractionAgent` through `IStreamingLLM`.
+
+Each page links to a runnable example under `examples/`.
+
+<Cards>
+  <Card
+    title="OpenAI SDK"
+    href="/docs/integrations/openai"
+    description="Official OpenAI Node SDK adapter for InteractionAgent"
+  />
+  <Card
+    title="LangChain"
+    href="/docs/integrations/langchain"
+    description="LangChain chat models and tools with FitalyAgents orchestration"
+  />
+  <Card
+    title="Vercel AI SDK"
+    href="/docs/integrations/vercel-ai-sdk"
+    description="Thin streaming adapter using streamText() and the AI SDK model layer"
+  />
+</Cards>

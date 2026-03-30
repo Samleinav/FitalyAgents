@@ -1,257 +1,103 @@
 ---
 title: Vercel AI SDK
-description: Use the Vercel AI SDK as the LLM backend and tool layer for FitalyAgents.
+description: Use the Vercel AI SDK as the model backend for FitalyAgents agents.
 ---
 
-The [Vercel AI SDK](https://sdk.vercel.ai) (`ai` package) provides a unified interface over multiple LLM providers (OpenAI, Anthropic, Google, Mistral, and more) with first-class streaming support. You can use it as the **LLM backend for the Dispatcher** or to power individual agents.
+The Vercel AI SDK is a good fit when you want a provider-agnostic model layer with straightforward streaming primitives.
+
+Runnable example: `examples/vercel-ai-sdk-agent`
 
 ## Install
 
 ```bash
-pnpm add ai
-# plus one provider package:
-pnpm add @ai-sdk/openai        # OpenAI / Azure
-pnpm add @ai-sdk/anthropic     # Claude
-pnpm add @ai-sdk/google        # Gemini
+pnpm add ai @ai-sdk/openai
 ```
 
-## LLM provider for the Dispatcher
+Set your API key:
 
-Implement `LLMProvider` using `generateText`. The single method is `complete(system, user): Promise<string>`:
+```bash
+OPENAI_API_KEY=...
+```
 
-```typescript
-import { type LLMProvider } from 'fitalyagents/dispatcher'
-import { generateText } from 'ai'
+## Adapter shape
+
+The most direct integration is adapting `streamText()` to `IStreamingLLM`.
+
+The runnable example is intentionally text-first. `InteractionAgent` history currently keeps `tool_call_id`, but not the richer tool metadata that AI SDK `ModelMessage` tool parts expect, so the baseline adapter folds prior tool outputs back into assistant text. If you need full AI SDK tool loops, extend the message mapper with your own tool metadata.
+
+```ts
+import { streamText, type ModelMessage } from 'ai'
 import { openai } from '@ai-sdk/openai'
+import type { IStreamingLLM, LLMStreamChunk } from 'fitalyagents'
 
-export class VercelAIProvider implements LLMProvider {
-  constructor(private model = openai('gpt-4o-mini')) {}
+function toModelMessages(
+  messages: Array<{ role: 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }>,
+): ModelMessage[] {
+  return messages.map((message) => {
+    if (message.role === 'tool') {
+      return {
+        role: 'assistant',
+        content: `[Tool result ${message.tool_call_id ?? 'unknown'}]\n${message.content}`,
+      }
+    }
 
-  async complete(system: string, user: string): Promise<string> {
-    const { text } = await generateText({
+    return {
+      role: message.role,
+      content: message.content,
+    }
+  })
+}
+
+class VercelAIStreamingLLM implements IStreamingLLM {
+  private model = openai(process.env.VERCEL_AI_MODEL ?? 'gpt-4o-mini')
+
+  async *stream(params: {
+    system: string
+    messages: Array<{ role: 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }>
+    tools?: Array<{ name: string; description?: string; input_schema?: unknown }>
+  }): AsyncIterable<LLMStreamChunk> {
+    const result = streamText({
       model: this.model,
-      system,
-      prompt: user,
-    })
-    return text
-  }
-}
-```
-
-Swap the model at construction time to change providers without touching the rest of your code:
-
-```typescript
-import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@ai-sdk/google'
-
-// Claude
-new VercelAIProvider(anthropic('claude-3-5-haiku-20241022'))
-
-// Gemini
-new VercelAIProvider(google('gemini-2.0-flash'))
-```
-
-Wire it into `DispatcherBootstrapper` and start `NodeDispatcher`:
-
-```typescript
-import {
-  NodeDispatcher,
-  InMemoryEmbeddingClassifier,
-  InMemoryIntentLibrary,
-  DispatcherBootstrapper,
-} from 'fitalyagents/dispatcher'
-
-const intentLibrary = new InMemoryIntentLibrary()
-const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
-
-const bootstrapper = new DispatcherBootstrapper({
-  intentLibrary,
-  llm: new VercelAIProvider(),
-})
-
-await bootstrapper.bootstrapFromManifests([
-  interactionAgent.manifest,
-  workAgent.manifest,
-  orderAgent.manifest,
-])
-
-await classifier.init()
-
-const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
-await dispatcher.start()
-```
-
-## Use AI SDK tools inside an agent
-
-Register tools from the AI SDK in `ToolRegistry` using `registerFunctionHandler`:
-
-```typescript
-import { ToolRegistry, ExecutorPool, registerFunctionHandler } from '@fitalyagents/asynctools'
-import { tool } from 'ai'
-import { z } from 'zod'
-
-const registry = new ToolRegistry()
-
-// Define the tool schema with AI SDK
-const getWeatherSchema = z.object({ city: z.string() })
-
-registry.register({
-  tool_id: 'get_weather',
-  description: 'Get current weather for a city',
-  executor: { type: 'ts_fn' },
-  timeout_ms: 5000,
-})
-
-registerFunctionHandler('get_weather', async (input) => {
-  const { city } = getWeatherSchema.parse(input)
-  const res = await fetch(`https://wttr.in/${city}?format=j1`)
-  const data = await res.json()
-  return { temperature: data.current_condition[0].temp_C }
-})
-
-const pool = new ExecutorPool(registry)
-```
-
-Use with `pool.execute()` in any agent's `process()`:
-
-```typescript
-import { NexusAgent } from 'fitalyagents'
-
-class WeatherAgent extends NexusAgent {
-  manifest = { agent_id: 'weather-agent', capabilities: ['WEATHER'], /* ... */ }
-
-  async process(task) {
-    const result = await pool.execute('get_weather', task.task_id, { city: task.slots?.city })
-
-    return {
-      status: 'completed',
-      result: result.result,
-      event: 'TASK_RESULT',
-      task_id: task.task_id,
-      session_id: task.session_id,
-      agent_id: this.manifest.agent_id,
-      completed_at: Date.now(),
-    }
-  }
-}
-```
-
-## Streaming responses through the bus
-
-For long-running responses, stream partial text events to the bus so subscribers can display incremental output:
-
-```typescript
-import { streamText } from 'ai'
-import { openai } from '@ai-sdk/openai'
-import { NexusAgent } from 'fitalyagents'
-
-class StreamingAgent extends NexusAgent {
-  manifest = { agent_id: 'streaming-agent', capabilities: ['CHAT'], /* ... */ }
-
-  async process(task) {
-    const { textStream } = streamText({
-      model: openai('gpt-4o-mini'),
-      prompt: task.slots?.message as string,
+      system: params.system,
+      messages: toModelMessages(params.messages),
     })
 
-    let fullText = ''
-
-    for await (const chunk of textStream) {
-      fullText += chunk
-      await this.bus.publish('bus:AGENT_STREAM_CHUNK', {
-        session_id: task.session_id,
-        agent_id: this.manifest.agent_id,
-        chunk,
-      })
+    for await (const chunk of result.textStream) {
+      if (chunk) {
+        yield { type: 'text', text: chunk }
+      }
     }
 
-    return {
-      status: 'completed',
-      result: { text: fullText },
-      event: 'TASK_RESULT',
-      task_id: task.task_id,
-      session_id: task.session_id,
-      agent_id: this.manifest.agent_id,
-      completed_at: Date.now(),
-    }
+    yield { type: 'end', stop_reason: 'end_turn' }
   }
 }
 ```
 
-Subscribe on the client or interaction layer:
+## Using it with `InteractionAgent`
 
-```typescript
-bus.subscribe('bus:AGENT_STREAM_CHUNK', ({ session_id, chunk }) => {
-  // Push to WebSocket, SSE, or TTS pipeline
-  ttsStream.write(chunk)
+```ts
+import { InMemoryBus, InMemoryContextStore, InteractionAgent, SafetyGuard } from 'fitalyagents'
+
+const agent = new InteractionAgent({
+  bus: new InMemoryBus(),
+  llm: new VercelAIStreamingLLM(),
+  contextStore: new InMemoryContextStore(),
+  toolRegistry: new Map(),
+  executor: {
+    async execute(toolId, input) {
+      return { toolId, input }
+    },
+  },
+  safetyGuard: new SafetyGuard({ toolConfigs: [] }),
 })
 ```
 
-## Structured output with `generateObject`
+## When to use it
 
-Use `generateObject` to get typed, schema-validated results from an LLM inside an agent:
+Use the Vercel AI SDK integration when:
 
-```typescript
-import { generateObject } from 'ai'
-import { openai } from '@ai-sdk/openai'
-import { z } from 'zod'
+- you want to swap providers without rewriting your agent shell
+- you care about streaming UX
+- you want the model layer to stay thin and keep orchestration in FitalyAgents
 
-const OrderSchema = z.object({
-  items: z.array(z.object({ sku: z.string(), qty: z.number() })),
-  delivery_date: z.string().optional(),
-})
-
-class ParseAgent extends NexusAgent {
-  manifest = { agent_id: 'parse-agent', capabilities: ['ORDER_PARSE'], /* ... */ }
-
-  async process(task) {
-    const { object } = await generateObject({
-      model: openai('gpt-4o'),
-      schema: OrderSchema,
-      prompt: `Extract order details from: "${task.slots?.utterance}"`,
-    })
-
-    return {
-      status: 'completed',
-      result: object,
-      event: 'TASK_RESULT',
-      task_id: task.task_id,
-      session_id: task.session_id,
-      agent_id: this.manifest.agent_id,
-      completed_at: Date.now(),
-    }
-  }
-}
-```
-
-## Provider-agnostic agent
-
-Because `LanguageModelV1` is the common interface, you can inject the model at bootstrap time:
-
-```typescript
-import { generateText, type LanguageModelV1 } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
-import { NexusAgent, type IEventBus } from 'fitalyagents'
-
-class FlexibleAgent extends NexusAgent {
-  constructor(private model: LanguageModelV1, options: { bus: IEventBus }) {
-    super(options)
-  }
-
-  async process(task) {
-    const { text } = await generateText({ model: this.model, prompt: task.slots?.query as string })
-    return {
-      status: 'completed',
-      result: { text },
-      event: 'TASK_RESULT',
-      task_id: task.task_id,
-      session_id: task.session_id,
-      agent_id: this.manifest.agent_id,
-      completed_at: Date.now(),
-    }
-  }
-}
-
-// At startup — swap without touching agent code:
-const agent = new FlexibleAgent(anthropic('claude-3-5-sonnet-20241022'), { bus })
-```
+The example in `examples/vercel-ai-sdk-agent` is intentionally small so you can extend it with tools or governance later.

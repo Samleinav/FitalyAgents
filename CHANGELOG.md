@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New runnable framework examples under `examples/openai-agent`, `examples/langchain-agent`, and `examples/vercel-ai-sdk-agent`
+- Integration docs refreshed to match the current `InteractionAgent` / `IStreamingLLM` runtime and point to those examples
+
 #### Core — Safety Module (`packages/core/src/safety/`)
 
 **SafetyGuard**

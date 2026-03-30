@@ -1,9 +1,11 @@
 ---
 title: OpenAI SDK
-description: Use the OpenAI Node SDK directly for classification, function calling, and embeddings in FitalyAgents.
+description: Use the official OpenAI Node SDK as the LLM backend for FitalyAgents agents.
 ---
 
-The [OpenAI Node SDK](https://github.com/openai/openai-node) (`openai` package) gives you direct access to chat completions, function calling, embeddings, and streaming. Use it to build a custom `LLMProvider` or power individual agents without adding extra abstraction layers.
+The `openai` package is the most direct way to wire a model into the current FitalyAgents runtime. The main adapter point is `IStreamingLLM`, which powers `InteractionAgent`.
+
+Runnable example: `examples/openai-agent`
 
 ## Install
 
@@ -11,242 +13,112 @@ The [OpenAI Node SDK](https://github.com/openai/openai-node) (`openai` package) 
 pnpm add openai
 ```
 
-Set `OPENAI_API_KEY` in your environment (`.env` or shell):
+Set your API key:
 
 ```bash
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=...
 ```
 
-## LLM provider for the Dispatcher
+## Adapter shape
 
-Implement the `LLMProvider` interface. The single method is `complete(system, user): Promise<string>`:
+`InteractionAgent` expects an object that implements:
 
-```typescript
-import { type LLMProvider } from 'fitalyagents/dispatcher'
+```ts
+interface IStreamingLLM {
+  stream(params: {
+    system: string
+    messages: Array<{ role: 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }>
+    tools?: Array<{ name: string; description?: string; input_schema?: unknown }>
+  }): AsyncIterable<
+    | { type: 'text'; text: string }
+    | { type: 'tool_call'; id: string; name: string; input: unknown }
+    | { type: 'end'; stop_reason: 'end_turn' | 'tool_use' | 'max_tokens' }
+  >
+}
+```
+
+With OpenAI, a minimal adapter looks like this:
+
+```ts
 import OpenAI from 'openai'
+import type { IStreamingLLM, LLMStreamChunk } from 'fitalyagents'
 
-export class OpenAIProvider implements LLMProvider {
-  private client = new OpenAI()
+class OpenAIStreamingLLM implements IStreamingLLM {
+  private client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-  constructor(private model = 'gpt-4o-mini') {}
-
-  async complete(system: string, user: string): Promise<string> {
+  async *stream(params: {
+    system: string
+    messages: Array<{ role: 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }>
+    tools?: Array<{ name: string; description?: string; input_schema?: unknown }>
+  }): AsyncIterable<LLMStreamChunk> {
     const response = await this.client.chat.completions.create({
-      model: this.model,
-      temperature: 0,
+      model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+      temperature: 0.2,
       messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
+        { role: 'system', content: params.system },
+        ...params.messages.map((message) =>
+          message.role === 'tool'
+            ? {
+                role: 'tool' as const,
+                tool_call_id: message.tool_call_id ?? 'tool_call_missing',
+                content: message.content,
+              }
+            : {
+                role: message.role,
+                content: message.content,
+              },
+        ),
       ],
     })
-    return response.choices[0].message.content ?? ''
-  }
-}
-```
 
-Wire it into `DispatcherBootstrapper` to auto-generate training examples, then start `NodeDispatcher`:
+    const message = response.choices[0]?.message
+    const text = typeof message?.content === 'string' ? message.content : ''
+    if (text) {
+      yield { type: 'text', text }
+    }
 
-```typescript
-import {
-  NodeDispatcher,
-  InMemoryEmbeddingClassifier,
-  InMemoryIntentLibrary,
-  DispatcherBootstrapper,
-} from 'fitalyagents/dispatcher'
-
-const intentLibrary = new InMemoryIntentLibrary()
-const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
-
-const bootstrapper = new DispatcherBootstrapper({
-  intentLibrary,
-  llm: new OpenAIProvider('gpt-4o'),
-})
-
-await bootstrapper.bootstrapFromManifests([
-  interactionAgent.manifest,
-  workAgent.manifest,
-  orderAgent.manifest,
-])
-
-await classifier.init()
-
-const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
-await dispatcher.start()
-```
-
-## Function calling for structured extraction
-
-Use OpenAI function calling to reliably extract typed slots from natural language:
-
-```typescript
-import OpenAI from 'openai'
-
-const client = new OpenAI()
-
-const extractSlots = async (utterance: string) => {
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: utterance }],
-    tools: [
-      {
-        type: 'function',
-        function: {
-          name: 'extract_order',
-          description: 'Extract order details from a user utterance',
-          parameters: {
-            type: 'object',
-            properties: {
-              items: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string' },
-                    quantity: { type: 'number' },
-                  },
-                  required: ['name', 'quantity'],
-                },
-              },
-              delivery_address: { type: 'string' },
-            },
-            required: ['items'],
-          },
-        },
-      },
-    ],
-    tool_choice: { type: 'function', function: { name: 'extract_order' } },
-  })
-
-  const call = response.choices[0].message.tool_calls?.[0]
-  return call ? JSON.parse(call.function.arguments) : {}
-}
-```
-
-Use inside an agent's `process()`:
-
-```typescript
-async process(task) {
-  const slots = await extractSlots(task.slots?.raw_utterance as string)
-  return {
-    status: 'completed',
-    result: { slots },
-    event: 'TASK_RESULT',
-    task_id: task.task_id,
-    session_id: task.session_id,
-    agent_id: this.manifest.agent_id,
-    completed_at: Date.now(),
-  }
-}
-```
-
-## Embeddings for semantic intent matching
-
-Generate embeddings and compare them against pre-computed intent vectors as an alternative to LLM classification:
-
-```typescript
-import OpenAI from 'openai'
-
-const client = new OpenAI()
-const EMBEDDING_MODEL = 'text-embedding-3-small'
-
-async function embed(text: string): Promise<number[]> {
-  const response = await client.embeddings.create({ model: EMBEDDING_MODEL, input: text })
-  return response.data[0].embedding
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  const dot = a.reduce((sum, ai, i) => sum + ai * b[i], 0)
-  const magA = Math.sqrt(a.reduce((sum, ai) => sum + ai * ai, 0))
-  const magB = Math.sqrt(b.reduce((sum, bi) => sum + bi * bi, 0))
-  return dot / (magA * magB)
-}
-
-// Pre-compute at startup
-const intentVectors: Map<string, number[]> = new Map()
-
-for (const [intentId, examples] of Object.entries(trainingData)) {
-  const vecs = await Promise.all(examples.map(embed))
-  const avg = vecs[0].map((_, i) => vecs.reduce((s, v) => s + v[i], 0) / vecs.length)
-  intentVectors.set(intentId, avg)
-}
-
-// At classification time — no LLM call needed
-async function classifyByEmbedding(utterance: string) {
-  const vec = await embed(utterance)
-  let best = { intentId: '', score: -1 }
-
-  for (const [intentId, intentVec] of intentVectors) {
-    const score = cosineSimilarity(vec, intentVec)
-    if (score > best.score) best = { intentId, score }
-  }
-
-  return best
-}
-```
-
-This approach is faster and cheaper than a full LLM call for high-volume classification.
-
-## Streaming completions through the bus
-
-Stream token-by-token output to real-time subscribers:
-
-```typescript
-import OpenAI from 'openai'
-import { NexusAgent } from 'fitalyagents'
-
-const client = new OpenAI()
-
-class StreamingAgent extends NexusAgent {
-  manifest = { agent_id: 'streaming-agent', capabilities: ['CHAT'], /* ... */ }
-
-  async process(task) {
-    const stream = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      stream: true,
-      messages: [{ role: 'user', content: task.slots?.message as string }],
-    })
-
-    let fullText = ''
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content ?? ''
-      fullText += delta
-
-      if (delta) {
-        await this.bus.publish('bus:AGENT_STREAM_CHUNK', {
-          session_id: task.session_id,
-          agent_id: this.manifest.agent_id,
-          chunk: delta,
-        })
+    for (const toolCall of message?.tool_calls ?? []) {
+      yield {
+        type: 'tool_call',
+        id: toolCall.id,
+        name: toolCall.function.name,
+        input: JSON.parse(toolCall.function.arguments || '{}'),
       }
     }
 
-    return {
-      status: 'completed',
-      result: { text: fullText },
-      event: 'TASK_RESULT',
-      task_id: task.task_id,
-      session_id: task.session_id,
-      agent_id: this.manifest.agent_id,
-      completed_at: Date.now(),
+    yield {
+      type: 'end',
+      stop_reason: (message?.tool_calls?.length ?? 0) > 0 ? 'tool_use' : 'end_turn',
     }
   }
 }
 ```
 
-## Using Azure OpenAI
+## Using it with `InteractionAgent`
 
-Pass Azure credentials at client construction — no other changes needed:
+```ts
+import { InMemoryBus, InMemoryContextStore, InteractionAgent, SafetyGuard } from 'fitalyagents'
 
-```typescript
-import OpenAI from 'openai'
-
-const client = new OpenAI({
-  apiKey: process.env.AZURE_OPENAI_API_KEY,
-  baseURL: `https://${process.env.AZURE_OPENAI_RESOURCE}.openai.azure.com/openai/deployments/${process.env.AZURE_DEPLOYMENT}`,
-  defaultQuery: { 'api-version': '2024-08-01-preview' },
-  defaultHeaders: { 'api-key': process.env.AZURE_OPENAI_API_KEY! },
+const agent = new InteractionAgent({
+  bus: new InMemoryBus(),
+  llm: new OpenAIStreamingLLM(),
+  contextStore: new InMemoryContextStore(),
+  toolRegistry: new Map(),
+  executor: {
+    async execute(toolId, input) {
+      return { toolId, input }
+    },
+  },
+  safetyGuard: new SafetyGuard({ toolConfigs: [] }),
 })
-
-// Use the same OpenAIProvider class with this client
 ```
+
+## Tool calling
+
+If you want OpenAI tool calls to flow through FitalyAgents governance, pass `tools` through your adapter and emit `tool_call` chunks. The runnable example in `examples/openai-agent` already does this. `InteractionAgent` will route them through:
+
+- `SafetyGuard`
+- `InMemoryDraftStore`
+- `ApprovalOrchestrator`
+
+For a ready-to-run baseline, start from `examples/openai-agent` and then add tools to the `toolRegistry`.

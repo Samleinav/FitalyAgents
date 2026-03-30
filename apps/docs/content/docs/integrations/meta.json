@@ -1,8 +1,4 @@
 {
   "title": "Integrations",
-  "pages": [
-    "langchain",
-    "vercel-ai-sdk",
-    "openai"
-  ]
+  "pages": ["index", "langchain", "vercel-ai-sdk", "openai"]
 }

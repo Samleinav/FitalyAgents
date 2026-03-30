@@ -11,6 +11,7 @@ full: true
 - Human role compatibility now accepts generic aliases (`user`, `agent`, `operator`, `supervisor`) alongside the original retail names, and `HumanProfile` accepts `org_id` in addition to `store_id`.
 - `StaffAgent` default roles now cover both alias families, and activation utterances such as `Fitaly, aplica...` can execute an inline operational command when the phrase clearly looks actionable.
 - Governance, human-role, and hardening docs were aligned with current runtime behavior, including `bus:AGENT_ERROR` and the real `HALF_OPEN` semantics.
+- OpenAI SDK, LangChain, and Vercel AI SDK integration guides now match the current `InteractionAgent` / `IStreamingLLM` runtime and link to runnable example folders.
 
 ### Fixed
 
@@ -19,6 +20,10 @@ full: true
 - `StreamAgent` now emits `bus:AGENT_ERROR` when `onEvent()` fails instead of swallowing the failure silently.
 - TTL expiry in `DraftStore` once again publishes `bus:DRAFT_CANCELLED` deterministically on `InMemoryBus`.
 - Multi-agent staff handoff flows now surface `STAFF_COMMAND` updates correctly in the UI path.
+
+### Added
+
+- New runnable examples in `examples/openai-agent`, `examples/langchain-agent`, and `examples/vercel-ai-sdk-agent`.
 
 ## v1.2.0 — 2026-03-06
 

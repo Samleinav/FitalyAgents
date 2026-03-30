@@ -1,247 +1,112 @@
 ---
 title: LangChain
-description: Use LangChain tools, chains, and chat models inside FitalyAgents.
+description: Use LangChain chat models and tools with the current FitalyAgents runtime.
 ---
 
-[LangChain](https://js.langchain.com) provides a rich ecosystem of tools, retrievers, memory, and chain primitives. FitalyAgents integrates with it at three layers: **tools**, **LLM provider**, and **memory**.
+LangChain is useful when you want provider abstraction, prompt composition, retrievers, or tool ecosystems while still using FitalyAgents as the runtime shell.
+
+Runnable example: `examples/langchain-agent`
 
 ## Install
 
 ```bash
-pnpm add langchain @langchain/core @langchain/openai
-# or for Anthropic models
-pnpm add @langchain/anthropic
+pnpm add @langchain/core @langchain/openai
 ```
 
-## Use LangChain tools inside an agent
+Set your API key:
 
-Register LangChain tools in the `ToolRegistry` and attach a handler that calls `lcTool.invoke()`:
+```bash
+OPENAI_API_KEY=...
+```
 
-```typescript
-import { ToolRegistry, ExecutorPool, registerFunctionHandler } from '@fitalyagents/asynctools'
-import { TavilySearchResults } from '@langchain/community/tools/tavily_search'
-import { Calculator } from '@langchain/community/tools/calculator'
+## LangChain as the LLM backend
+
+The cleanest integration is to adapt a LangChain chat model to `IStreamingLLM`:
+
+```ts
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages'
+import { ChatOpenAI } from '@langchain/openai'
+import type { IStreamingLLM, LLMStreamChunk } from 'fitalyagents'
+
+class LangChainStreamingLLM implements IStreamingLLM {
+  private model = new ChatOpenAI({
+    model: process.env.LANGCHAIN_MODEL ?? 'gpt-4o-mini',
+    temperature: 0.2,
+  })
+
+  async *stream(params: {
+    system: string
+    messages: Array<{ role: 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }>
+    tools?: Array<{ name: string; description?: string; input_schema?: unknown }>
+  }): AsyncIterable<LLMStreamChunk> {
+    const response = await this.model.invoke([
+      new SystemMessage(params.system),
+      ...params.messages.map((message) => {
+        if (message.role === 'assistant') {
+          return new AIMessage(message.content)
+        }
+        if (message.role === 'tool') {
+          return new ToolMessage({
+            content: message.content,
+            tool_call_id: message.tool_call_id ?? 'tool_call_missing',
+          })
+        }
+        return new HumanMessage(message.content)
+      }),
+    ])
+
+    const text =
+      typeof response.content === 'string'
+        ? response.content
+        : response.content
+            .map((part) =>
+              typeof part === 'string' ? part : 'text' in part ? String(part.text) : '',
+            )
+            .join('')
+    if (text) {
+      yield { type: 'text', text }
+    }
+
+    yield { type: 'end', stop_reason: 'end_turn' }
+  }
+}
+```
+
+Then use that adapter inside `InteractionAgent`.
+
+## LangChain tools with `@fitalyagents/asynctools`
+
+LangChain tools also fit naturally into `ToolRegistry`:
+
+```ts
+import { ToolRegistry, registerFunctionHandler } from '@fitalyagents/asynctools'
+import { DynamicStructuredTool } from '@langchain/core/tools'
+import { z } from 'zod'
+
+const catalogTool = new DynamicStructuredTool({
+  name: 'catalog_search',
+  description: 'Search a product catalog',
+  schema: z.object({ query: z.string() }),
+  func: async ({ query }) => JSON.stringify({ results: [`Result for ${query}`] }),
+})
 
 const registry = new ToolRegistry()
-
-const tavilyTool = new TavilySearchResults({ maxResults: 3 })
-const calculatorTool = new Calculator()
-
 registry.register({
-  tool_id: 'web_search',
-  description: 'Search the web for current information',
+  tool_id: 'catalog_search',
   executor: { type: 'ts_fn' },
-  timeout_ms: 8000,
+  execution_mode: 'async',
 })
 
-registerFunctionHandler('web_search', async (input) => {
-  const result = await tavilyTool.invoke(input)
-  return { result }
-})
-
-registry.register({
-  tool_id: 'calculator',
-  description: 'Evaluate mathematical expressions',
-  executor: { type: 'ts_fn' },
-  timeout_ms: 1000,
-})
-
-registerFunctionHandler('calculator', async (input) => {
-  const result = await calculatorTool.invoke(input)
-  return { result }
-})
-
-const pool = new ExecutorPool(registry)
-```
-
-Use `pool.execute()` inside `NexusAgent.process()`:
-
-```typescript
-import { NexusAgent } from 'fitalyagents'
-
-class ResearchAgent extends NexusAgent {
-  manifest = {
-    agent_id: 'research-agent',
-    capabilities: ['SEARCH', 'CALCULATE'],
-    requires_human_approval: false,
-    priority_group: 1,
-  }
-
-  async process(task) {
-    // Both tools fire simultaneously
-    const [searchResult, calcResult] = await Promise.all([
-      pool.execute('web_search',  `${task.task_id}_s`, { query: task.slots?.query }),
-      pool.execute('calculator',  `${task.task_id}_c`, { expression: task.slots?.expression }),
-    ])
-
-    return {
-      status: 'completed',
-      result: { search: searchResult.result, calc: calcResult.result },
-      event: 'TASK_RESULT',
-      task_id: task.task_id,
-      session_id: task.session_id,
-      agent_id: this.manifest.agent_id,
-      completed_at: Date.now(),
-    }
-  }
-}
-```
-
-## LangChain as the Dispatcher LLM provider
-
-Implement the `LLMProvider` interface. The single method is `complete(system, user): Promise<string>`:
-
-```typescript
-import { type LLMProvider } from 'fitalyagents/dispatcher'
-import { ChatOpenAI } from '@langchain/openai'
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-
-export class LangChainLLMProvider implements LLMProvider {
-  private model: ChatOpenAI
-
-  constructor(modelName = 'gpt-4o-mini') {
-    this.model = new ChatOpenAI({ model: modelName, temperature: 0 })
-  }
-
-  async complete(system: string, user: string): Promise<string> {
-    const response = await this.model.invoke([
-      new SystemMessage(system),
-      new HumanMessage(user),
-    ])
-    return response.content as string
-  }
-}
-```
-
-Register it with `DispatcherBootstrapper` to auto-generate training examples, then wire it into `NodeDispatcher`:
-
-```typescript
-import {
-  NodeDispatcher,
-  InMemoryEmbeddingClassifier,
-  InMemoryIntentLibrary,
-  DispatcherBootstrapper,
-} from 'fitalyagents/dispatcher'
-
-const intentLibrary = new InMemoryIntentLibrary()
-const classifier = new InMemoryEmbeddingClassifier({ intentLibrary })
-
-const bootstrapper = new DispatcherBootstrapper({
-  intentLibrary,
-  llm: new LangChainLLMProvider('gpt-4o'),
-})
-
-await bootstrapper.bootstrapFromManifests([
-  researchAgent.manifest,
-  orderAgent.manifest,
-])
-
-await classifier.init()
-
-const dispatcher = new NodeDispatcher({ bus, classifier, intentLibrary })
-await dispatcher.start()
-```
-
-## Use LangChain memory with session context
-
-Bind a `BufferMemory` per session using `InMemorySessionManager`:
-
-```typescript
-import { BufferMemory } from 'langchain/memory'
-import { InMemorySessionManager } from 'fitalyagents'
-
-const sessionManager = new InMemorySessionManager({ bus })
-const memories = new Map<string, BufferMemory>()
-
-function getMemory(sessionId: string): BufferMemory {
-  if (!memories.has(sessionId)) {
-    memories.set(sessionId, new BufferMemory({ returnMessages: true }))
-  }
-  return memories.get(sessionId)!
-}
-
-// Inside an agent's process():
-async process(task) {
-  const memory = getMemory(task.session_id)
-  const history = await memory.loadMemoryVariables({})
-
-  const chain = new LLMChain({ llm: model, memory })
-  const result = await chain.call({ input: task.slots?.query })
-
-  return {
-    status: 'completed',
-    result: { answer: result.text },
-    event: 'TASK_RESULT',
-    task_id: task.task_id,
-    session_id: task.session_id,
-    agent_id: this.manifest.agent_id,
-    completed_at: Date.now(),
-  }
-}
-```
-
-## Use a LangChain LCEL chain inside an agent
-
-For complex multi-step pipelines, compose a chain with LCEL and call it from `process()`:
-
-```typescript
-import { ChatPromptTemplate } from '@langchain/core/prompts'
-import { StringOutputParser } from '@langchain/core/output_parsers'
-import { ChatAnthropic } from '@langchain/anthropic'
-
-const model = new ChatAnthropic({ model: 'claude-3-5-haiku-20241022' })
-
-const chain = ChatPromptTemplate.fromMessages([
-  ['system', 'You are a helpful assistant for a retail store.'],
-  ['human', '{question}'],
-])
-  .pipe(model)
-  .pipe(new StringOutputParser())
-
-class SupportAgent extends NexusAgent {
-  manifest = { agent_id: 'support-agent', capabilities: ['FAQ'], /* ... */ }
-
-  async process(task) {
-    const answer = await chain.invoke({ question: task.slots?.question })
-    return {
-      status: 'completed',
-      result: { answer },
-      event: 'TASK_RESULT',
-      task_id: task.task_id,
-      session_id: task.session_id,
-      agent_id: this.manifest.agent_id,
-      completed_at: Date.now(),
-    }
-  }
-}
-```
-
-## RAG with a LangChain retriever
-
-Register a vector store retriever as a tool in `ToolRegistry`:
-
-```typescript
-import { MemoryVectorStore } from 'langchain/vectorstores/memory'
-import { OpenAIEmbeddings } from '@langchain/openai'
-import { Document } from '@langchain/core/documents'
-
-const vectorStore = await MemoryVectorStore.fromDocuments(
-  [new Document({ pageContent: 'Return policy: 30 days.' })],
-  new OpenAIEmbeddings()
-)
-
-registry.register({
-  tool_id: 'knowledge_base',
-  description: 'Retrieve documents from the knowledge base',
-  executor: { type: 'ts_fn' },
-  timeout_ms: 3000,
-})
-
-registerFunctionHandler('knowledge_base', async (input) => {
-  const { query } = input as { query: string }
-  const docs = await vectorStore.similaritySearch(query, 3)
-  return { documents: docs.map(d => d.pageContent) }
+registerFunctionHandler('catalog_search', async (input) => {
+  return { result: await catalogTool.invoke(input) }
 })
 ```
 
-Use it with `pool.execute('knowledge_base', callId, { query })` in any agent.
+This lets LangChain handle tool implementation while FitalyAgents keeps concurrency, retries, circuit breaking, and governance outside the framework.
+
+## Recommended split
+
+- Use LangChain for prompts, model adapters, retrievers, and tool definitions
+- Use FitalyAgents for event flow, session state, safety, approvals, and orchestration
+
+That boundary keeps examples small and production behavior predictable.
