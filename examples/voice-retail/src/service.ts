@@ -14,7 +14,8 @@
  *   STORE_ID           — Store identifier (default: store-001)
  */
 import Anthropic from '@anthropic-ai/sdk'
-import { createBus, WorkAgent, DEFAULT_INTENT_TOOL_MAP } from '../../../packages/core/src/index.js'
+import { createBus } from 'fitalyagents'
+import { WorkAgent, DEFAULT_INTENT_TOOL_MAP } from './index.js'
 import { MockToolExecutor } from './agents/work/mock-tool-executor.js'
 
 // ── Types ────────────────────────────────────────────────────────────────────
