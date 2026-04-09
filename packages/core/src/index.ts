@@ -43,6 +43,9 @@ export type {
   TargetGroupEvent,
   ProactiveTriggerEvent,
   TargetGroupChangedEvent,
+  AvatarSpeakEvent,
+  ResponseStartEvent,
+  ResponseEndEvent,
   InteractionPauseEvent,
   InteractionResumeEvent,
   StaffCommandEvent,
@@ -86,6 +89,9 @@ export {
   TargetGroupEventSchema,
   ProactiveTriggerEventSchema,
   TargetGroupChangedEventSchema,
+  AvatarSpeakEventSchema,
+  ResponseStartEventSchema,
+  ResponseEndEventSchema,
   InteractionPauseEventSchema,
   InteractionResumeEventSchema,
   StaffCommandEventSchema,
@@ -143,6 +149,21 @@ export type {
   SpeakerLostPayload,
   SpeakerAmbientPayload,
 } from './agent/target-group-bridge.js'
+export { AvatarAgent } from './agent/avatar-agent.js'
+export type { AvatarAgentDeps } from './agent/avatar-agent.js'
+export { AIRIRenderer } from './agent/avatar-renderer-airi.js'
+export type {
+  AIRIRendererConfig,
+  AIRIWebSocketConstructor,
+  AIRIWebSocketLike,
+} from './agent/avatar-renderer-airi.js'
+export { MockAvatarRenderer } from './agent/avatar-renderer-mock.js'
+export type {
+  AvatarCommand,
+  AvatarExpression,
+  AvatarState,
+  IAvatarRenderer,
+} from './agent/avatar-types.js'
 
 // Context
 export { InMemoryContextStore } from './context/in-memory-context-store.js'

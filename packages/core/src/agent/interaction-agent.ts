@@ -1,4 +1,4 @@
-import type { IEventBus } from '../types/index.js'
+import type { IEventBus, ResponseEndEvent } from '../types/index.js'
 import type { IContextStore } from '../context/types.js'
 import type { SafetyGuard } from '../safety/safety-guard.js'
 import type { InMemoryDraftStore } from '../safety/draft-store.js'
@@ -153,6 +153,7 @@ export class InteractionAgent {
   private readonly ttsCallback: (text: string, sessionId: string) => void
   private readonly systemPrompt: string
   private readonly tracer: ITracer
+  private turnSequence = 0
 
   /**
    * Tracks PROTECTED tools waiting for client confirmation.
@@ -216,6 +217,8 @@ export class InteractionAgent {
     const textChunks: string[] = []
     const toolResults: ToolCallResult[] = []
     const t0 = Date.now()
+    const turnId = this.createTurnId(session_id)
+    let responseEndReason: ResponseEndEvent['reason'] = 'end_turn'
 
     // ── Observability: start turn trace ──────────────────────────────────────
     const trace: ITrace = this.tracer.startTrace('speech_turn', {
@@ -229,78 +232,190 @@ export class InteractionAgent {
     // 2. Build tools list for the LLM
     const tools = this.buildToolsList()
 
-    // 3. Stream LLM response
-    const llmStart = Date.now()
-    const llmSpan = trace.span('llm_stream', { system: this.systemPrompt, toolCount: tools.length })
+    this.publishResponseStart(session_id, speaker_id, turnId)
 
-    for await (const chunk of this.llm.stream({
-      system: this.systemPrompt,
-      messages,
-      tools: tools.length > 0 ? tools : undefined,
-    })) {
-      switch (chunk.type) {
-        case 'text': {
-          textChunks.push(chunk.text)
-          this.ttsCallback(chunk.text, session_id)
-          break
-        }
+    try {
+      // 3. Stream LLM response
+      const llmStart = Date.now()
+      const llmSpan = trace.span('llm_stream', {
+        system: this.systemPrompt,
+        toolCount: tools.length,
+      })
 
-        case 'tool_call': {
-          const toolSpan = trace.span(`tool_${chunk.name}`, {
-            input: chunk.input as Record<string, unknown>,
-          })
-          const result = await this.handleToolCall(chunk.name, chunk.input, session_id, speaker_id)
-          toolResults.push(result)
-          toolSpan.end({ type: result.type })
-          break
-        }
+      for await (const chunk of this.llm.stream({
+        system: this.systemPrompt,
+        messages,
+        tools: tools.length > 0 ? tools : undefined,
+      })) {
+        switch (chunk.type) {
+          case 'text': {
+            textChunks.push(chunk.text)
+            this.emitSpeechChunk(chunk.text, session_id, {
+              speakerId: speaker_id,
+              turnId,
+              isFinal: false,
+            })
+            break
+          }
 
-        case 'end': {
-          // Stream finished
-          break
+          case 'tool_call': {
+            const toolSpan = trace.span(`tool_${chunk.name}`, {
+              input: chunk.input as Record<string, unknown>,
+            })
+            const result = await this.handleToolCall(
+              chunk.name,
+              chunk.input,
+              session_id,
+              speaker_id,
+            )
+            toolResults.push(result)
+            toolSpan.end({ type: result.type })
+            break
+          }
+
+          case 'end': {
+            responseEndReason = chunk.stop_reason
+            break
+          }
         }
       }
+
+      if (textChunks.length > 0) {
+        this.publishAvatarSpeak(session_id, '', {
+          speakerId: speaker_id,
+          turnId,
+          isFinal: true,
+        })
+      }
+
+      const fullText = textChunks.join('')
+      llmSpan.end({ textChunks: textChunks.length, toolResults: toolResults.length })
+
+      // Record LLM generation with latency
+      trace.generation({
+        name: 'interaction_llm',
+        input: messages,
+        output: fullText || null,
+        latencyMs: Date.now() - llmStart,
+      })
+
+      // 4. Store conversation in context
+      if (fullText) {
+        await this.contextStore.set(session_id, 'last_response', fullText)
+      }
+      await this.contextStore.set(session_id, 'last_user_text', text)
+
+      // 5. Publish completion event
+      await this.bus.publish('bus:ACTION_COMPLETED', {
+        event: 'ACTION_COMPLETED',
+        task_id: `interaction_${Date.now()}`,
+        session_id,
+        intent_id: 'interaction',
+        agent_id: 'InteractionAgent',
+        result: { textChunks: textChunks.length, toolResults: toolResults.length },
+        timestamp: Date.now(),
+      })
+
+      // 6. Invalidate speculative cache at end of turn
+      this.speculativeCache?.invalidate(session_id)
+
+      // ── Observability: end trace ─────────────────────────────────────────────
+      trace.end({
+        latencyMs: Date.now() - t0,
+        textChunks: textChunks.length,
+        toolResults: toolResults.length,
+      })
+
+      return { textChunks, toolResults, traceId: trace.traceId }
+    } catch (error) {
+      responseEndReason = 'error'
+      throw error
+    } finally {
+      this.publishResponseEnd(session_id, speaker_id, turnId, responseEndReason)
     }
+  }
 
-    const fullText = textChunks.join('')
-    llmSpan.end({ textChunks: textChunks.length, toolResults: toolResults.length })
+  private createTurnId(sessionId: string): string {
+    this.turnSequence += 1
+    return `turn_${sessionId}_${Date.now()}_${this.turnSequence}`
+  }
 
-    // Record LLM generation with latency
-    trace.generation({
-      name: 'interaction_llm',
-      input: messages,
-      output: fullText || null,
-      latencyMs: Date.now() - llmStart,
-    })
+  private publishResponseStart(
+    sessionId: string,
+    speakerId: string | undefined,
+    turnId: string,
+  ): void {
+    void this.bus
+      .publish('bus:RESPONSE_START', {
+        event: 'RESPONSE_START',
+        session_id: sessionId,
+        speaker_id: speakerId,
+        turn_id: turnId,
+        timestamp: Date.now(),
+      })
+      .catch(() => {
+        // Visual lifecycle events must never break interaction flow.
+      })
+  }
 
-    // 4. Store conversation in context
-    if (fullText) {
-      await this.contextStore.set(session_id, 'last_response', fullText)
-    }
-    await this.contextStore.set(session_id, 'last_user_text', text)
+  private publishResponseEnd(
+    sessionId: string,
+    speakerId: string | undefined,
+    turnId: string,
+    reason: ResponseEndEvent['reason'],
+  ): void {
+    void this.bus
+      .publish('bus:RESPONSE_END', {
+        event: 'RESPONSE_END',
+        session_id: sessionId,
+        speaker_id: speakerId,
+        turn_id: turnId,
+        reason,
+        timestamp: Date.now(),
+      })
+      .catch(() => {
+        // Visual lifecycle events must never break interaction flow.
+      })
+  }
 
-    // 5. Publish completion event
-    await this.bus.publish('bus:ACTION_COMPLETED', {
-      event: 'ACTION_COMPLETED',
-      task_id: `interaction_${Date.now()}`,
-      session_id,
-      intent_id: 'interaction',
-      agent_id: 'InteractionAgent',
-      result: { textChunks: textChunks.length, toolResults: toolResults.length },
-      timestamp: Date.now(),
-    })
+  private emitSpeechChunk(
+    text: string,
+    sessionId: string,
+    options: {
+      speakerId?: string
+      turnId?: string
+      intentId?: string
+      isFinal?: boolean
+    } = {},
+  ): void {
+    this.ttsCallback(text, sessionId)
+    this.publishAvatarSpeak(sessionId, text, options)
+  }
 
-    // 6. Invalidate speculative cache at end of turn
-    this.speculativeCache?.invalidate(session_id)
-
-    // ── Observability: end trace ─────────────────────────────────────────────
-    trace.end({
-      latencyMs: Date.now() - t0,
-      textChunks: textChunks.length,
-      toolResults: toolResults.length,
-    })
-
-    return { textChunks, toolResults, traceId: trace.traceId }
+  private publishAvatarSpeak(
+    sessionId: string,
+    text: string,
+    options: {
+      speakerId?: string
+      turnId?: string
+      intentId?: string
+      isFinal?: boolean
+    } = {},
+  ): void {
+    void this.bus
+      .publish('bus:AVATAR_SPEAK', {
+        event: 'AVATAR_SPEAK',
+        session_id: sessionId,
+        speaker_id: options.speakerId,
+        turn_id: options.turnId ?? this.createTurnId(sessionId),
+        text,
+        intent_id: options.intentId,
+        is_final: options.isFinal ?? true,
+        timestamp: Date.now(),
+      })
+      .catch(() => {
+        // Avatar output must never break the interaction turn.
+      })
   }
 
   /**
@@ -405,7 +520,7 @@ export class InteractionAgent {
     this.pendingConfirmations.set(sessionId, { toolDef, input })
 
     const prompt = toolDef.confirm_prompt ?? `¿Desea confirmar la acción "${toolDef.tool_id}"?`
-    this.ttsCallback(prompt, sessionId)
+    this.emitSpeechChunk(prompt, sessionId)
 
     return {
       type: 'needs_confirmation',
@@ -425,7 +540,7 @@ export class InteractionAgent {
     }
 
     // Notify via TTS that we're waiting for approval
-    this.ttsCallback('Un momento, necesito autorización para esta acción.', sessionId)
+    this.emitSpeechChunk('Un momento, necesito autorización para esta acción.', sessionId)
 
     const resolvedRole: HumanRole = toolDef.required_role ?? 'manager'
 
@@ -533,7 +648,7 @@ export class InteractionAgent {
         // Execute the real action now
         try {
           const result = await this.executor.execute(draft.intent_id, draft.items)
-          this.ttsCallback('Listo, orden confirmada.', sessionId)
+          this.emitSpeechChunk('Listo, orden confirmada.', sessionId)
 
           await this.bus.publish('bus:ACTION_COMPLETED', {
             event: 'ACTION_COMPLETED',
@@ -545,7 +660,7 @@ export class InteractionAgent {
             timestamp: Date.now(),
           })
         } catch (err) {
-          this.ttsCallback(`Hubo un error al procesar: ${String(err)}`, sessionId)
+          this.emitSpeechChunk(`Hubo un error al procesar: ${String(err)}`, sessionId)
         }
 
         return { type: 'confirmed', draftId: draft.id }
@@ -562,7 +677,7 @@ export class InteractionAgent {
           const summary = Object.entries(updatedDraft.items)
             .map(([k, v]) => `${k}: ${v}`)
             .join(', ')
-          this.ttsCallback(`Actualizado. Ahora tienes: ${summary}. ¿Confirmas?`, sessionId)
+          this.emitSpeechChunk(`Actualizado. Ahora tienes: ${summary}. ¿Confirmas?`, sessionId)
         }
 
         return { type: 'modified', draftId: draft.id, changes }
@@ -570,7 +685,7 @@ export class InteractionAgent {
 
       case 'cancel': {
         await this.draftStore.cancel(draft.id)
-        this.ttsCallback('Orden cancelada.', sessionId)
+        this.emitSpeechChunk('Orden cancelada.', sessionId)
         return { type: 'cancelled', draftId: draft.id }
       }
 
@@ -587,7 +702,7 @@ export class InteractionAgent {
     return this.bus.subscribe('bus:DRAFT_CANCELLED', (data) => {
       const event = data as { session_id: string; reason: string }
       if (event.reason === 'ttl_expired') {
-        this.ttsCallback('Tu orden ha expirado por inactividad.', event.session_id)
+        this.emitSpeechChunk('Tu orden ha expirado por inactividad.', event.session_id)
       }
     })
   }
@@ -675,7 +790,7 @@ export class InteractionAgent {
 
       try {
         const result = await this.executor.execute(pending.toolDef.tool_id, pending.input)
-        this.ttsCallback('Acción ejecutada correctamente.', sessionId)
+        this.emitSpeechChunk('Acción ejecutada correctamente.', sessionId)
 
         await this.bus.publish('bus:ACTION_COMPLETED', {
           event: 'ACTION_COMPLETED',
@@ -689,21 +804,21 @@ export class InteractionAgent {
 
         return { type: 'executed', toolId: pending.toolDef.tool_id, result }
       } catch (err) {
-        this.ttsCallback(`Error al ejecutar: ${String(err)}`, sessionId)
+        this.emitSpeechChunk(`Error al ejecutar: ${String(err)}`, sessionId)
         return { type: 'error', toolId: pending.toolDef.tool_id, error: String(err) }
       }
     }
 
     if (intent === 'cancel') {
       this.pendingConfirmations.delete(sessionId)
-      this.ttsCallback('Entendido, acción cancelada.', sessionId)
+      this.emitSpeechChunk('Entendido, acción cancelada.', sessionId)
       return { type: 'denied', toolId: pending.toolDef.tool_id }
     }
 
     // Unknown — re-prompt
     const prompt =
       pending.toolDef.confirm_prompt ?? `¿Desea confirmar "${pending.toolDef.tool_id}"?`
-    this.ttsCallback(`No entendí. ${prompt}`, sessionId)
+    this.emitSpeechChunk(`No entendí. ${prompt}`, sessionId)
     return { type: 'no_pending', sessionId }
   }
 
@@ -728,9 +843,9 @@ export class InteractionAgent {
           reason?: string
         }
         if (event.approved) {
-          this.ttsCallback('Aprobación recibida. Procesando tu solicitud.', event.session_id)
+          this.emitSpeechChunk('Aprobación recibida. Procesando tu solicitud.', event.session_id)
         } else {
-          this.ttsCallback(
+          this.emitSpeechChunk(
             `Solicitud denegada${event.reason ? ': ' + event.reason : ''}.`,
             event.session_id,
           )
@@ -741,7 +856,7 @@ export class InteractionAgent {
     unsubs.push(
       this.bus.subscribe('bus:ORDER_APPROVAL_TIMEOUT', (data) => {
         const event = data as { session_id: string }
-        this.ttsCallback(
+        this.emitSpeechChunk(
           'Lo siento, no se recibió autorización a tiempo. La solicitud ha expirado.',
           event.session_id,
         )

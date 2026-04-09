@@ -5,7 +5,7 @@ Event-driven multi-agent framework with built-in governance.
 This package contains the core runtime:
 
 - `InMemoryBus`, `RedisBus`, `createBus`
-- `InteractionAgent`, `StaffAgent`, `UIAgent`, `AmbientAgent`, `ContextBuilderAgent`, `ProactiveAgent`
+- `InteractionAgent`, `StaffAgent`, `UIAgent`, `AmbientAgent`, `ContextBuilderAgent`, `ProactiveAgent`, `AvatarAgent`
 - `SafetyGuard`, `InMemoryDraftStore`, `ApprovalOrchestrator`
 - `InMemoryContextStore`, `InMemorySessionManager`, `TargetGroupBridge`
 - tracing primitives such as `NoopTracer` and `LangfuseTracer`
@@ -120,6 +120,42 @@ Human roles support both the generic and retail naming schemes:
 - `StaffAgent` pauses customer interaction, handles privileged commands, and resumes the session
 - `UIAgent` converts bus events into UI update payloads
 - `AmbientAgent` enriches context from non-targeted speech
+- `AvatarAgent` renders bus events into visual/speech commands through an `IAvatarRenderer`
+
+### Avatar rendering
+
+`AvatarAgent` is a pure renderer: it does not call an LLM, choose tools, approve
+actions, or modify response text. It listens to bus events such as
+`bus:RESPONSE_START`, `bus:AVATAR_SPEAK`, `bus:RESPONSE_END`,
+`bus:TARGET_GROUP_CHANGED`, and `bus:APPROVAL_RESOLVED`, then sends visual
+commands to an `IAvatarRenderer`.
+
+```ts
+import { AvatarAgent, InMemoryBus, MockAvatarRenderer } from 'fitalyagents'
+
+const bus = new InMemoryBus()
+const renderer = new MockAvatarRenderer()
+
+const avatar = new AvatarAgent({
+  bus,
+  renderer,
+  intentExpressionMap: {
+    order_confirmed: 'happy',
+    complaint: 'empathetic',
+    product_search: 'helpful',
+  },
+})
+
+await avatar.start()
+```
+
+For visual deployments, swap `MockAvatarRenderer` for `AIRIRenderer`:
+
+```ts
+import { AIRIRenderer } from 'fitalyagents'
+
+const renderer = new AIRIRenderer({ url: 'ws://localhost:6006' })
+```
 
 ### Safety and approvals
 

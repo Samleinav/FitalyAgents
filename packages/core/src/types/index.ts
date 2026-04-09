@@ -287,6 +287,39 @@ export const TargetGroupChangedEventSchema = z.object({
 })
 export type TargetGroupChangedEvent = z.infer<typeof TargetGroupChangedEventSchema>
 
+export const AvatarSpeakEventSchema = z.object({
+  event: z.literal('AVATAR_SPEAK'),
+  session_id: z.string(),
+  speaker_id: z.string().optional(),
+  turn_id: z.string(),
+  text: z.string(),
+  intent_id: z.string().optional(),
+  is_final: z.boolean(),
+  timestamp: z.number(),
+})
+export type AvatarSpeakEvent = z.infer<typeof AvatarSpeakEventSchema>
+
+export const ResponseStartEventSchema = z.object({
+  event: z.literal('RESPONSE_START'),
+  session_id: z.string(),
+  speaker_id: z.string().optional(),
+  turn_id: z.string(),
+  intent_id: z.string().optional(),
+  timestamp: z.number(),
+})
+export type ResponseStartEvent = z.infer<typeof ResponseStartEventSchema>
+
+export const ResponseEndEventSchema = z.object({
+  event: z.literal('RESPONSE_END'),
+  session_id: z.string(),
+  speaker_id: z.string().optional(),
+  turn_id: z.string(),
+  intent_id: z.string().optional(),
+  reason: z.enum(['end_turn', 'tool_use', 'max_tokens', 'error']),
+  timestamp: z.number(),
+})
+export type ResponseEndEvent = z.infer<typeof ResponseEndEventSchema>
+
 // ── Multi-Agent Ecosystem Events ─────────────────────────────────────────────
 
 export const InteractionPauseEventSchema = z.object({

@@ -109,6 +109,82 @@ describe('InteractionAgent', () => {
       expect(ttsLog).toEqual(['Hola, ', '¿en qué puedo ayudarte?'])
     })
 
+    it('publishes response lifecycle and avatar speech events', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Hello, ' },
+        { type: 'text', text: 'how can I help?' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+      const { agent, bus, ttsLog } = createAgent({ llm })
+      const events: Array<{ channel: string; payload: unknown }> = []
+
+      for (const channel of ['bus:RESPONSE_START', 'bus:AVATAR_SPEAK', 'bus:RESPONSE_END']) {
+        bus.subscribe(channel, (payload) => events.push({ channel, payload }))
+      }
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        speaker_id: 'cust_ana',
+        text: 'hello',
+      })
+
+      expect(ttsLog).toEqual(['Hello, ', 'how can I help?'])
+      expect(events.map((event) => event.channel)).toEqual([
+        'bus:RESPONSE_START',
+        'bus:AVATAR_SPEAK',
+        'bus:AVATAR_SPEAK',
+        'bus:AVATAR_SPEAK',
+        'bus:RESPONSE_END',
+      ])
+
+      const responseStart = events[0]?.payload as { turn_id: string; speaker_id?: string }
+      const firstSpeech = events[1]?.payload as { turn_id: string; text: string; is_final: boolean }
+      const finalSpeech = events[3]?.payload as { turn_id: string; text: string; is_final: boolean }
+      const responseEnd = events[4]?.payload as { turn_id: string; reason: string }
+
+      expect(responseStart.speaker_id).toBe('cust_ana')
+      expect(firstSpeech).toMatchObject({
+        turn_id: responseStart.turn_id,
+        text: 'Hello, ',
+        is_final: false,
+      })
+      expect(finalSpeech).toMatchObject({
+        turn_id: responseStart.turn_id,
+        text: '',
+        is_final: true,
+      })
+      expect(responseEnd).toMatchObject({
+        turn_id: responseStart.turn_id,
+        reason: 'end_turn',
+      })
+    })
+
+    it('publishes RESPONSE_END with error reason when streaming fails', async () => {
+      const llm: IStreamingLLM = {
+        async *stream() {
+          yield { type: 'text', text: 'partial' } satisfies LLMStreamChunk
+          throw new Error('stream failed')
+        },
+      }
+      const { agent, bus } = createAgent({ llm })
+      const responseEndEvents: unknown[] = []
+      bus.subscribe('bus:RESPONSE_END', (payload) => responseEndEvents.push(payload))
+
+      await expect(
+        agent.handleSpeechFinal({
+          session_id: 'session-1',
+          text: 'hello',
+        }),
+      ).rejects.toThrow('stream failed')
+
+      expect(responseEndEvents).toHaveLength(1)
+      expect(responseEndEvents[0]).toMatchObject({
+        event: 'RESPONSE_END',
+        session_id: 'session-1',
+        reason: 'error',
+      })
+    })
+
     it('stores response in context store', async () => {
       const llm = createMockLLM([
         { type: 'text', text: 'Response text' },
