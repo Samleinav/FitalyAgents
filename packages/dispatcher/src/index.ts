@@ -37,6 +37,40 @@ export { InMemoryIntentLibrary } from './node/intent-library/in-memory-intent-li
 export type { LLMProvider } from './llm/types.js'
 export { ClaudeLLMProvider } from './llm/claude-llm-provider.js'
 
+// Memory
+export { InMemoryMemoryStore } from './memory/memory-store.js'
+export type { IMemoryStore, MemoryEntry, MemoryHit, MemoryQueryOptions } from './memory/types.js'
+export { AaakDialect } from './memory/aaak-dialect.js'
+export type {
+  AaakCompressionMetadata,
+  AaakDialectLike,
+  AaakDialectOptions,
+} from './memory/aaak-dialect.js'
+export {
+  MemPalaceCliTransport,
+  MemPalaceMcpTransport,
+  MemPalaceMemoryStore,
+} from './memory/mempalace-store.js'
+export type {
+  MemPalaceCliTransportOptions,
+  MemPalaceCommandResult,
+  MemPalaceCommandRunner,
+  MemPalaceCommandRunnerOptions,
+  MemPalaceMcpClient,
+  MemPalaceMcpTransportOptions,
+  MemPalaceMemoryStoreOptions,
+  MemPalaceSearchInput,
+  MemPalaceTransport,
+  MemPalaceTransportHit,
+  MemPalaceWriteInput,
+} from './memory/mempalace-store.js'
+export type {
+  MemoryScope,
+  MemoryScopeResolveInput,
+  MemoryScopeResolver,
+} from './memory/scope-resolver.js'
+export { createDefaultMemoryScope } from './memory/scope-resolver.js'
+
 // Speculative Cache (v2)
 export { SpeculativeCache } from './speculative-cache.js'
 export type {

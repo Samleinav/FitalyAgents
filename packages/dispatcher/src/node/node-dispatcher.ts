@@ -9,6 +9,13 @@ import type {
 } from '../types/index.js'
 import type { SpeculativeCache } from '../speculative-cache.js'
 import { CONFIDENCE_THRESHOLD } from '../types/index.js'
+import type { IMemoryStore, MemoryHit } from '../memory/types.js'
+import type {
+  MemoryScope,
+  MemoryScopeResolveInput,
+  MemoryScopeResolver,
+} from '../memory/scope-resolver.js'
+import { createDefaultMemoryScope } from '../memory/scope-resolver.js'
 
 // Ambient timer declarations (available in Node.js but not in ES2022 lib)
 declare function setInterval(callback: () => void, ms: number): number
@@ -24,6 +31,8 @@ declare function clearInterval(id: number): void
  */
 export const SPECULATIVE_CONFIDENCE_MIN = 0.9
 export const SPECULATIVE_MARGIN_MIN = 0.15
+const PENDING_FALLBACK_TTL_MS = 60_000
+const MAX_PENDING_FALLBACKS_PER_SESSION = 32
 
 // ── Tool safety levels for speculative decisions ─────────────────────────────
 
@@ -45,6 +54,18 @@ export type SpeculativeExecutor = (intentId: string, sessionId: string) => Promi
  * Returns null if the intent doesn't map to a known tool.
  */
 export type IntentToolResolver = (intentId: string) => SpeculativeToolMeta | null
+
+interface TaskAvailableLike {
+  session_id: string
+  source?: string
+  slots?: Record<string, unknown>
+}
+
+interface PendingFallbackMemory {
+  text: string
+  scope: MemoryScope
+  createdAt: number
+}
 
 // ── Dependencies ─────────────────────────────────────────────────────────────
 
@@ -83,6 +104,10 @@ export interface NodeDispatcherDeps {
   speculativeHintTtlMs?: number
   /** Optional observability tracer. Defaults to NoopTracer. */
   tracer?: ITracer
+  /** Optional semantic memory store used to enrich fallback requests. */
+  memoryStore?: IMemoryStore
+  /** Optional resolver that maps events to a memory scope (actor, group, store, or session). */
+  memoryScopeResolver?: MemoryScopeResolver
 }
 
 /**
@@ -132,10 +157,13 @@ export class NodeDispatcher {
   private readonly speculativeHintTtlMs: number
 
   private readonly tracer: ITracer
+  private readonly memoryStore: IMemoryStore | null
+  private readonly memoryScopeResolver: MemoryScopeResolver | null
 
   private unsubs: Unsubscribe[] = []
   private watchdogTimer: number | null = null
   private started = false
+  private readonly pendingFallbacks = new Map<string, PendingFallbackMemory[]>()
 
   constructor(deps: NodeDispatcherDeps) {
     this.bus = deps.bus
@@ -151,6 +179,8 @@ export class NodeDispatcher {
     this.speculativeTtlMs = deps.speculativeTtlMs ?? 30_000
     this.speculativeHintTtlMs = deps.speculativeHintTtlMs ?? 10_000
     this.tracer = deps.tracer ?? new NoopTracer()
+    this.memoryStore = deps.memoryStore ?? null
+    this.memoryScopeResolver = deps.memoryScopeResolver ?? null
   }
 
   // ── Start all workers ─────────────────────────────────────────────────
@@ -165,16 +195,19 @@ export class NodeDispatcher {
     // Worker 1: Speech listener
     this.startSpeechListener()
 
-    // Worker 2: Fallback agent
+    // Worker 2: Observe resolved fallback tasks for memory writes
+    this.startTaskAvailableListener()
+
+    // Worker 3: Fallback agent
     this.fallbackAgent.start()
 
-    // Worker 3: Intent reloader
+    // Worker 4: Intent reloader
     this.startIntentReloader()
 
-    // Worker 4: Lock watchdog
+    // Worker 5: Lock watchdog
     this.startLockWatchdog()
 
-    // Worker 5: Partial speech → speculative execution
+    // Worker 6: Partial speech → speculative execution
     if (this.speculativeCache) {
       this.startPartialListener()
     }
@@ -188,6 +221,8 @@ export class NodeDispatcher {
 
     this.fallbackAgent.dispose()
     this.classifier.dispose()
+    this.memoryStore?.dispose?.()
+    this.pendingFallbacks.clear()
 
     if (this.watchdogTimer) {
       clearInterval(this.watchdogTimer)
@@ -215,6 +250,14 @@ export class NodeDispatcher {
     const unsub = this.bus.subscribe('bus:SPEECH_PARTIAL', (data) => {
       const event = data as SpeechPartialEvent
       void this.handlePartial(event)
+    })
+    this.unsubs.push(unsub)
+  }
+
+  private startTaskAvailableListener(): void {
+    const unsub = this.bus.subscribe('bus:TASK_AVAILABLE', (data) => {
+      const event = data as TaskAvailableLike
+      void this.handleTaskAvailable(event)
     })
     this.unsubs.push(unsub)
   }
@@ -263,10 +306,15 @@ export class NodeDispatcher {
         timeout_ms: 8000,
         created_at: Date.now(),
       })
+      this.scheduleMemoryWrite(event)
       trace.score('classifier_confidence', result.confidence)
       trace.score('classifier_hit', 1)
       trace.end({ intent_id: result.intent_id, outcome: 'hit' })
     } else {
+      const scope = await this.resolveMemoryScope(event)
+      const memoryHits = await this.queryMemoryContext(event, scope)
+      this.registerPendingFallback(event, scope)
+
       // Low confidence: publish fallback request
       await this.bus.publish('bus:DISPATCH_FALLBACK', {
         event: 'DISPATCH_FALLBACK',
@@ -274,12 +322,37 @@ export class NodeDispatcher {
         text: event.text,
         classifier_confidence: result.confidence,
         top_candidates: result.type === 'fallback' ? result.top_candidates : result.candidates,
+        ...(memoryHits.length > 0 ? { memory_context: memoryHits } : {}),
         timestamp: Date.now(),
       })
       trace.score('classifier_confidence', result.confidence)
       trace.score('classifier_hit', 0, 'fell back to LLM')
       trace.end({ outcome: 'fallback' })
     }
+  }
+
+  private async handleTaskAvailable(event: TaskAvailableLike): Promise<void> {
+    if (!this.memoryStore) return
+    if (event.source !== 'llm_fallback') return
+
+    const pending = this.consumePendingFallback(
+      event.session_id,
+      this.extractRawTextFromTask(event),
+      this.memoryScopeResolver !== null,
+    )
+
+    if (pending) {
+      await this.writeMemoryEntry(pending.text, pending.scope)
+      return
+    }
+
+    // If no custom resolver is configured, falling back to session scope is safe.
+    if (this.memoryScopeResolver) return
+
+    const rawText = this.extractRawTextFromTask(event)
+    if (!rawText) return
+
+    await this.writeMemoryEntry(rawText, createDefaultMemoryScope(event.session_id))
   }
 
   // ── Speculative execution logic ───────────────────────────────────────
@@ -377,5 +450,138 @@ export class NodeDispatcher {
     // Candidates are sorted by score descending
     const sorted = [...candidates].sort((a, b) => b.score - a.score)
     return sorted[0]!.score - sorted[1]!.score
+  }
+
+  private async queryMemoryContext(
+    event: SpeechFinalEvent,
+    scope: MemoryScope,
+  ): Promise<MemoryHit[]> {
+    if (!this.memoryStore) return []
+
+    try {
+      return await this.memoryStore.query(event.text, {
+        wing: scope.wing,
+        room: scope.room,
+        n: 3,
+      })
+    } catch {
+      return []
+    }
+  }
+
+  private scheduleMemoryWrite(event: SpeechFinalEvent): void {
+    if (!this.memoryStore || event.text.trim().length === 0) return
+
+    void this.resolveMemoryScope(event)
+      .then((scope) => this.writeMemoryEntry(event.text, scope))
+      .catch(() => {
+        // Memory must never break dispatch flow.
+      })
+  }
+
+  private async writeMemoryEntry(text: string, scope: MemoryScope): Promise<void> {
+    if (!this.memoryStore || text.trim().length === 0) return
+
+    await this.memoryStore.write({
+      text,
+      wing: scope.wing,
+      room: scope.room,
+    })
+  }
+
+  private async resolveMemoryScope(event: SpeechFinalEvent): Promise<MemoryScope> {
+    if (!this.memoryScopeResolver) {
+      return createDefaultMemoryScope(event.session_id)
+    }
+
+    try {
+      const resolved = await this.memoryScopeResolver(this.toMemoryScopeInput(event))
+      if (resolved) return resolved
+    } catch {
+      // Fall back to the session scope when the custom resolver fails.
+    }
+
+    return createDefaultMemoryScope(event.session_id)
+  }
+
+  private toMemoryScopeInput(event: SpeechFinalEvent): MemoryScopeResolveInput {
+    return {
+      session_id: event.session_id,
+      text: event.text,
+      locale: event.locale,
+      speaker_id: event.speaker_id,
+      role: event.role,
+      actor_type: event.actor_type,
+      store_id: event.store_id,
+      group_id: event.group_id,
+      timestamp: event.timestamp,
+    }
+  }
+
+  private registerPendingFallback(event: SpeechFinalEvent, scope: MemoryScope): void {
+    if (!this.memoryStore || event.text.trim().length === 0) return
+
+    const entries = this.pendingFallbacks.get(event.session_id) ?? []
+    const fresh = this.pruneExpiredPending(entries)
+
+    fresh.push({
+      text: event.text,
+      scope,
+      createdAt: Date.now(),
+    })
+
+    if (fresh.length > MAX_PENDING_FALLBACKS_PER_SESSION) {
+      fresh.splice(0, fresh.length - MAX_PENDING_FALLBACKS_PER_SESSION)
+    }
+
+    this.pendingFallbacks.set(event.session_id, fresh)
+  }
+
+  private consumePendingFallback(
+    sessionId: string,
+    rawText?: string,
+    strictMatch = false,
+  ): PendingFallbackMemory | null {
+    const entries = this.pendingFallbacks.get(sessionId)
+    if (!entries || entries.length === 0) return null
+
+    const fresh = this.pruneExpiredPending(entries)
+    if (fresh.length === 0) {
+      this.pendingFallbacks.delete(sessionId)
+      return null
+    }
+
+    let index = -1
+    if (rawText) {
+      index = fresh.findIndex((entry) => entry.text === rawText)
+    }
+
+    if (index === -1 && !strictMatch) {
+      index = 0
+    }
+
+    if (index === -1) {
+      this.pendingFallbacks.set(sessionId, fresh)
+      return null
+    }
+
+    const [matched] = fresh.splice(index, 1)
+    if (fresh.length === 0) {
+      this.pendingFallbacks.delete(sessionId)
+    } else {
+      this.pendingFallbacks.set(sessionId, fresh)
+    }
+
+    return matched ?? null
+  }
+
+  private pruneExpiredPending(entries: PendingFallbackMemory[]): PendingFallbackMemory[] {
+    const cutoff = Date.now() - PENDING_FALLBACK_TTL_MS
+    return entries.filter((entry) => entry.createdAt >= cutoff)
+  }
+
+  private extractRawTextFromTask(event: TaskAvailableLike): string | undefined {
+    const raw = event.slots?.raw_text
+    return typeof raw === 'string' && raw.trim().length > 0 ? raw : undefined
   }
 }

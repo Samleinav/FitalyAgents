@@ -9,9 +9,11 @@ import type {
   IntentToolResolver,
   SpeculativeExecutor,
 } from './node-dispatcher.js'
+import type { MemoryScopeResolver } from '../memory/scope-resolver.js'
 import { InMemoryEmbeddingClassifier } from './classifier/in-memory-embedding-classifier.js'
 import { InMemoryIntentLibrary } from './intent-library/in-memory-intent-library.js'
 import { SpeculativeCache } from '../speculative-cache.js'
+import { InMemoryMemoryStore } from '../memory/memory-store.js'
 import { InMemoryBus } from 'fitalyagents'
 import type { ILLMFallbackAgent } from '../types/index.js'
 import type { IEventBus, Unsubscribe } from 'fitalyagents'
@@ -54,6 +56,23 @@ class MockFallbackAgent implements ILLMFallbackAgent {
       new_example: event.text,
       source: 'llm_fallback',
       timestamp: Date.now(),
+    })
+  }
+
+  dispose(): void {
+    if (this.unsub) this.unsub()
+    this.unsub = null
+  }
+}
+
+class NoopFallbackAgent implements ILLMFallbackAgent {
+  private unsub: Unsubscribe | null = null
+
+  constructor(private readonly bus: IEventBus) {}
+
+  start(): void {
+    this.unsub = this.bus.subscribe('bus:DISPATCH_FALLBACK', () => {
+      // Intentionally unresolved: used to verify ambiguous fallbacks are not stored.
     })
   }
 
@@ -160,6 +179,306 @@ describe('NodeDispatcher', () => {
       expect(fallbacks.length).toBe(1)
       expect(fallbacks[0]).toHaveProperty('event', 'DISPATCH_FALLBACK')
       expect(fallbacks[0]).toHaveProperty('text', 'completely unrelated xyz abc 123')
+      expect(fallbacks[0]).not.toHaveProperty('memory_context')
+    })
+
+    it('adds memory_context when an optional memory store has related session history', async () => {
+      const memoryStore = new InMemoryMemoryStore()
+      await memoryStore.write({
+        text: 'customer usually orders decaf coffee',
+        wing: 'session',
+        room: 'sess_1',
+      })
+
+      const memoryDispatcher = new NodeDispatcher({
+        bus,
+        classifier,
+        fallbackAgent,
+        memoryStore,
+      })
+
+      await memoryDispatcher.start()
+
+      const fallbacks: Array<Record<string, unknown>> = []
+      bus.subscribe('bus:DISPATCH_FALLBACK', (data) => {
+        fallbacks.push(data as Record<string, unknown>)
+      })
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'sess_1',
+        text: 'the usual decaf please',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(fallbacks).toHaveLength(1)
+      expect(fallbacks[0]?.memory_context).toBeDefined()
+      expect(fallbacks[0]?.memory_context).toHaveLength(1)
+
+      memoryDispatcher.dispose()
+    })
+
+    it('writes session memory asynchronously after successful dispatch', async () => {
+      const memoryStore = new InMemoryMemoryStore()
+      const memoryDispatcher = new NodeDispatcher({
+        bus,
+        classifier,
+        fallbackAgent,
+        memoryStore,
+      })
+
+      await memoryDispatcher.start()
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'sess_1',
+        text: 'find shoes',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      const hits = await memoryStore.query('find shoes', { room: 'sess_1' })
+      expect(hits.length).toBeGreaterThan(0)
+      expect(hits[0]?.text).toBe('find shoes')
+
+      memoryDispatcher.dispose()
+    })
+
+    it('does not write unresolved fallback utterances into memory', async () => {
+      const memoryStore = new InMemoryMemoryStore()
+      const unresolvedFallbackAgent = new NoopFallbackAgent(bus)
+      const memoryDispatcher = new NodeDispatcher({
+        bus,
+        classifier,
+        fallbackAgent: unresolvedFallbackAgent,
+        memoryStore,
+      })
+
+      await memoryDispatcher.start()
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'sess_1',
+        text: 'completely unrelated xyz abc 123',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      const hits = await memoryStore.query('completely unrelated xyz abc 123', { room: 'sess_1' })
+      expect(hits).toHaveLength(0)
+
+      memoryDispatcher.dispose()
+    })
+
+    it('writes resolved fallback utterances into memory after llm_fallback resolution', async () => {
+      const memoryStore = new InMemoryMemoryStore()
+      const memoryDispatcher = new NodeDispatcher({
+        bus,
+        classifier,
+        fallbackAgent,
+        memoryStore,
+      })
+
+      await memoryDispatcher.start()
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'sess_1',
+        text: 'completely unrelated xyz abc 123',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 75))
+
+      const hits = await memoryStore.query('completely unrelated xyz abc 123', { room: 'sess_1' })
+      expect(hits).toHaveLength(1)
+      expect(hits[0]?.text).toBe('completely unrelated xyz abc 123')
+
+      memoryDispatcher.dispose()
+    })
+
+    it('uses memoryScopeResolver to avoid mixing customer and employee memory in one session', async () => {
+      const memoryStore = new InMemoryMemoryStore()
+      const memoryScopeResolver: MemoryScopeResolver = ({ session_id, speaker_id, role }) => {
+        if (role === 'customer') {
+          return { wing: 'customer', room: speaker_id ?? `${session_id}:customer` }
+        }
+
+        if (role === 'staff') {
+          return { wing: 'employee', room: speaker_id ?? `${session_id}:employee` }
+        }
+
+        return { wing: 'session', room: session_id }
+      }
+
+      await memoryStore.write({
+        text: 'customer usually orders decaf coffee',
+        wing: 'customer',
+        room: 'cust_1',
+      })
+      await memoryStore.write({
+        text: 'employee is handling inventory counting',
+        wing: 'employee',
+        room: 'staff_1',
+      })
+
+      const memoryDispatcher = new NodeDispatcher({
+        bus,
+        classifier,
+        fallbackAgent,
+        memoryStore,
+        memoryScopeResolver,
+      })
+
+      await memoryDispatcher.start()
+
+      const fallbacks: Array<Record<string, unknown>> = []
+      bus.subscribe('bus:DISPATCH_FALLBACK', (data) => {
+        fallbacks.push(data as Record<string, unknown>)
+      })
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'shared_sess',
+        speaker_id: 'cust_1',
+        role: 'customer',
+        text: 'the usual decaf please',
+        timestamp: Date.now(),
+      })
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'shared_sess',
+        speaker_id: 'staff_1',
+        role: 'staff',
+        text: 'inventory count status',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(fallbacks).toHaveLength(2)
+      expect(fallbacks[0]?.memory_context).toHaveLength(1)
+      expect((fallbacks[0]?.memory_context as Array<Record<string, unknown>>)[0]).toMatchObject({
+        wing: 'customer',
+        room: 'cust_1',
+      })
+      expect(fallbacks[1]?.memory_context).toHaveLength(1)
+      expect((fallbacks[1]?.memory_context as Array<Record<string, unknown>>)[0]).toMatchObject({
+        wing: 'employee',
+        room: 'staff_1',
+      })
+
+      memoryDispatcher.dispose()
+    })
+
+    it('writes resolved llm_fallback memory into the matched actor scope', async () => {
+      const memoryStore = new InMemoryMemoryStore()
+      const memoryScopeResolver: MemoryScopeResolver = ({ session_id, speaker_id, role }) => {
+        if (role === 'customer') {
+          return { wing: 'customer', room: speaker_id ?? `${session_id}:customer` }
+        }
+
+        if (role === 'staff') {
+          return { wing: 'employee', room: speaker_id ?? `${session_id}:employee` }
+        }
+
+        return { wing: 'session', room: session_id }
+      }
+
+      const memoryDispatcher = new NodeDispatcher({
+        bus,
+        classifier,
+        fallbackAgent,
+        memoryStore,
+        memoryScopeResolver,
+      })
+
+      await memoryDispatcher.start()
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'shared_sess',
+        speaker_id: 'cust_1',
+        role: 'customer',
+        text: 'please repeat my regular order',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 75))
+
+      expect(
+        await memoryStore.query('please repeat my regular order', {
+          wing: 'customer',
+          room: 'cust_1',
+        }),
+      ).toHaveLength(1)
+      expect(
+        await memoryStore.query('please repeat my regular order', {
+          wing: 'employee',
+          room: 'cust_1',
+        }),
+      ).toHaveLength(0)
+
+      memoryDispatcher.dispose()
+    })
+
+    it('writes memory into distinct group, store, and session scopes', async () => {
+      const memoryStore = new InMemoryMemoryStore()
+      const memoryScopeResolver: MemoryScopeResolver = ({ session_id, group_id, store_id }) => {
+        if (group_id) return { wing: 'group', room: group_id }
+        if (store_id) return { wing: 'store', room: store_id }
+        return { wing: 'session', room: session_id }
+      }
+
+      const memoryDispatcher = new NodeDispatcher({
+        bus,
+        classifier,
+        fallbackAgent,
+        memoryStore,
+        memoryScopeResolver,
+      })
+
+      await memoryDispatcher.start()
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'sess_scope',
+        text: 'find shoes',
+        timestamp: Date.now(),
+      })
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'sess_scope',
+        store_id: 'store_9',
+        text: 'find shoes',
+        timestamp: Date.now(),
+      })
+      await bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'sess_scope',
+        group_id: 'group_A',
+        text: 'find shoes',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(
+        await memoryStore.query('find shoes', { wing: 'session', room: 'sess_scope' }),
+      ).toHaveLength(1)
+      expect(
+        await memoryStore.query('find shoes', { wing: 'store', room: 'store_9' }),
+      ).toHaveLength(1)
+      expect(
+        await memoryStore.query('find shoes', { wing: 'group', room: 'group_A' }),
+      ).toHaveLength(1)
+
+      memoryDispatcher.dispose()
     })
   })
 

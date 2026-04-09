@@ -57,6 +57,16 @@ export const FallbackRequestSchema = z.object({
       score: z.number(),
     }),
   ),
+  memory_context: z
+    .array(
+      z.object({
+        text: z.string(),
+        wing: z.string(),
+        room: z.string(),
+        similarity: z.number(),
+      }),
+    )
+    .optional(),
   timestamp: z.number(),
 })
 export type FallbackRequest = z.infer<typeof FallbackRequestSchema>
@@ -66,6 +76,11 @@ export const SpeechFinalEventSchema = z.object({
   session_id: z.string(),
   text: z.string(),
   locale: z.string().optional(),
+  speaker_id: z.string().optional(),
+  role: z.string().nullable().optional(),
+  actor_type: z.string().nullable().optional(),
+  store_id: z.string().optional(),
+  group_id: z.string().optional(),
   timestamp: z.number(),
 })
 export type SpeechFinalEvent = z.infer<typeof SpeechFinalEventSchema>
@@ -75,6 +90,11 @@ export const SpeechPartialEventSchema = z.object({
   session_id: z.string(),
   text: z.string(),
   locale: z.string().optional(),
+  speaker_id: z.string().optional(),
+  role: z.string().nullable().optional(),
+  actor_type: z.string().nullable().optional(),
+  store_id: z.string().optional(),
+  group_id: z.string().optional(),
   timestamp: z.number(),
 })
 export type SpeechPartialEvent = z.infer<typeof SpeechPartialEventSchema>
