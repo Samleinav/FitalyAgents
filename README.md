@@ -4,9 +4,9 @@
 
 > _Just as FITALY puts letters where the fingers already are, FitalyAgents puts results where the agent needs them - without waiting._
 
-**Event-driven multi-agent framework with built-in governance, speculative dispatch, and MemPalace-powered memory.**
+**Event-driven multi-agent framework with built-in governance, speculative dispatch, MemPalace-powered memory, and professional avatar presence.**
 
-FitalyAgents lets you build systems where multiple AI agents collaborate over a shared event bus, each tool declares its own safety level, human approval flows are a first-class primitive, and agents can remember actor-specific context across sessions through [MemPalace](https://github.com/milla-jovovich/mempalace).
+FitalyAgents lets you build systems where multiple AI agents collaborate over a shared event bus, each tool declares its own safety level, human approval flows are a first-class primitive, agents can remember actor-specific context across sessions through [MemPalace](https://github.com/milla-jovovich/mempalace), and customer-facing avatars can present the system with a professional retail presence.
 
 ---
 
@@ -29,6 +29,20 @@ Avatar presence follows the same principle: `AvatarAgent` is a pure renderer tha
 
 ---
 
+## Core Features
+
+| Feature                           | Why it matters                                                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Governed tool execution           | Every tool declares its risk level, so safe actions stay fast and sensitive actions require the right approval.   |
+| Speculative dispatch              | SAFE tools can be classified and prefetched while the user is still speaking, reducing perceived latency.         |
+| MemPalace-powered memory          | Agents can remember customers, employees, groups, stores, and prior decisions without mixing actor contexts.      |
+| Professional avatar presence      | `AvatarAgent` turns bus events into brand-safe expressions, gestures, gaze, and speech for kiosk or web avatars.  |
+| Retail target and group awareness | Diarization and target-group events let Fitaly focus on the active customer while tracking queues and ambience.   |
+| Human-in-the-loop approvals       | Voice, webhook, and external channels let employees or supervisors approve high-impact actions in real workflows. |
+| Pure event-driven integration     | Agents, UI, memory, approvals, and avatar renderers connect through the bus instead of hard-coded dependencies.   |
+
+---
+
 ## Packages
 
 | Package                    | Import                | Description                                                            |
@@ -44,13 +58,13 @@ Avatar presence follows the same principle: `AvatarAgent` is a pure renderer tha
 ```
                         Event Bus (pub/sub)
                               │
-          ┌───────────────────┼──────────────────────┐
-          │                   │                      │
-   InteractionAgent     StaffAgent             UIAgent
-   (LLM streaming)      (employee              (reactive UI
-                         override)              updates)
-          │                   │                      │
-          └───────────────────┼──────────────────────┘
+          ┌───────────────────┼──────────────────────┬──────────────────┐
+          │                   │                      │                  │
+   InteractionAgent     StaffAgent             UIAgent           AvatarAgent
+   (LLM streaming)      (employee              (reactive UI      (kiosk/web/AIRI
+                         override)              updates)          renderer)
+          │                   │                      │                  │
+          └───────────────────┼──────────────────────┴──────────────────┘
                               │
                        SafetyGuard
                     (evaluates every action)
@@ -211,8 +225,55 @@ Channels can run in `parallel` (first to respond wins) or `sequential` (fallback
 | `ProactiveAgent`      | Triggers suggestions based on context signals (e.g., session inactivity, thresholds).                          |
 | `TargetGroupBridge`   | Routes events to the right session group based on session priority.                                            |
 | `ContextBuilderAgent` | Builds and maintains the session context from multiple sources.                                                |
+| `AvatarAgent`         | Renders bus events into avatar state, expression, gesture, gaze, and speech commands. No decision-making.      |
 
 All agents extend `StreamAgent` and communicate exclusively through the event bus.
+
+---
+
+## Avatar Presence
+
+`AvatarAgent` gives Fitaly a customer-facing body language layer without letting
+the avatar decide anything. The interaction agent still owns the text, tools,
+safety, and memory; the avatar only renders bus events into presentation
+commands.
+
+For retail, that means the same agent can power an in-store kiosk, a web avatar,
+or an AIRI character while keeping a consistent professional style:
+
+- subtle motion instead of overly cute movement
+- focused expressions while listening or searching
+- queue acknowledgement when another customer is waiting
+- open-palm presentation gestures for product options
+- serious confirmation posture for drafts and approvals
+- target-aware gaze for the active customer or group
+
+```typescript
+import {
+  AIRIRenderer,
+  AvatarAgent,
+  InMemoryBus,
+  retailProfessionalAvatarProfile,
+} from 'fitalyagents'
+
+const bus = new InMemoryBus()
+
+const avatar = new AvatarAgent({
+  bus,
+  renderer: new AIRIRenderer({ url: 'ws://localhost:6006' }),
+  presentationProfile: retailProfessionalAvatarProfile,
+})
+
+await avatar.start()
+```
+
+The renderer is swappable. Use `AIRIRenderer` for an AIRI WebSocket character,
+`MockAvatarRenderer` for tests and CI, or a custom renderer for a browser,
+kiosk, POS screen, or 3D environment. The retail profile travels with the agent,
+so in-store retail and web retail can share the same behavior while rendering
+through different surfaces.
+
+See [Avatar Retail Example](examples/avatar-retail/README.md).
 
 ---
 
@@ -349,6 +410,7 @@ npx vitest run --reporter=verbose --root examples/voice-retail
 - [Approval Channels](docs/APPROVAL-CHANNELS.md) — VoiceChannel, WebhookChannel, ExternalToolChannel
 - [Speculative Dispatcher](docs/DISPATCHER-SPECULATIVE.md) — speculative pre-fetching architecture
 - [Memory Integration](docs/MEMORY-INTEGRATION.md) — actor-scoped memory, AAAK, and MemPalace CLI/MCP backends
+- [Avatar Retail Example](examples/avatar-retail/README.md) — professional avatar presence for in-store and web retail
 - [API Reference](docs/api/) — generated TypeDoc
 
 ---
