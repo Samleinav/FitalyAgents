@@ -1,4 +1,10 @@
-import { AvatarAgent, InMemoryBus, MockAvatarRenderer, type AvatarCommand } from 'fitalyagents'
+import {
+  AvatarAgent,
+  InMemoryBus,
+  MockAvatarRenderer,
+  retailProfessionalAvatarProfile,
+  type AvatarCommand,
+} from 'fitalyagents'
 
 class NamedRenderer extends MockAvatarRenderer {
   constructor(private readonly name: string) {
@@ -15,16 +21,25 @@ class NamedRenderer extends MockAvatarRenderer {
 }
 
 function formatCommand(command: AvatarCommand): string {
+  const motion = command.motion_style ? ` motion=${command.motion_style}` : ''
+
   switch (command.type) {
     case 'state':
-      return `state -> ${command.state}`
+      return `state -> ${command.state}${motion}`
     case 'expression':
-      return `expression -> ${command.expression}`
+      return `expression -> ${command.expression}${motion}`
+    case 'gesture':
+      return `gesture -> ${command.gesture}${formatTarget(command)}${motion}`
     case 'speak':
-      return `speak -> "${command.text}" final=${String(command.is_final)}`
+      return `speak -> "${command.text}" final=${String(command.is_final)}${motion}`
     case 'look_at':
-      return `look_at -> ${command.target_id ?? command.speaker_id ?? 'unknown'}`
+      return `look_at -> ${command.target_id ?? command.speaker_id ?? 'unknown'}${motion}`
   }
+}
+
+function formatTarget(command: AvatarCommand): string {
+  const target = command.target_id ?? command.speaker_id
+  return target ? ` target=${target}` : ''
 }
 
 async function runScenario(name: string, renderer: NamedRenderer): Promise<void> {
@@ -32,11 +47,7 @@ async function runScenario(name: string, renderer: NamedRenderer): Promise<void>
   const avatar = new AvatarAgent({
     bus,
     renderer,
-    intentExpressionMap: {
-      product_search: 'helpful',
-      order_confirmed: 'happy',
-      complaint: 'empathetic',
-    },
+    presentationProfile: retailProfessionalAvatarProfile,
   })
 
   await avatar.start()

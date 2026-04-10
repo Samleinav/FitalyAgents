@@ -10,11 +10,54 @@ export type AvatarExpression =
   | 'warm'
   | 'serious'
   | 'thinking'
+  | 'professional'
+  | 'focused'
+  | 'reassuring'
+  | 'approving'
+  | 'apologetic'
+
+export type AvatarMotionStyle = 'subtle' | 'balanced' | 'expressive'
+
+export type AvatarGesture =
+  | 'none'
+  | 'professional_greeting'
+  | 'small_nod'
+  | 'open_palm'
+  | 'present_options'
+  | 'acknowledge_queue'
+  | 'confirm_action'
+  | 'polite_apology'
+  | 'handoff'
+  | 'thank_you'
+
+export type AvatarGestureEvent =
+  | 'speakerDetected'
+  | 'targetChanged'
+  | 'queueWaiting'
+  | 'taskAvailable'
+  | 'responseStart'
+  | 'responseEnd'
+  | 'draftCreated'
+  | 'approvalApproved'
+  | 'approvalRejected'
+  | 'actionCompleted'
+  | 'actionFailed'
+
+export interface AvatarPresentationProfile {
+  name?: string
+  motionStyle?: AvatarMotionStyle
+  defaultExpression?: AvatarExpression
+  stateExpressionMap?: Partial<Record<AvatarState, AvatarExpression>>
+  intentExpressionMap?: Record<string, AvatarExpression>
+  eventGestureMap?: Partial<Record<AvatarGestureEvent, AvatarGesture>>
+}
 
 export interface AvatarCommand {
-  type: 'state' | 'expression' | 'speak' | 'look_at'
+  type: 'state' | 'expression' | 'speak' | 'look_at' | 'gesture'
   state?: AvatarState
   expression?: AvatarExpression
+  gesture?: AvatarGesture
+  motion_style?: AvatarMotionStyle
   text?: string
   is_final?: boolean
   session_id?: string

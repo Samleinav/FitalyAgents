@@ -151,6 +151,7 @@ export type {
 } from './agent/target-group-bridge.js'
 export { AvatarAgent } from './agent/avatar-agent.js'
 export type { AvatarAgentDeps } from './agent/avatar-agent.js'
+export { retailProfessionalAvatarProfile } from './agent/avatar-profiles.js'
 export { AIRIRenderer } from './agent/avatar-renderer-airi.js'
 export type {
   AIRIRendererConfig,
@@ -161,6 +162,10 @@ export { MockAvatarRenderer } from './agent/avatar-renderer-mock.js'
 export type {
   AvatarCommand,
   AvatarExpression,
+  AvatarGesture,
+  AvatarGestureEvent,
+  AvatarMotionStyle,
+  AvatarPresentationProfile,
   AvatarState,
   IAvatarRenderer,
 } from './agent/avatar-types.js'

@@ -131,7 +131,12 @@ actions, or modify response text. It listens to bus events such as
 commands to an `IAvatarRenderer`.
 
 ```ts
-import { AvatarAgent, InMemoryBus, MockAvatarRenderer } from 'fitalyagents'
+import {
+  AvatarAgent,
+  InMemoryBus,
+  MockAvatarRenderer,
+  retailProfessionalAvatarProfile,
+} from 'fitalyagents'
 
 const bus = new InMemoryBus()
 const renderer = new MockAvatarRenderer()
@@ -139,15 +144,17 @@ const renderer = new MockAvatarRenderer()
 const avatar = new AvatarAgent({
   bus,
   renderer,
-  intentExpressionMap: {
-    order_confirmed: 'happy',
-    complaint: 'empathetic',
-    product_search: 'helpful',
-  },
+  presentationProfile: retailProfessionalAvatarProfile,
 })
 
 await avatar.start()
 ```
+
+Presentation profiles tune body language without changing the agent's decisions.
+The retail professional profile uses subtle motion, focused and reassuring
+expressions, queue acknowledgement, open-palm response gestures, and
+confirmation gestures for approvals. Custom profiles can override
+`stateExpressionMap`, `intentExpressionMap`, and `eventGestureMap`.
 
 For visual deployments, swap `MockAvatarRenderer` for `AIRIRenderer`:
 

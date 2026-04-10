@@ -136,9 +136,19 @@ export class AIRIRenderer implements IAvatarRenderer {
 function toAIRIMessage(command: AvatarCommand): Record<string, unknown> {
   switch (command.type) {
     case 'state':
-      return { type: 'state', value: command.state, metadata: command.metadata }
+      return {
+        type: 'state',
+        value: command.state,
+        motion_style: command.motion_style,
+        metadata: command.metadata,
+      }
     case 'expression':
-      return { type: 'expression', value: command.expression, metadata: command.metadata }
+      return {
+        type: 'expression',
+        value: command.expression,
+        motion_style: command.motion_style,
+        metadata: command.metadata,
+      }
     case 'speak':
       return {
         type: 'speak',
@@ -147,6 +157,7 @@ function toAIRIMessage(command: AvatarCommand): Record<string, unknown> {
         session_id: command.session_id,
         speaker_id: command.speaker_id,
         turn_id: command.turn_id,
+        motion_style: command.motion_style,
         metadata: command.metadata,
       }
     case 'look_at':
@@ -154,6 +165,16 @@ function toAIRIMessage(command: AvatarCommand): Record<string, unknown> {
         type: 'look_at',
         target_id: command.target_id ?? command.speaker_id,
         session_id: command.session_id,
+        motion_style: command.motion_style,
+        metadata: command.metadata,
+      }
+    case 'gesture':
+      return {
+        type: 'gesture',
+        value: command.gesture,
+        target_id: command.target_id ?? command.speaker_id,
+        session_id: command.session_id,
+        motion_style: command.motion_style,
         metadata: command.metadata,
       }
   }

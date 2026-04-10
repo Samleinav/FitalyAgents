@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { InMemoryBus } from '../bus/in-memory-bus.js'
 import { AvatarAgent } from './avatar-agent.js'
+import { retailProfessionalAvatarProfile } from './avatar-profiles.js'
 import { MockAvatarRenderer } from './avatar-renderer-mock.js'
 import type { AvatarCommand, IAvatarRenderer } from './avatar-types.js'
 
@@ -54,6 +55,61 @@ describe('AvatarAgent', () => {
     expect(renderer.commands).toEqual([
       { type: 'state', state: 'thinking' },
       { type: 'expression', expression: 'helpful' },
+    ])
+  })
+
+  it('can use a professional retail presentation profile', async () => {
+    const bus = new InMemoryBus()
+    const renderer = new MockAvatarRenderer()
+    const agent = new AvatarAgent({
+      bus,
+      renderer,
+      presentationProfile: retailProfessionalAvatarProfile,
+    })
+
+    await agent.onEvent('bus:TARGET_GROUP_CHANGED', {
+      event: 'TARGET_GROUP_CHANGED',
+      store_id: 'store_1',
+      primary: 'cust_ana',
+      queued: ['cust_ben'],
+      ambient: [],
+      speakers: [],
+      timestamp: Date.now(),
+    })
+
+    expect(renderer.commands).toEqual([
+      {
+        type: 'look_at',
+        target_id: 'cust_ana',
+        motion_style: 'subtle',
+        metadata: { avatar_profile: 'retail-professional', motion_style: 'subtle' },
+      },
+      {
+        type: 'gesture',
+        gesture: 'small_nod',
+        target_id: 'cust_ana',
+        motion_style: 'subtle',
+        metadata: { avatar_profile: 'retail-professional', motion_style: 'subtle' },
+      },
+      {
+        type: 'gesture',
+        gesture: 'acknowledge_queue',
+        target_id: 'cust_ana',
+        motion_style: 'subtle',
+        metadata: { avatar_profile: 'retail-professional', motion_style: 'subtle' },
+      },
+      {
+        type: 'state',
+        state: 'waiting',
+        motion_style: 'subtle',
+        metadata: { avatar_profile: 'retail-professional', motion_style: 'subtle' },
+      },
+      {
+        type: 'expression',
+        expression: 'attentive',
+        motion_style: 'subtle',
+        metadata: { avatar_profile: 'retail-professional', motion_style: 'subtle' },
+      },
     ])
   })
 

@@ -25,13 +25,15 @@ This model is embedded at every layer: tool definitions, the event bus, approval
 
 Memory is embedded behind the same event-driven design. High-confidence intents stay fast. Low-confidence fallbacks can receive scoped MemPalace context, so agents can answer follow-ups like "the same coffee as before", "how is that inventory issue going", or "is register two still slow?" without mixing customer, employee, or store history.
 
+Avatar presence follows the same principle: `AvatarAgent` is a pure renderer that turns bus events into visual commands without changing decisions or response text. Retail deployments can use the built-in professional presentation profile for subtle motion, focused expressions, queue acknowledgement, and approval gestures across in-store kiosks or web avatars.
+
 ---
 
 ## Packages
 
 | Package                    | Import                | Description                                                            |
 | -------------------------- | --------------------- | ---------------------------------------------------------------------- |
-| `fitalyagents`             | `packages/core`       | Core framework: bus, agents, sessions, governance                      |
+| `fitalyagents`             | `packages/core`       | Core framework: bus, agents, sessions, governance, avatar rendering    |
 | `@fitalyagents/asynctools` | `packages/asynctools` | Async tool execution: ExecutorPool, RateLimiter, CircuitBreaker        |
 | `@fitalyagents/dispatcher` | `packages/dispatcher` | Intent classification, speculative dispatch, and memory-aware fallback |
 

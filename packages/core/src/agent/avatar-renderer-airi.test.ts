@@ -75,6 +75,12 @@ describe('AIRIRenderer', () => {
       turn_id: 'turn-1',
     })
     await renderer.send({ type: 'look_at', target_id: 'cust_ana' })
+    await renderer.send({
+      type: 'gesture',
+      gesture: 'open_palm',
+      motion_style: 'subtle',
+      metadata: { avatar_profile: 'retail-professional' },
+    })
 
     expect(socket.sent.map((message) => JSON.parse(message))).toEqual([
       { type: 'state', value: 'thinking' },
@@ -88,6 +94,12 @@ describe('AIRIRenderer', () => {
         turn_id: 'turn-1',
       },
       { type: 'look_at', target_id: 'cust_ana' },
+      {
+        type: 'gesture',
+        value: 'open_palm',
+        motion_style: 'subtle',
+        metadata: { avatar_profile: 'retail-professional' },
+      },
     ])
   })
 
