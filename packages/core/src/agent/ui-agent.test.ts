@@ -185,9 +185,12 @@ describe('UIAgent', () => {
         event: 'APPROVAL_RESOLVED',
         request_id: 'req_001',
         draft_id: 'draft_001',
+        session_id: 'session-1',
         approved: true,
         approver_id: 'manager_1',
+        approvers: ['manager_1', 'owner_1'],
         channel_used: 'voice',
+        strategy: 'quorum',
         timestamp: Date.now(),
       })
 
@@ -196,8 +199,11 @@ describe('UIAgent', () => {
         component: 'approval_bar',
         action: 'update',
         data: {
+          session_id: 'session-1',
           approved: true,
+          approvers: ['manager_1', 'owner_1'],
           channel_used: 'voice',
+          strategy: 'quorum',
         },
       })
     })
@@ -213,6 +219,8 @@ describe('UIAgent', () => {
         draft_id: 'draft_001',
         session_id: 'session-1',
         required_role: 'manager',
+        quorum_required: 2,
+        eligible_roles: ['manager', 'owner'],
         queued_at: Date.now(),
       })
 
@@ -223,6 +231,8 @@ describe('UIAgent', () => {
         data: {
           request_id: 'req_001',
           required_role: 'manager',
+          quorum_required: 2,
+          eligible_roles: ['manager', 'owner'],
         },
       })
     })

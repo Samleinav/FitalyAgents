@@ -161,6 +161,7 @@ export const ApprovalWebhookRequestEventSchema = z.object({
   event: z.literal('APPROVAL_WEBHOOK_REQUEST'),
   request_id: z.string(),
   draft_id: z.string(),
+  approver_id: z.string().optional(),
   required_role: z.string(),
   action: z.string(),
   amount: z.number().optional(),
@@ -189,9 +190,12 @@ export const ApprovalResolvedEventSchema = z.object({
   event: z.literal('APPROVAL_RESOLVED'),
   request_id: z.string(),
   draft_id: z.string(),
+  session_id: z.string().optional(),
   approved: z.boolean(),
   approver_id: z.string(),
+  approvers: z.array(z.string()).optional(),
   channel_used: z.string(),
+  strategy: z.enum(['parallel', 'sequential', 'quorum']).optional(),
   timestamp: z.number(),
 })
 export type ApprovalResolvedEvent = z.infer<typeof ApprovalResolvedEventSchema>
@@ -228,6 +232,8 @@ export const OrderQueuedNoApproverSchema = z.object({
   draft_id: z.string(),
   session_id: z.string(),
   required_role: z.string(),
+  quorum_required: z.number().int().optional(),
+  eligible_roles: z.array(z.string()).optional(),
   queued_at: z.number(),
 })
 export type OrderQueuedNoApprover = z.infer<typeof OrderQueuedNoApproverSchema>

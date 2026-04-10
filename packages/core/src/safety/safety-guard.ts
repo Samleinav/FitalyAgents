@@ -5,6 +5,7 @@ import type {
   HumanRole,
   ApprovalLimits,
   ChannelConfig,
+  QuorumConfig,
 } from './channels/types.js'
 
 export interface SafetyEvaluationContext {
@@ -82,7 +83,8 @@ export interface ToolSafetyConfig {
   required_role?: HumanRole
   confirm_prompt?: string
   approval_channels?: ChannelConfig[]
-  approval_strategy?: 'parallel' | 'sequential'
+  approval_strategy?: 'parallel' | 'sequential' | 'quorum'
+  quorum?: QuorumConfig
 }
 
 export interface SafetyGuardDeps {
@@ -193,6 +195,7 @@ export class SafetyGuard {
           reason: 'needs_approval',
           escalate_to: requiredRole,
           channels: effectiveTool.approval_channels ?? [],
+          quorum: effectiveTool.quorum,
         }
       }
     }

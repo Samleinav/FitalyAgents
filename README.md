@@ -38,6 +38,7 @@ Avatar presence follows the same principle: `AvatarAgent` is a pure renderer tha
 | Sentiment-aware escalation        | Ambient emotional signals can trigger proactive help before a customer interaction deteriorates.                  |
 | Presence-aware approvals          | Approval routing can wait for an available manager or higher-role approver instead of timing out blindly.         |
 | Human session handoff             | Staff takeovers receive a live context packet with conversation, draft, memory, and sentiment state.              |
+| Quorum approvals                  | High-risk actions can require 2-of-N human approvals, with immediate rejection on any explicit no.                |
 | Speculative dispatch              | SAFE tools can be classified and prefetched while the user is still speaking, reducing perceived latency.         |
 | MemPalace-powered memory          | Agents can remember customers, employees, groups, stores, and prior decisions without mixing actor contexts.      |
 | Professional avatar presence      | `AvatarAgent` turns bus events into brand-safe expressions, gestures, gaze, and speech for kiosk or web avatars.  |

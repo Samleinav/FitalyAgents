@@ -154,9 +154,12 @@ export class UIAgent extends StreamAgent {
           data: {
             request_id: data.request_id,
             draft_id: data.draft_id,
+            session_id: data.session_id,
             approved: data.approved,
             approver_id: data.approver_id,
+            approvers: data.approvers,
             channel_used: data.channel_used,
+            strategy: data.strategy,
           },
         }
         break
@@ -170,6 +173,8 @@ export class UIAgent extends StreamAgent {
             draft_id: data.draft_id,
             session_id: data.session_id,
             required_role: data.required_role,
+            quorum_required: data.quorum_required,
+            eligible_roles: data.eligible_roles,
             queued_at: data.queued_at,
           },
         }

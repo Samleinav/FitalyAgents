@@ -45,7 +45,12 @@ function createMockCache(
 }
 
 function buildTools(
-  ...defs: Array<{ id: string; safety: InteractionToolDef['safety']; prompt?: string }>
+  ...defs: Array<{
+    id: string
+    safety: InteractionToolDef['safety']
+    prompt?: string
+    quorum?: InteractionToolDef['quorum']
+  }>
 ): Map<string, InteractionToolDef> {
   const map = new Map<string, InteractionToolDef>()
   for (const d of defs) {
@@ -54,6 +59,7 @@ function buildTools(
       description: `Tool ${d.id}`,
       safety: d.safety,
       confirm_prompt: d.prompt,
+      quorum: d.quorum,
     })
   }
   return map
@@ -538,6 +544,62 @@ describe('InteractionAgent', () => {
         expect.any(Object),
         [{ type: 'webhook', timeout_ms: 30_000 }],
         'parallel',
+        expect.any(Object),
+      )
+    })
+
+    it('passes quorum config from SafetyGuard to the approval request', async () => {
+      const mockOrchestrator = {
+        orchestrate: vi.fn().mockResolvedValue({
+          approved: true,
+          approver_id: 'manager_1',
+          approvers: ['manager_1', 'manager_2'],
+          channel_used: 'webhook',
+          timestamp: Date.now(),
+        }),
+      }
+      const safetyGuard = new SafetyGuard({
+        toolConfigs: [
+          {
+            name: 'inventory_writeoff',
+            safety: 'restricted',
+            required_role: 'manager',
+            approval_channels: [{ type: 'webhook', timeout_ms: 30_000 }],
+            quorum: {
+              required: 2,
+              eligible_roles: ['manager', 'owner'],
+            },
+          },
+        ],
+      })
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'inventory_writeoff', input: { amount: 50_000 } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        safetyGuard,
+        approvalOrchestrator: mockOrchestrator as unknown as ApprovalOrchestrator,
+        toolRegistry: buildTools({ id: 'inventory_writeoff', safety: 'restricted' }),
+      })
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'write this off',
+        speaker_id: 'customer_1',
+        role: 'customer',
+      })
+
+      expect(mockOrchestrator.orchestrate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quorum: {
+            required: 2,
+            eligible_roles: ['manager', 'owner'],
+          },
+        }),
+        [{ type: 'webhook', timeout_ms: 30_000 }],
+        'quorum',
         expect.any(Object),
       )
     })

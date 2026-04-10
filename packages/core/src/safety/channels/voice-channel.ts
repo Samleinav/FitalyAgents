@@ -59,6 +59,10 @@ export class VoiceApprovalChannel implements IApprovalChannel {
 
         // Check if the speaker matches the expected approver
         if (!event.speaker_id) return
+        const expectedApproverId = request.context.expected_approver_id
+        if (typeof expectedApproverId === 'string' && event.speaker_id !== expectedApproverId) {
+          return
+        }
 
         const isAffirmative = this.detectAffirmative(event.text)
         const isNegative = this.detectNegative(event.text)

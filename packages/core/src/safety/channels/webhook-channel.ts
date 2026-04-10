@@ -26,11 +26,12 @@ export class WebhookApprovalChannel implements IApprovalChannel {
     this.id = deps.id ?? 'webhook'
   }
 
-  async notify(request: ApprovalRequest, _approver: HumanProfile): Promise<void> {
+  async notify(request: ApprovalRequest, approver: HumanProfile): Promise<void> {
     await this.bus.publish('bus:APPROVAL_WEBHOOK_REQUEST', {
       event: 'APPROVAL_WEBHOOK_REQUEST',
       request_id: request.id,
       draft_id: request.draft_id,
+      approver_id: approver.id,
       required_role: request.required_role,
       action: request.action,
       amount: request.amount,

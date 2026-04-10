@@ -54,6 +54,7 @@ describe('WebhookApprovalChannel', () => {
         event: 'APPROVAL_WEBHOOK_REQUEST',
         request_id: 'req_001',
         draft_id: 'draft_001',
+        approver_id: 'emp_carlos',
         required_role: 'manager',
         amount: 15_000,
       })

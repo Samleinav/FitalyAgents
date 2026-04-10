@@ -11,6 +11,7 @@ import type {
   ChannelConfig,
   SafetyDecision,
   ApprovalStrategy,
+  QuorumConfig,
 } from '../safety/channels/types.js'
 import type { ITracer, ITrace } from '../tracing/types.js'
 import { NoopTracer } from '../tracing/noop-tracer.js'
@@ -45,6 +46,7 @@ export interface InteractionToolDef {
   safety: 'safe' | 'staged' | 'protected' | 'restricted'
   required_role?: HumanRole
   confirm_prompt?: string
+  quorum?: QuorumConfig
   input_schema?: unknown
 }
 
@@ -463,7 +465,7 @@ export class InteractionAgent {
         sessionId,
         speakerId,
         contextSnapshot,
-        configuredTool.approval_strategy,
+        configuredTool.approval_strategy ?? (configuredTool.quorum ? 'quorum' : undefined),
       )
     }
 
@@ -489,7 +491,8 @@ export class InteractionAgent {
           undefined,
           undefined,
           contextSnapshot,
-          undefined,
+          toolDef.quorum ? 'quorum' : undefined,
+          toolDef.quorum,
         )
       }
     }
@@ -527,6 +530,7 @@ export class InteractionAgent {
       decision.channels,
       contextSnapshot,
       approvalStrategy,
+      decision.quorum,
     )
   }
 
@@ -619,6 +623,7 @@ export class InteractionAgent {
     channels?: ChannelConfig[],
     contextSnapshot: Record<string, unknown> = {},
     approvalStrategy?: ApprovalStrategy,
+    quorum?: QuorumConfig,
   ): Promise<ToolCallResult> {
     if (!this.approvalOrchestrator) {
       return { type: 'error', toolId: toolDef.tool_id, error: 'ApprovalOrchestrator not available' }
@@ -658,6 +663,7 @@ export class InteractionAgent {
         required_role: resolvedRole,
         context: approvalContext,
         timeout_ms: 120_000,
+        quorum,
       },
       channels && channels.length > 0 ? channels : [{ type: 'voice', timeout_ms: 60_000 }],
       approvalStrategy ?? 'sequential',

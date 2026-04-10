@@ -456,6 +456,45 @@ orchestrate(request, strategy='sequential')
 
 Use when: there is a preferred channel (voice) and a fallback (app).
 
+#### `quorum`
+
+Multiple humans are notified in parallel, and the action only succeeds after the
+configured number of distinct approvers say yes. By default, any explicit
+rejection fails the quorum immediately.
+
+```typescript
+const request = {
+  id: 'approval_001',
+  draft_id: 'draft_001',
+  action: 'inventory_writeoff',
+  amount: 50_000,
+  session_id: 'session-1',
+  required_role: 'manager',
+  context: { store_id: 'store_001' },
+  timeout_ms: 120_000,
+  quorum: {
+    required: 2,
+    eligible_roles: ['manager', 'owner'],
+    reject_on_any_no: true,
+  },
+}
+
+await orchestrator.orchestrate(
+  request,
+  [{ type: 'webhook', timeout_ms: 60_000 }],
+  'quorum',
+  fallbackApprover,
+)
+```
+
+With `InMemoryPresenceManager`, quorum routing waits until enough eligible
+humans are available. The final `APPROVAL_RESOLVED` event keeps
+`approver_id` for backwards compatibility and adds `approvers` for all quorum
+participants.
+
+Use when: high-impact operations require shared accountability, such as large
+refunds, inventory write-offs, pricing overrides, or policy changes.
+
 ### Bus events emitted by the governance system
 
 ```
@@ -464,16 +503,16 @@ bus:DRAFT_CONFIRMED          {draft_id, session_id, intent_id, items, total?}
 bus:DRAFT_CANCELLED          {draft_id, session_id, reason}
 bus:ORDER_PENDING_APPROVAL   {request, channels, strategy, approver}
 bus:HUMAN_PRESENCE_CHANGED   {human_id, role, status, store_id?, timestamp}
-bus:ORDER_QUEUED_NO_APPROVER {request_id, draft_id, session_id, required_role, queued_at}
+bus:ORDER_QUEUED_NO_APPROVER {request_id, draft_id, session_id, required_role, quorum_required?, eligible_roles?, queued_at}
 bus:SESSION_HANDOFF          {session_id, from_agent_id, to_human_id?, to_role, context_snapshot, conversation_summary, pending_draft?, memory_context?, timestamp}
 bus:SESSION_RESUMED          {session_id, resumed_by, resumed_by_role?, notes?, timestamp}
 bus:APPROVAL_VOICE_REQUEST   {request_id, draft_id, approver_id, prompt_text}
-bus:APPROVAL_WEBHOOK_REQUEST {request_id, draft_id, required_role, action, amount?, session_id}
+bus:APPROVAL_WEBHOOK_REQUEST {request_id, draft_id, approver_id?, required_role, action, amount?, session_id}
 bus:APPROVAL_EXTERNAL_REQUEST  {request_id, draft_id, payload}
 bus:APPROVAL_EXTERNAL_RESPONSE {request_id, approved, approver_id, reason?}
-bus:APPROVAL_RESOLVED        {request_id, draft_id, approved, approver_id, channel_used, timestamp}
-bus:ORDER_APPROVED           {draft_id, session_id, approved_by, channel_used}
-bus:ORDER_APPROVAL_TIMEOUT   {draft_id, session_id, request_id}
+bus:APPROVAL_RESOLVED        {request_id, draft_id, session_id, approved, approver_id, approvers?, channel_used, strategy?, timestamp}
+bus:ORDER_APPROVED           {draft_id, session_id, approved_by, approvers?, channel_used, strategy?}
+bus:ORDER_APPROVAL_TIMEOUT   {draft_id, session_id, request_id, partial_approvals?, quorum_required?}
 bus:AGENT_ERROR              {agent_id, channel, error, payload?, timestamp}
 ```
 

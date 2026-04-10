@@ -222,11 +222,12 @@ const renderer = new AIRIRenderer({ url: 'ws://localhost:6006' })
 ### Safety and approvals
 
 - `InMemoryDraftStore` manages staged actions with TTL, rollback, confirm, and cancel
-- `ApprovalOrchestrator` coordinates voice, webhook, and external approval channels
+- `ApprovalOrchestrator` coordinates voice, webhook, external, sequential, parallel, and quorum approvals
 - `InMemoryPresenceManager` tracks available, busy, offline, and on-break humans for same-or-higher-role approval routing
 
 ```ts
 import { ApprovalOrchestrator, InMemoryPresenceManager } from 'fitalyagents'
+import type { ApprovalRequest } from 'fitalyagents'
 
 const presenceManager = new InMemoryPresenceManager({ bus })
 presenceManager.start()
@@ -235,6 +236,29 @@ const approvals = new ApprovalOrchestrator({
   bus,
   channelRegistry,
   presenceManager,
+})
+
+const request: ApprovalRequest = {
+  id: 'approval_001',
+  draft_id: 'draft_001',
+  action: 'inventory_writeoff',
+  amount: 50_000,
+  session_id: 'session-1',
+  required_role: 'manager',
+  context: { store_id: 'store_001' },
+  timeout_ms: 120_000,
+  quorum: {
+    required: 2,
+    eligible_roles: ['manager', 'owner'],
+  },
+}
+
+await approvals.orchestrate(request, [{ type: 'webhook', timeout_ms: 60_000 }], 'quorum', {
+  id: 'fallback_manager',
+  name: 'Fallback Manager',
+  role: 'manager',
+  store_id: 'store_001',
+  approval_limits: {},
 })
 ```
 

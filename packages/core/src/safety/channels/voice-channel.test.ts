@@ -120,6 +120,23 @@ describe('VoiceApprovalChannel', () => {
       expect(result).toBeNull()
     })
 
+    it('ignores speech from a different expected approver', async () => {
+      const request = makeRequest({
+        context: { expected_approver_id: 'emp_carlos' },
+      })
+      const promise = channel.waitForResponse(request, 5_000)
+
+      await bus.publish('bus:SPEECH_FINAL', {
+        session_id: 'session-1',
+        text: 'sí, aprobado',
+        speaker_id: 'emp_maria',
+      })
+
+      vi.advanceTimersByTime(5_000)
+      const result = await promise
+      expect(result).toBeNull()
+    })
+
     it('ignores ambiguous speech (neither yes nor no)', async () => {
       const request = makeRequest()
       const promise = channel.waitForResponse(request, 5_000)

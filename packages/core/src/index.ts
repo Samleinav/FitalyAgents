@@ -252,6 +252,7 @@ export type {
   ApprovalStrategy,
   ApprovalRequest,
   ApprovalResponse,
+  QuorumConfig,
   ChannelConfig,
   IApprovalChannel,
   SafetyDecision,

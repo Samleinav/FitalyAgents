@@ -51,7 +51,16 @@ export interface HumanProfile {
 
 export type ApprovalChannelType = 'voice' | 'webhook' | 'external_tool'
 
-export type ApprovalStrategy = 'parallel' | 'sequential'
+export type ApprovalStrategy = 'parallel' | 'sequential' | 'quorum'
+
+export interface QuorumConfig {
+  /** How many distinct approvers are required. */
+  required: number
+  /** Roles eligible to participate in the quorum. */
+  eligible_roles: HumanRole[]
+  /** Whether any rejection fails the whole quorum immediately. Default: true. */
+  reject_on_any_no?: boolean
+}
 
 export interface ApprovalRequest {
   id: string
@@ -62,11 +71,14 @@ export interface ApprovalRequest {
   required_role: HumanRole
   context: Record<string, unknown>
   timeout_ms: number
+  quorum?: QuorumConfig
 }
 
 export interface ApprovalResponse {
   approved: boolean
   approver_id: string
+  /** All approvers that contributed to a quorum result. */
+  approvers?: string[]
   channel_used: string
   reason?: string
   timestamp: number
@@ -121,6 +133,7 @@ export type SafetyDecision =
       reason: 'needs_approval'
       escalate_to: HumanRole
       channels: ChannelConfig[]
+      quorum?: QuorumConfig
     }
 
 // ApprovalOrchestrator deps

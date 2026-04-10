@@ -105,6 +105,37 @@ describe('SafetyGuard', () => {
       }
     })
 
+    it('includes quorum config in needs_approval decisions', () => {
+      const customer = makeProfile({ role: 'customer' })
+      const quorumGuard = new SafetyGuard({
+        toolConfigs: [
+          {
+            name: 'inventory_writeoff',
+            safety: 'restricted',
+            required_role: 'manager',
+            approval_channels: [{ type: 'webhook', timeout_ms: 30_000 }],
+            approval_strategy: 'quorum',
+            quorum: {
+              required: 2,
+              eligible_roles: ['manager', 'owner'],
+            },
+          },
+        ],
+      })
+
+      const decision = quorumGuard.evaluate('inventory_writeoff', { amount: 50_000 }, customer)
+
+      expect(decision).toMatchObject({
+        allowed: false,
+        reason: 'needs_approval',
+        escalate_to: 'manager',
+        quorum: {
+          required: 2,
+          eligible_roles: ['manager', 'owner'],
+        },
+      })
+    })
+
     it('returns allowed+execute for RESTRICTED tools when speaker has sufficient role', () => {
       const manager = makeProfile({ role: 'manager' })
       const decision = guard.evaluate('refund_create', { amount: 50_000 }, manager)
