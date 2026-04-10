@@ -12,6 +12,7 @@ import { InMemoryBus } from '../bus/in-memory-bus.js'
 import { InMemoryContextStore } from '../context/in-memory-context-store.js'
 import { SafetyGuard } from '../safety/safety-guard.js'
 import { InMemoryDraftStore } from '../safety/draft-store.js'
+import type { ApprovalOrchestrator } from '../safety/approval-orchestrator.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -420,6 +421,128 @@ describe('InteractionAgent', () => {
     })
   })
 
+  // ── Dynamic SafetyGuard ───────────────────────────────────────────
+
+  describe('Dynamic SafetyGuard', () => {
+    it('can lower a protected tool to safe for a contextual evaluation', async () => {
+      const executor = createMockExecutor({
+        payment_process: { charged: true },
+      })
+      const safetyGuard = new SafetyGuard({
+        toolConfigs: [{ name: 'payment_process', safety: 'protected' }],
+        contextualResolver: ({ context }) => {
+          if (context?.customer_tier === 'vip') return 'safe'
+          return null
+        },
+      })
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'payment_process', input: { amount: 100 } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent, contextStore } = createAgent({
+        llm,
+        executor,
+        safetyGuard,
+        toolRegistry: buildTools({ id: 'payment_process', safety: 'protected' }),
+      })
+      await contextStore.set('session-1', 'customer_tier', 'vip')
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'charge it',
+        speaker_id: 'customer_1',
+        role: 'customer',
+      })
+
+      expect(result.toolResults[0]).toEqual({
+        type: 'executed',
+        toolId: 'payment_process',
+        result: { charged: true },
+      })
+      expect(executor.execute).toHaveBeenCalledWith('payment_process', { amount: 100 })
+    })
+
+    it('can raise a safe tool to protected from session context', async () => {
+      const executor = createMockExecutor()
+      const safetyGuard = new SafetyGuard({
+        toolConfigs: [{ name: 'product_search', safety: 'safe' }],
+        contextualResolver: ({ context }) => {
+          if (context?.sentiment_alert_level === 'frustrated') return 'protected'
+          return null
+        },
+      })
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'product_search', input: { q: 'shoes' } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent, contextStore } = createAgent({
+        llm,
+        executor,
+        safetyGuard,
+        toolRegistry: buildTools({ id: 'product_search', safety: 'safe' }),
+      })
+      await contextStore.set('session-1', 'sentiment_alert_level', 'frustrated')
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'find shoes',
+        speaker_id: 'customer_1',
+      })
+
+      expect(result.toolResults[0].type).toBe('needs_confirmation')
+      expect(executor.execute).not.toHaveBeenCalled()
+    })
+
+    it('uses the configured approval strategy from SafetyGuard decisions', async () => {
+      const mockOrchestrator = {
+        orchestrate: vi.fn().mockResolvedValue({
+          approved: true,
+          approver_id: 'manager_1',
+          channel_used: 'webhook',
+          timestamp: Date.now(),
+        }),
+      }
+      const safetyGuard = new SafetyGuard({
+        toolConfigs: [
+          {
+            name: 'refund_create',
+            safety: 'restricted',
+            required_role: 'manager',
+            approval_channels: [{ type: 'webhook', timeout_ms: 30_000 }],
+            approval_strategy: 'parallel',
+          },
+        ],
+      })
+      const llm = createMockLLM([
+        { type: 'tool_call', id: 'tc_1', name: 'refund_create', input: { amount: 100 } },
+        { type: 'end', stop_reason: 'tool_use' },
+      ])
+
+      const { agent } = createAgent({
+        llm,
+        safetyGuard,
+        approvalOrchestrator: mockOrchestrator as unknown as ApprovalOrchestrator,
+        toolRegistry: buildTools({ id: 'refund_create', safety: 'restricted' }),
+      })
+
+      await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'refund this',
+        speaker_id: 'customer_1',
+        role: 'customer',
+      })
+
+      expect(mockOrchestrator.orchestrate).toHaveBeenCalledWith(
+        expect.any(Object),
+        [{ type: 'webhook', timeout_ms: 30_000 }],
+        'parallel',
+        expect.any(Object),
+      )
+    })
+  })
+
   // ── RESTRICTED tool ────────────────────────────────────────────────
 
   describe('RESTRICTED tool', () => {
@@ -456,7 +579,7 @@ describe('InteractionAgent', () => {
 
       const { agent, ttsLog } = createAgent({
         llm,
-        approvalOrchestrator: mockOrchestrator as any,
+        approvalOrchestrator: mockOrchestrator as unknown as ApprovalOrchestrator,
         toolRegistry: buildTools({ id: 'refund_create', safety: 'restricted' }),
       })
 

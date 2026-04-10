@@ -196,6 +196,42 @@ export const ApprovalResolvedEventSchema = z.object({
 })
 export type ApprovalResolvedEvent = z.infer<typeof ApprovalResolvedEventSchema>
 
+export const HumanPresenceStatusSchema = z.enum(['available', 'busy', 'offline', 'on_break'])
+export type HumanPresenceStatus = z.infer<typeof HumanPresenceStatusSchema>
+
+export const HumanPresenceChangedSchema = z.object({
+  event: z.literal('HUMAN_PRESENCE_CHANGED'),
+  human_id: z.string(),
+  name: z.string().optional(),
+  role: z.enum([
+    'customer',
+    'user',
+    'staff',
+    'agent',
+    'cashier',
+    'operator',
+    'manager',
+    'supervisor',
+    'owner',
+  ]),
+  status: HumanPresenceStatusSchema,
+  org_id: z.string().optional(),
+  store_id: z.string().optional(),
+  approval_limits: z.record(z.unknown()).optional(),
+  timestamp: z.number(),
+})
+export type HumanPresenceChanged = z.infer<typeof HumanPresenceChangedSchema>
+
+export const OrderQueuedNoApproverSchema = z.object({
+  event: z.literal('ORDER_QUEUED_NO_APPROVER'),
+  request_id: z.string(),
+  draft_id: z.string(),
+  session_id: z.string(),
+  required_role: z.string(),
+  queued_at: z.number(),
+})
+export type OrderQueuedNoApprover = z.infer<typeof OrderQueuedNoApproverSchema>
+
 // ── Session / Target Bus Events (v2) ─────────────────────────────────────────
 
 export const SpeechPartialEventSchema = z.object({
@@ -235,9 +271,24 @@ export const AmbientContextEventSchema = z.object({
   session_id: z.string(),
   speaker_id: z.string().optional(),
   text: z.string(),
+  sentiment: z.string().nullable().optional(),
   timestamp: z.number(),
 })
 export type AmbientContextEvent = z.infer<typeof AmbientContextEventSchema>
+
+export const SentimentLevelSchema = z.enum(['positive', 'neutral', 'tense', 'frustrated', 'angry'])
+export type SentimentLevel = z.infer<typeof SentimentLevelSchema>
+
+export const SessionSentimentAlertSchema = z.object({
+  event: z.literal('SESSION_SENTIMENT_ALERT'),
+  session_id: z.string(),
+  level: SentimentLevelSchema,
+  consecutive_count: z.number().int(),
+  trigger_text: z.string().optional(),
+  speaker_id: z.string().optional(),
+  timestamp: z.number(),
+})
+export type SessionSentimentAlert = z.infer<typeof SessionSentimentAlertSchema>
 
 export const TargetDetectedEventSchema = z.object({
   event: z.literal('TARGET_DETECTED'),

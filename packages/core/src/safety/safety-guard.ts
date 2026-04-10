@@ -7,6 +7,23 @@ import type {
   ChannelConfig,
 } from './channels/types.js'
 
+export interface SafetyEvaluationContext {
+  session_id?: string
+  ctx?: Record<string, unknown>
+}
+
+export interface ContextualSafetyInput {
+  action: string
+  params: Record<string, unknown>
+  speaker: HumanProfile
+  session_id?: string
+  context?: Record<string, unknown>
+}
+
+export type ContextualSafetyResolver = (
+  input: ContextualSafetyInput,
+) => SafetyLevel | null | undefined | Promise<SafetyLevel | null | undefined>
+
 // ── Role hierarchy ────────────────────────────────────────────────────────────
 
 const ROLE_HIERARCHY: Record<HumanRole, number> = {
@@ -68,6 +85,11 @@ export interface ToolSafetyConfig {
   approval_strategy?: 'parallel' | 'sequential'
 }
 
+export interface SafetyGuardDeps {
+  toolConfigs: ToolSafetyConfig[]
+  contextualResolver?: ContextualSafetyResolver
+}
+
 // ── SafetyGuard ───────────────────────────────────────────────────────────────
 
 /**
@@ -84,15 +106,49 @@ export interface ToolSafetyConfig {
  */
 export class SafetyGuard {
   private readonly toolConfigs: Map<string, ToolSafetyConfig>
+  private readonly contextualResolver: ContextualSafetyResolver | undefined
 
-  constructor(deps: { toolConfigs: ToolSafetyConfig[] }) {
+  constructor(deps: SafetyGuardDeps) {
     this.toolConfigs = new Map(deps.toolConfigs.map((t) => [t.name, t]))
+    this.contextualResolver = deps.contextualResolver
   }
 
   /**
    * Evaluate whether an action can be executed by this speaker.
+   *
+   * This method remains synchronous for backwards compatibility. If the guard
+   * was configured with an async contextual resolver, use `evaluateAsync()`.
    */
-  evaluate(action: string, params: Record<string, unknown>, speaker: HumanProfile): SafetyDecision {
+  evaluate(
+    action: string,
+    params: Record<string, unknown>,
+    speaker: HumanProfile,
+    context?: SafetyEvaluationContext,
+  ): SafetyDecision {
+    const contextualSafety = this.resolveContextualSafetySync(action, params, speaker, context)
+    return this.evaluateWithSafety(action, params, speaker, contextualSafety ?? undefined)
+  }
+
+  /**
+   * Async-safe evaluation for contextual resolvers that read memory, sentiment,
+   * fraud signals, or other external session state.
+   */
+  async evaluateAsync(
+    action: string,
+    params: Record<string, unknown>,
+    speaker: HumanProfile,
+    context?: SafetyEvaluationContext,
+  ): Promise<SafetyDecision> {
+    const contextualSafety = await this.resolveContextualSafety(action, params, speaker, context)
+    return this.evaluateWithSafety(action, params, speaker, contextualSafety ?? undefined)
+  }
+
+  private evaluateWithSafety(
+    action: string,
+    params: Record<string, unknown>,
+    speaker: HumanProfile,
+    contextualSafety?: SafetyLevel,
+  ): SafetyDecision {
     const tool = this.toolConfigs.get(action)
 
     // Unknown tool → treat as RESTRICTED for safety
@@ -105,7 +161,12 @@ export class SafetyGuard {
       }
     }
 
-    switch (tool.safety) {
+    const effectiveTool =
+      contextualSafety && contextualSafety !== tool.safety
+        ? { ...tool, safety: contextualSafety }
+        : tool
+
+    switch (effectiveTool.safety) {
       case 'safe':
         return { allowed: true, execute: true }
 
@@ -116,14 +177,14 @@ export class SafetyGuard {
         return {
           allowed: false,
           reason: 'needs_confirmation',
-          prompt: tool.confirm_prompt,
+          prompt: effectiveTool.confirm_prompt,
         }
 
       case 'restricted': {
-        const requiredRole = tool.required_role ?? 'manager'
+        const requiredRole = effectiveTool.required_role ?? 'manager'
 
         // Check if speaker has sufficient permissions
-        if (this.roleHasPermission(speaker, action, params)) {
+        if (this.roleHasPermissionForTool(speaker, action, params, effectiveTool)) {
           return { allowed: true, execute: true }
         }
 
@@ -131,7 +192,7 @@ export class SafetyGuard {
           allowed: false,
           reason: 'needs_approval',
           escalate_to: requiredRole,
-          channels: tool.approval_channels ?? [],
+          channels: effectiveTool.approval_channels ?? [],
         }
       }
     }
@@ -145,13 +206,22 @@ export class SafetyGuard {
     toolName: string,
     params: Record<string, unknown>,
   ): boolean {
+    const tool = this.toolConfigs.get(toolName)
+    if (!tool) return false
+
+    return this.roleHasPermissionForTool(speaker, toolName, params, tool)
+  }
+
+  private roleHasPermissionForTool(
+    speaker: HumanProfile,
+    toolName: string,
+    params: Record<string, unknown>,
+    tool: ToolSafetyConfig,
+  ): boolean {
     const limits = speaker.approval_limits
 
     // Owner can always do everything
     if (speaker.role === 'owner') return true
-
-    const tool = this.toolConfigs.get(toolName)
-    if (!tool) return false
 
     // SAFE and STAGED tools don't require role checks
     if (tool.safety === 'safe' || tool.safety === 'staged') return true
@@ -209,4 +279,70 @@ export class SafetyGuard {
   getToolConfig(toolName: string): ToolSafetyConfig | undefined {
     return this.toolConfigs.get(toolName)
   }
+
+  private resolveContextualSafetySync(
+    action: string,
+    params: Record<string, unknown>,
+    speaker: HumanProfile,
+    context?: SafetyEvaluationContext,
+  ): SafetyLevel | null | undefined {
+    if (!this.contextualResolver) return null
+
+    const result = this.contextualResolver(
+      this.createResolverInput(action, params, speaker, context),
+    )
+
+    if (isPromiseLike(result)) {
+      throw new Error('SafetyGuard contextualResolver returned a Promise. Use evaluateAsync().')
+    }
+
+    return result
+  }
+
+  private async resolveContextualSafety(
+    action: string,
+    params: Record<string, unknown>,
+    speaker: HumanProfile,
+    context?: SafetyEvaluationContext,
+  ): Promise<SafetyLevel | null | undefined> {
+    if (!this.contextualResolver) return null
+    return this.contextualResolver(this.createResolverInput(action, params, speaker, context))
+  }
+
+  private createResolverInput(
+    action: string,
+    params: Record<string, unknown>,
+    speaker: HumanProfile,
+    context?: SafetyEvaluationContext,
+  ): ContextualSafetyInput {
+    return {
+      action,
+      params,
+      speaker,
+      session_id: context?.session_id,
+      context: context?.ctx,
+    }
+  }
+}
+
+export function composeContextualSafetyResolvers(
+  ...resolvers: ContextualSafetyResolver[]
+): ContextualSafetyResolver {
+  return async (input) => {
+    for (const resolver of resolvers) {
+      const result = await resolver(input)
+      if (result != null) return result
+    }
+
+    return null
+  }
+}
+
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'then' in value &&
+    typeof (value as { then?: unknown }).then === 'function'
+  )
 }

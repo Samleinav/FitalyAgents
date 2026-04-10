@@ -203,6 +203,31 @@ describe('UIAgent', () => {
     })
   })
 
+  describe('ORDER_QUEUED_NO_APPROVER', () => {
+    it('publishes UI_UPDATE approval_queue show', async () => {
+      const { agent, updates } = createUIAgent()
+
+      await agent.onEvent('bus:ORDER_QUEUED_NO_APPROVER', {
+        event: 'ORDER_QUEUED_NO_APPROVER',
+        request_id: 'req_001',
+        draft_id: 'draft_001',
+        session_id: 'session-1',
+        required_role: 'manager',
+        queued_at: Date.now(),
+      })
+
+      expect(updates).toHaveLength(1)
+      expect(updates[0]).toMatchObject({
+        component: 'approval_queue',
+        action: 'show',
+        data: {
+          request_id: 'req_001',
+          required_role: 'manager',
+        },
+      })
+    })
+  })
+
   // ── PROACTIVE_TRIGGER ──────────────────────────────────────────
 
   describe('PROACTIVE_TRIGGER', () => {

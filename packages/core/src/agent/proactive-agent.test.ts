@@ -239,6 +239,40 @@ describe('ProactiveAgent', () => {
     })
   })
 
+  // ── sentiment_alert ───────────────────────────────────────────────
+
+  describe('sentiment_alert', () => {
+    it('turns SESSION_SENTIMENT_ALERT into a proactive trigger', async () => {
+      const { agent, bus, triggers } = createAgent({ enableIdleDetection: false })
+      await agent.start()
+
+      await bus.publish('bus:SESSION_SENTIMENT_ALERT', {
+        event: 'SESSION_SENTIMENT_ALERT',
+        session_id: 'ses-1',
+        level: 'angry',
+        consecutive_count: 2,
+        trigger_text: 'This is ridiculous.',
+        speaker_id: 'cust_ana',
+        timestamp: Date.now(),
+      })
+
+      await new Promise((r) => setTimeout(r, 20))
+
+      expect(triggers).toHaveLength(1)
+      expect(triggers[0]).toMatchObject({
+        event: 'PROACTIVE_TRIGGER',
+        session_id: 'ses-1',
+        reason: 'sentiment_alert',
+        context: {
+          level: 'angry',
+          consecutive_count: 2,
+          trigger_text: 'This is ridiculous.',
+          speaker_id: 'cust_ana',
+        },
+      })
+    })
+  })
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   describe('lifecycle', () => {

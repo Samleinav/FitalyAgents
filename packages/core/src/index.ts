@@ -35,6 +35,9 @@ export type {
   ApprovalExternalRequestEvent,
   ApprovalExternalResponseEvent,
   ApprovalResolvedEvent,
+  HumanPresenceStatus,
+  HumanPresenceChanged,
+  OrderQueuedNoApprover,
   SpeechPartialEvent,
   SpeechFinalEvent,
   AmbientContextEvent,
@@ -42,6 +45,8 @@ export type {
   TargetQueuedEvent,
   TargetGroupEvent,
   ProactiveTriggerEvent,
+  SentimentLevel,
+  SessionSentimentAlert,
   TargetGroupChangedEvent,
   AvatarSpeakEvent,
   ResponseStartEvent,
@@ -81,6 +86,9 @@ export {
   ApprovalExternalRequestEventSchema,
   ApprovalExternalResponseEventSchema,
   ApprovalResolvedEventSchema,
+  HumanPresenceStatusSchema,
+  HumanPresenceChangedSchema,
+  OrderQueuedNoApproverSchema,
   SpeechPartialEventSchema,
   SpeechFinalEventSchema,
   AmbientContextEventSchema,
@@ -88,6 +96,8 @@ export {
   TargetQueuedEventSchema,
   TargetGroupEventSchema,
   ProactiveTriggerEventSchema,
+  SentimentLevelSchema,
+  SessionSentimentAlertSchema,
   TargetGroupChangedEventSchema,
   AvatarSpeakEventSchema,
   ResponseStartEventSchema,
@@ -117,6 +127,12 @@ export type {
   AmbientAgentConfig,
   AmbientAgentDeps,
 } from './agent/ambient-agent.js'
+export { SentimentGuard } from './agent/sentiment-guard.js'
+export type {
+  SentimentGuardConfig,
+  SentimentGuardDeps,
+  SentimentSample,
+} from './agent/sentiment-guard.js'
 export { ContextBuilderAgent } from './agent/context-builder-agent.js'
 export type {
   ConversationContext,
@@ -175,6 +191,11 @@ export { InMemoryContextStore } from './context/in-memory-context-store.js'
 export { AccessDeniedError, enforceAccess } from './context/types.js'
 export type { IContextStore, AmbientContext } from './context/types.js'
 
+// Presence
+export { InMemoryPresenceManager } from './presence/in-memory-presence-manager.js'
+export type { InMemoryPresenceManagerDeps } from './presence/in-memory-presence-manager.js'
+export type { IPresenceManager, PresenceEntry } from './presence/types.js'
+
 // Session
 export { InMemorySessionManager } from './session/in-memory-session-manager.js'
 export { TargetGroupStateMachine } from './session/target-group.js'
@@ -222,8 +243,18 @@ export type {
   SafetyDecision,
   ApprovalOrchestratorDeps,
 } from './safety/channels/types.js'
-export { SafetyGuard, defaultLimits } from './safety/safety-guard.js'
-export type { ToolSafetyConfig } from './safety/safety-guard.js'
+export {
+  SafetyGuard,
+  composeContextualSafetyResolvers,
+  defaultLimits,
+} from './safety/safety-guard.js'
+export type {
+  ContextualSafetyInput,
+  ContextualSafetyResolver,
+  SafetyEvaluationContext,
+  SafetyGuardDeps,
+  ToolSafetyConfig,
+} from './safety/safety-guard.js'
 export { InMemoryDraftStore } from './safety/draft-store.js'
 export type { IDraftStore, Draft, DraftInput, DraftStatus } from './safety/draft-store.js'
 export { VoiceApprovalChannel } from './safety/channels/voice-channel.js'

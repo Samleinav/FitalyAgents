@@ -9,6 +9,7 @@ export type ProactiveReason =
   | 'out_of_stock'
   | 'draft_expired'
   | 'unanswered_question'
+  | 'sentiment_alert'
 
 export interface ProactiveTrigger {
   session_id: string
@@ -33,6 +34,7 @@ export interface ProactiveAgentConfig {
  * - Customer idle time (no SPEECH_FINAL for N seconds)
  * - Out-of-stock from ACTION_COMPLETED results
  * - Draft expiry from DRAFT_CANCELLED with ttl_expired
+ * - Session sentiment alerts from SentimentGuard
  *
  * Emits bus:PROACTIVE_TRIGGER for InteractionAgent to decide
  * whether to speak (avoiding being intrusive).
@@ -57,7 +59,12 @@ export class ProactiveAgent extends StreamAgent {
   private readonly idleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   protected get channels(): string[] {
-    return ['bus:SPEECH_FINAL', 'bus:ACTION_COMPLETED', 'bus:DRAFT_CANCELLED']
+    return [
+      'bus:SPEECH_FINAL',
+      'bus:ACTION_COMPLETED',
+      'bus:DRAFT_CANCELLED',
+      'bus:SESSION_SENTIMENT_ALERT',
+    ]
   }
 
   constructor(deps: {
@@ -85,6 +92,9 @@ export class ProactiveAgent extends StreamAgent {
         break
       case 'bus:DRAFT_CANCELLED':
         await this.handleDraftCancelled(sessionId, data)
+        break
+      case 'bus:SESSION_SENTIMENT_ALERT':
+        await this.handleSentimentAlert(sessionId, data)
         break
     }
   }
@@ -134,6 +144,18 @@ export class ProactiveAgent extends StreamAgent {
         draft_id: data.draft_id,
       })
     }
+  }
+
+  private async handleSentimentAlert(
+    sessionId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    await this.publishTrigger(sessionId, 'sentiment_alert', {
+      level: data.level,
+      consecutive_count: data.consecutive_count,
+      trigger_text: data.trigger_text,
+      speaker_id: data.speaker_id,
+    })
   }
 
   // ── Idle detection ─────────────────────────────────────────────────────

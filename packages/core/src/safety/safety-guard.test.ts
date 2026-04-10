@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { SafetyGuard, defaultLimits } from './safety-guard.js'
+import { SafetyGuard, composeContextualSafetyResolvers, defaultLimits } from './safety-guard.js'
 import type { HumanProfile } from './channels/types.js'
-import type { ToolSafetyConfig } from './safety-guard.js'
+import type { ContextualSafetyResolver, ToolSafetyConfig } from './safety-guard.js'
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -136,6 +136,118 @@ describe('SafetyGuard', () => {
         reason: 'needs_approval',
         escalate_to: 'owner',
       })
+    })
+
+    it('uses a sync contextual resolver to lower the safety level for one evaluation', () => {
+      const vipResolver: ContextualSafetyResolver = ({ action, context }) => {
+        if (action === 'payment_process' && context?.customer_tier === 'vip') return 'safe'
+        return null
+      }
+      const vipGuard = new SafetyGuard({ toolConfigs, contextualResolver: vipResolver })
+      const customer = makeProfile({ role: 'customer' })
+
+      const decision = vipGuard.evaluate('payment_process', { amount: 15_000 }, customer, {
+        session_id: 'session_vip',
+        ctx: { customer_tier: 'vip' },
+      })
+
+      expect(decision).toEqual({ allowed: true, execute: true })
+    })
+
+    it('uses a sync contextual resolver to raise a safe tool to restricted', () => {
+      const elevatedGuard = new SafetyGuard({
+        toolConfigs: [{ name: 'manual_override', safety: 'safe', required_role: 'manager' }],
+        contextualResolver: () => 'restricted',
+      })
+      const customer = makeProfile({ role: 'customer' })
+
+      const decision = elevatedGuard.evaluate(
+        'manual_override',
+        { reason: 'policy exception' },
+        customer,
+        { session_id: 'session_1', ctx: { fraud_signal: true } },
+      )
+
+      expect(decision).toEqual({
+        allowed: false,
+        reason: 'needs_approval',
+        escalate_to: 'manager',
+        channels: [],
+      })
+    })
+
+    it('keeps the static safety level when the contextual resolver returns null', () => {
+      const passthroughGuard = new SafetyGuard({
+        toolConfigs,
+        contextualResolver: () => null,
+      })
+      const customer = makeProfile({ role: 'customer' })
+
+      const decision = passthroughGuard.evaluate('payment_process', { amount: 15_000 }, customer, {
+        session_id: 'session_1',
+        ctx: { customer_tier: 'standard' },
+      })
+
+      expect(decision).toEqual({
+        allowed: false,
+        reason: 'needs_confirmation',
+        prompt: '¿Confirma el cobro de {amount}?',
+      })
+    })
+
+    it('supports async contextual resolvers through evaluateAsync()', async () => {
+      const asyncGuard = new SafetyGuard({
+        toolConfigs,
+        contextualResolver: async ({ action, context }) => {
+          if (action === 'payment_process' && context?.fraud_signal === true) return 'restricted'
+          return null
+        },
+      })
+      const customer = makeProfile({ role: 'customer' })
+
+      const decision = await asyncGuard.evaluateAsync(
+        'payment_process',
+        { amount: 15_000 },
+        customer,
+        { session_id: 'session_risk', ctx: { fraud_signal: true } },
+      )
+
+      expect(decision).toEqual({
+        allowed: false,
+        reason: 'needs_approval',
+        escalate_to: 'manager',
+        channels: [],
+      })
+    })
+
+    it('throws a clear error when evaluate() receives an async resolver', () => {
+      const asyncGuard = new SafetyGuard({
+        toolConfigs,
+        contextualResolver: async () => 'safe',
+      })
+      const customer = makeProfile({ role: 'customer' })
+
+      expect(() => asyncGuard.evaluate('payment_process', { amount: 15_000 }, customer)).toThrow(
+        'Use evaluateAsync()',
+      )
+    })
+
+    it('composes contextual resolvers in order', async () => {
+      const resolver = composeContextualSafetyResolvers(
+        () => null,
+        ({ action }) => (action === 'payment_process' ? 'safe' : null),
+        () => 'restricted',
+      )
+      const composedGuard = new SafetyGuard({ toolConfigs, contextualResolver: resolver })
+      const customer = makeProfile({ role: 'customer' })
+
+      const decision = await composedGuard.evaluateAsync(
+        'payment_process',
+        { amount: 15_000 },
+        customer,
+      )
+
+      expect(decision).toEqual({ allowed: true, execute: true })
     })
   })
 

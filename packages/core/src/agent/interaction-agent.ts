@@ -1,9 +1,17 @@
 import type { IEventBus, ResponseEndEvent } from '../types/index.js'
 import type { IContextStore } from '../context/types.js'
+import { defaultLimits } from '../safety/safety-guard.js'
 import type { SafetyGuard } from '../safety/safety-guard.js'
 import type { InMemoryDraftStore } from '../safety/draft-store.js'
 import type { ApprovalOrchestrator } from '../safety/approval-orchestrator.js'
-import type { HumanProfile, HumanRole, ApprovalResponse } from '../safety/channels/types.js'
+import type {
+  HumanProfile,
+  HumanRole,
+  ApprovalResponse,
+  ChannelConfig,
+  SafetyDecision,
+  ApprovalStrategy,
+} from '../safety/channels/types.js'
 import type { ITracer, ITrace } from '../tracing/types.js'
 import { NoopTracer } from '../tracing/noop-tracer.js'
 
@@ -202,12 +210,13 @@ export class InteractionAgent {
     session_id: string
     text: string
     speaker_id?: string
+    role?: HumanRole | null
   }): Promise<{
     textChunks: string[]
     toolResults: ToolCallResult[]
     traceId: string
   }> {
-    const { session_id, text, speaker_id } = event
+    const { session_id, text, speaker_id, role } = event
 
     // ── PAUSE check: if session is paused by StaffAgent, return early ────────
     if (this.pausedSessions.has(session_id)) {
@@ -267,6 +276,7 @@ export class InteractionAgent {
               chunk.input,
               session_id,
               speaker_id,
+              role,
             )
             toolResults.push(result)
             toolSpan.end({ type: result.type })
@@ -426,10 +436,35 @@ export class InteractionAgent {
     input: unknown,
     sessionId: string,
     speakerId?: string,
+    role?: HumanRole | null,
   ): Promise<ToolCallResult> {
     const toolDef = this.toolRegistry.get(toolName)
     if (!toolDef) {
       return { type: 'error', toolId: toolName, error: `Unknown tool: ${toolName}` }
+    }
+
+    const configuredTool = this.safetyGuard.getToolConfig(toolName)
+    if (configuredTool) {
+      const contextSnapshot = await this.contextStore.getSnapshot(sessionId, ['*'])
+      const decision = await this.safetyGuard.evaluateAsync(
+        toolName,
+        toRecord(input),
+        this.createSpeakerProfile(speakerId, role),
+        {
+          session_id: sessionId,
+          ctx: contextSnapshot,
+        },
+      )
+
+      return this.handleSafetyDecision(
+        decision,
+        toolDef,
+        input,
+        sessionId,
+        speakerId,
+        contextSnapshot,
+        configuredTool.approval_strategy,
+      )
     }
 
     const safety = toolDef.safety ?? 'safe'
@@ -444,12 +479,56 @@ export class InteractionAgent {
       case 'protected':
         return this.handleProtectedTool(toolDef, input, sessionId)
 
-      case 'restricted':
-        return this.handleRestrictedTool(toolDef, input, sessionId, speakerId)
+      case 'restricted': {
+        const contextSnapshot = await this.contextStore.getSnapshot(sessionId, ['*'])
+        return this.handleRestrictedTool(
+          toolDef,
+          input,
+          sessionId,
+          speakerId,
+          undefined,
+          undefined,
+          contextSnapshot,
+          undefined,
+        )
+      }
     }
   }
 
   // ── Safety-level handlers ────────────────────────────────────────────
+
+  private async handleSafetyDecision(
+    decision: SafetyDecision,
+    toolDef: InteractionToolDef,
+    input: unknown,
+    sessionId: string,
+    speakerId: string | undefined,
+    contextSnapshot: Record<string, unknown>,
+    approvalStrategy?: ApprovalStrategy,
+  ): Promise<ToolCallResult> {
+    if (decision.allowed) {
+      if (decision.execute) {
+        return this.handleSafeTool(toolDef, input, sessionId)
+      }
+
+      return this.handleStagedTool(toolDef, input, sessionId)
+    }
+
+    if (decision.reason === 'needs_confirmation') {
+      return this.handleProtectedTool(toolDef, input, sessionId, decision.prompt)
+    }
+
+    return this.handleRestrictedTool(
+      toolDef,
+      input,
+      sessionId,
+      speakerId,
+      decision.escalate_to,
+      decision.channels,
+      contextSnapshot,
+      approvalStrategy,
+    )
+  }
 
   private async handleSafeTool(
     toolDef: InteractionToolDef,
@@ -515,11 +594,13 @@ export class InteractionAgent {
     toolDef: InteractionToolDef,
     input: unknown,
     sessionId: string,
+    promptOverride?: string,
   ): ToolCallResult {
     // Store the pending confirmation so we can resolve it on the next turn
     this.pendingConfirmations.set(sessionId, { toolDef, input })
 
-    const prompt = toolDef.confirm_prompt ?? `¿Desea confirmar la acción "${toolDef.tool_id}"?`
+    const prompt =
+      promptOverride ?? toolDef.confirm_prompt ?? `¿Desea confirmar la acción "${toolDef.tool_id}"?`
     this.emitSpeechChunk(prompt, sessionId)
 
     return {
@@ -534,6 +615,10 @@ export class InteractionAgent {
     input: unknown,
     sessionId: string,
     speakerId?: string,
+    requiredRole?: HumanRole,
+    channels?: ChannelConfig[],
+    contextSnapshot: Record<string, unknown> = {},
+    approvalStrategy?: ApprovalStrategy,
   ): Promise<ToolCallResult> {
     if (!this.approvalOrchestrator) {
       return { type: 'error', toolId: toolDef.tool_id, error: 'ApprovalOrchestrator not available' }
@@ -542,15 +627,22 @@ export class InteractionAgent {
     // Notify via TTS that we're waiting for approval
     this.emitSpeechChunk('Un momento, necesito autorización para esta acción.', sessionId)
 
-    const resolvedRole: HumanRole = toolDef.required_role ?? 'manager'
+    const resolvedRole: HumanRole = requiredRole ?? toolDef.required_role ?? 'manager'
+    const storeId =
+      typeof contextSnapshot.store_id === 'string' ? contextSnapshot.store_id : 'default'
 
     const approver: HumanProfile = {
       id: speakerId ?? 'unknown',
       name: speakerId ?? 'Unknown',
       role: resolvedRole,
       org_id: 'default',
-      store_id: 'default',
+      store_id: storeId,
       approval_limits: {},
+    }
+
+    const approvalContext: Record<string, unknown> = { tool_input: input }
+    if (typeof contextSnapshot.store_id === 'string') {
+      approvalContext.store_id = contextSnapshot.store_id
     }
 
     const response = await this.approvalOrchestrator.orchestrate(
@@ -564,11 +656,11 @@ export class InteractionAgent {
             : undefined,
         session_id: sessionId,
         required_role: resolvedRole,
-        context: { tool_input: input },
+        context: approvalContext,
         timeout_ms: 120_000,
       },
-      [{ type: 'voice', timeout_ms: 60_000 }],
-      'sequential',
+      channels && channels.length > 0 ? channels : [{ type: 'voice', timeout_ms: 60_000 }],
+      approvalStrategy ?? 'sequential',
       approver,
     )
 
@@ -601,6 +693,22 @@ export class InteractionAgent {
     messages.push({ role: 'user', content: currentText })
 
     return messages
+  }
+
+  private createSpeakerProfile(
+    speakerId: string | undefined,
+    role: HumanRole | null | undefined,
+  ): HumanProfile {
+    const resolvedRole: HumanRole = role ?? 'customer'
+
+    return {
+      id: speakerId ?? 'unknown',
+      name: speakerId ?? 'Unknown',
+      role: resolvedRole,
+      org_id: 'default',
+      store_id: 'default',
+      approval_limits: defaultLimits[resolvedRole] ?? {},
+    }
   }
 
   private buildToolsList(): Array<{ name: string; description?: string; input_schema?: unknown }> {
@@ -915,4 +1023,8 @@ export class InteractionAgent {
   isSessionPaused(sessionId: string): boolean {
     return this.pausedSessions.has(sessionId)
   }
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
 }

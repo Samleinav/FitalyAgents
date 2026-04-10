@@ -351,7 +351,9 @@ export class StaffAgent extends StreamAgent {
       typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {}
 
     // Check permissions via SafetyGuard using the staff member's profile
-    const decision = this.safetyGuard.evaluate(toolName, params, profile)
+    const decision = await this.safetyGuard.evaluateAsync(toolName, params, profile, {
+      session_id: sessionId,
+    })
 
     if (!decision.allowed && 'reason' in decision && decision.reason === 'needs_approval') {
       // Staff doesn't have sufficient permissions — reject silently

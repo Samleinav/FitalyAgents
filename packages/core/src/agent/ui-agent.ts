@@ -36,6 +36,7 @@ export interface UIAgentDeps {
  * - `TOOL_RESULT`           → product_grid show (if product_search)
  * - `TARGET_GROUP_CHANGED`  → queue_status update
  * - `APPROVAL_RESOLVED`     → approval_bar update
+ * - `ORDER_QUEUED_NO_APPROVER` → approval_queue show
  * - `PROACTIVE_TRIGGER`     → suggestion show
  * - `STAFF_COMMAND`         → staff_bar show
  *
@@ -60,6 +61,7 @@ export class UIAgent extends StreamAgent {
       'bus:TOOL_RESULT',
       'bus:TARGET_GROUP_CHANGED',
       'bus:APPROVAL_RESOLVED',
+      'bus:ORDER_QUEUED_NO_APPROVER',
       'bus:PROACTIVE_TRIGGER',
       'bus:STAFF_COMMAND',
     ]
@@ -151,6 +153,20 @@ export class UIAgent extends StreamAgent {
             approved: data.approved,
             approver_id: data.approver_id,
             channel_used: data.channel_used,
+          },
+        }
+        break
+
+      case 'bus:ORDER_QUEUED_NO_APPROVER':
+        update = {
+          component: 'approval_queue',
+          action: 'show',
+          data: {
+            request_id: data.request_id,
+            draft_id: data.draft_id,
+            session_id: data.session_id,
+            required_role: data.required_role,
+            queued_at: data.queued_at,
           },
         }
         break

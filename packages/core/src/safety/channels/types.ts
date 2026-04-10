@@ -1,4 +1,5 @@
 import type { IEventBus } from '../../types/index.js'
+import type { IPresenceManager } from '../../presence/types.js'
 
 // Safety levels
 
@@ -127,5 +128,6 @@ export type SafetyDecision =
 export interface ApprovalOrchestratorDeps {
   bus: IEventBus
   channelRegistry: Map<string, IApprovalChannel>
+  presenceManager?: IPresenceManager
   defaultTimeoutMs?: number
 }

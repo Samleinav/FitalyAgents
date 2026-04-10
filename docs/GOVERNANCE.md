@@ -117,6 +117,90 @@ type SafetyDecision =
   | { allowed: false; reason: 'needs_approval'; escalate_to: HumanRole; channels: ChannelConfig[] }
 ```
 
+### Dynamic safety levels
+
+Static tool safety is the default, but production deployments can add a
+`ContextualSafetyResolver` to adjust the safety level for a single evaluation.
+This is useful when memory, fraud signals, customer tier, sentiment, store state,
+or other session context should make an action safer or more restrictive without
+changing the tool definition globally.
+
+```typescript
+import {
+  SafetyGuard,
+  composeContextualSafetyResolvers,
+  type ContextualSafetyResolver,
+} from 'fitalyagents'
+
+const vipResolver: ContextualSafetyResolver = ({ action, context }) => {
+  if (action === 'payment_process' && context?.customer_tier === 'vip') return 'safe'
+  return null
+}
+
+const fraudResolver: ContextualSafetyResolver = ({ action, context }) => {
+  if (action.includes('payment') && context?.fraud_signal === true) return 'restricted'
+  return null
+}
+
+const guard = new SafetyGuard({
+  toolConfigs,
+  contextualResolver: composeContextualSafetyResolvers(fraudResolver, vipResolver),
+})
+
+const decision = await guard.evaluateAsync('payment_process', { amount: 15_000 }, speakerProfile, {
+  session_id: 'session_001',
+  ctx: { customer_tier: 'vip', fraud_signal: false },
+})
+```
+
+`evaluate()` remains synchronous for existing code. Use `evaluateAsync()` when
+the resolver may read memory, sentiment state, external fraud checks, or any
+other async source.
+
+### Sentiment-aware escalation
+
+`SentimentGuard` can feed the contextual safety layer by turning ambient emotional
+signals into session state. It listens to `bus:AMBIENT_CONTEXT`, classifies each
+fragment as `positive`, `neutral`, `tense`, `frustrated`, or `angry`, keeps a
+short sliding window per session, and publishes `bus:SESSION_SENTIMENT_ALERT`
+when the configured threshold is reached.
+
+```typescript
+import { InMemoryContextStore, SentimentGuard } from 'fitalyagents'
+
+const contextStore = new InMemoryContextStore()
+
+const sentimentGuard = new SentimentGuard({
+  bus,
+  contextStore,
+  config: {
+    alertThreshold: 2,
+    minAlertLevel: 'tense',
+    windowSize: 5,
+  },
+})
+
+await sentimentGuard.start()
+```
+
+The alert is also stored in context fields such as `sentiment_alert_level` and
+`sentiment_alert_count`, so a contextual resolver can raise risk when a session
+is emotionally hot:
+
+```typescript
+const sentimentResolver: ContextualSafetyResolver = ({ action, context }) => {
+  if (context?.sentiment_alert_level === 'angry' && action.includes('payment')) {
+    return 'restricted'
+  }
+
+  if (context?.sentiment_alert_level === 'frustrated') {
+    return 'protected'
+  }
+
+  return null
+}
+```
+
 ---
 
 ## Layer 2 — Role Hierarchy
@@ -241,6 +325,42 @@ orchestrator.start()
 // Publishes bus:ORDER_APPROVAL_TIMEOUT if all channels time out
 ```
 
+### Presence-aware approval routing
+
+`ApprovalOrchestrator` can optionally use `InMemoryPresenceManager` to route
+approval requests only to humans who are currently available and whose role
+satisfies the requested approval role. For example, an `owner` can cover a
+`manager` request. If no eligible approver is available, the request is queued
+with `bus:ORDER_QUEUED_NO_APPROVER` instead of blindly timing out.
+
+```typescript
+import { ApprovalOrchestrator, InMemoryPresenceManager } from 'fitalyagents'
+
+const presenceManager = new InMemoryPresenceManager({ bus })
+presenceManager.start()
+
+const orchestrator = new ApprovalOrchestrator({
+  bus,
+  channelRegistry,
+  presenceManager,
+})
+
+await bus.publish('bus:HUMAN_PRESENCE_CHANGED', {
+  event: 'HUMAN_PRESENCE_CHANGED',
+  human_id: 'manager_ana',
+  name: 'Ana',
+  role: 'manager',
+  status: 'available',
+  store_id: 'store_001',
+  approval_limits: { refund_max: 100_000 },
+  timestamp: Date.now(),
+})
+```
+
+When a matching human becomes available, the orchestrator drains queued approval
+requests for that role, marks the approver busy while the request is active, and
+marks them available again when the approval resolves or times out.
+
 ### The three channels
 
 #### VoiceChannel
@@ -343,6 +463,8 @@ bus:DRAFT_CREATED            {draft_id, session_id, intent_id, summary, ttl}
 bus:DRAFT_CONFIRMED          {draft_id, session_id, intent_id, items, total?}
 bus:DRAFT_CANCELLED          {draft_id, session_id, reason}
 bus:ORDER_PENDING_APPROVAL   {request, channels, strategy, approver}
+bus:HUMAN_PRESENCE_CHANGED   {human_id, role, status, store_id?, timestamp}
+bus:ORDER_QUEUED_NO_APPROVER {request_id, draft_id, session_id, required_role, queued_at}
 bus:APPROVAL_VOICE_REQUEST   {request_id, draft_id, approver_id, prompt_text}
 bus:APPROVAL_WEBHOOK_REQUEST {request_id, draft_id, required_role, action, amount?, session_id}
 bus:APPROVAL_EXTERNAL_REQUEST  {request_id, draft_id, payload}

@@ -5,9 +5,9 @@ Event-driven multi-agent framework with built-in governance.
 This package contains the core runtime:
 
 - `InMemoryBus`, `RedisBus`, `createBus`
-- `InteractionAgent`, `StaffAgent`, `UIAgent`, `AmbientAgent`, `ContextBuilderAgent`, `ProactiveAgent`, `AvatarAgent`
+- `InteractionAgent`, `StaffAgent`, `UIAgent`, `AmbientAgent`, `SentimentGuard`, `ContextBuilderAgent`, `ProactiveAgent`, `AvatarAgent`
 - `SafetyGuard`, `InMemoryDraftStore`, `ApprovalOrchestrator`
-- `InMemoryContextStore`, `InMemorySessionManager`, `TargetGroupBridge`
+- `InMemoryContextStore`, `InMemoryPresenceManager`, `InMemorySessionManager`, `TargetGroupBridge`
 - tracing primitives such as `NoopTracer` and `LangfuseTracer`
 
 ## Install
@@ -106,6 +106,12 @@ Human roles support both the generic and retail naming schemes:
 
 `HumanProfile` also accepts both `org_id` and `store_id`.
 
+`SafetyGuard` can also take a `ContextualSafetyResolver` for dynamic risk
+adjustment. A resolver can lower a verified VIP payment to `safe`, raise a
+fraud-flagged payment to `restricted`, or react to session sentiment without
+changing the static tool config globally. Existing synchronous `evaluate()`
+calls keep working; use `evaluateAsync()` when the resolver reads async context.
+
 ## Main building blocks
 
 ### Event bus
@@ -120,7 +126,32 @@ Human roles support both the generic and retail naming schemes:
 - `StaffAgent` pauses customer interaction, handles privileged commands, and resumes the session
 - `UIAgent` converts bus events into UI update payloads
 - `AmbientAgent` enriches context from non-targeted speech
+- `SentimentGuard` detects tense/frustrated/angry ambient signals and publishes session alerts
 - `AvatarAgent` renders bus events into visual/speech commands through an `IAvatarRenderer`
+
+### Sentiment guard
+
+`SentimentGuard` subscribes to `bus:AMBIENT_CONTEXT`, classifies the emotional
+level, stores recent sentiment state in `IContextStore`, and publishes
+`bus:SESSION_SENTIMENT_ALERT` after a configurable run of tense, frustrated, or
+angry samples. `ProactiveAgent` listens to those alerts and emits
+`sentiment_alert` triggers so an interaction agent can suggest a human handoff,
+soften tone, or route a risky action through dynamic safety.
+
+```ts
+import { InMemoryBus, InMemoryContextStore, SentimentGuard } from 'fitalyagents'
+
+const bus = new InMemoryBus()
+const contextStore = new InMemoryContextStore()
+
+const sentimentGuard = new SentimentGuard({
+  bus,
+  contextStore,
+  config: { alertThreshold: 2, minAlertLevel: 'tense' },
+})
+
+await sentimentGuard.start()
+```
 
 ### Avatar rendering
 
@@ -168,6 +199,20 @@ const renderer = new AIRIRenderer({ url: 'ws://localhost:6006' })
 
 - `InMemoryDraftStore` manages staged actions with TTL, rollback, confirm, and cancel
 - `ApprovalOrchestrator` coordinates voice, webhook, and external approval channels
+- `InMemoryPresenceManager` tracks available, busy, offline, and on-break humans for same-or-higher-role approval routing
+
+```ts
+import { ApprovalOrchestrator, InMemoryPresenceManager } from 'fitalyagents'
+
+const presenceManager = new InMemoryPresenceManager({ bus })
+presenceManager.start()
+
+const approvals = new ApprovalOrchestrator({
+  bus,
+  channelRegistry,
+  presenceManager,
+})
+```
 
 ## Docs
 
