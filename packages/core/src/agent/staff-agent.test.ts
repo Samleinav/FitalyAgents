@@ -11,6 +11,7 @@ import { InMemoryBus } from '../bus/in-memory-bus.js'
 import { SafetyGuard } from '../safety/safety-guard.js'
 import type { ToolSafetyConfig } from '../safety/safety-guard.js'
 import type { HumanProfile, HumanRole } from '../safety/channels/types.js'
+import type { HandoffBuilder } from '../session/handoff-builder.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -223,6 +224,46 @@ describe('StaffAgent', () => {
       expect(pauseEvents).toHaveLength(1)
       expect((pauseEvents[0] as any).session_id).toBe('session-42')
     })
+
+    it('publishes SESSION_HANDOFF with built context on activation', async () => {
+      const bus = new InMemoryBus()
+      const handoffEvents: unknown[] = []
+      bus.subscribe('bus:SESSION_HANDOFF', (d) => handoffEvents.push(d))
+
+      const handoffBuilder = {
+        build: vi.fn().mockResolvedValue({
+          event: 'SESSION_HANDOFF',
+          session_id: 'session-1',
+          from_agent_id: 'InteractionAgent',
+          to_human_id: 'spk_manager',
+          to_role: 'manager',
+          context_snapshot: { sentiment_alert_level: 'frustrated' },
+          conversation_summary: [],
+          timestamp: Date.now(),
+        }),
+      } as unknown as HandoffBuilder
+
+      const { agent } = createStaffAgent({ bus, handoffBuilder })
+
+      await fireSpeechFinal(agent, {
+        session_id: 'session-1',
+        text: 'Fitaly, pausa',
+        speaker_id: 'spk_manager',
+        role: 'manager',
+      })
+
+      expect(handoffBuilder.build).toHaveBeenCalledWith(
+        'session-1',
+        'spk_manager',
+        'manager',
+        'InteractionAgent',
+      )
+      expect(handoffEvents).toHaveLength(1)
+      expect(handoffEvents[0]).toMatchObject({
+        event: 'SESSION_HANDOFF',
+        to_human_id: 'spk_manager',
+      })
+    })
   })
 
   // ── Resume ────────────────────────────────────────────────────────
@@ -231,7 +272,9 @@ describe('StaffAgent', () => {
     it('publishes INTERACTION_RESUME on "continúa"', async () => {
       const bus = new InMemoryBus()
       const resumeEvents: unknown[] = []
+      const sessionResumedEvents: unknown[] = []
       bus.subscribe('bus:INTERACTION_RESUME', (d) => resumeEvents.push(d))
+      bus.subscribe('bus:SESSION_RESUMED', (d) => sessionResumedEvents.push(d))
 
       const { agent } = createStaffAgent({ bus })
 
@@ -256,6 +299,12 @@ describe('StaffAgent', () => {
       expect(resumeEvents[0]).toMatchObject({
         event: 'INTERACTION_RESUME',
         session_id: 'session-1',
+      })
+      expect(sessionResumedEvents[0]).toMatchObject({
+        event: 'SESSION_RESUMED',
+        session_id: 'session-1',
+        resumed_by: 'spk_cashier',
+        resumed_by_role: 'cashier',
       })
       expect(agent.isSessionActivated('session-1')).toBe(false)
     })
@@ -283,6 +332,51 @@ describe('StaffAgent', () => {
 
       expect(resumeEvents).toHaveLength(1)
       expect(agent.isSessionActivated('session-1')).toBe(false)
+    })
+
+    it('accepts external SESSION_RESUMED events and resumes interaction', async () => {
+      const bus = new InMemoryBus()
+      const resumeEvents: unknown[] = []
+      bus.subscribe('bus:INTERACTION_RESUME', (d) => resumeEvents.push(d))
+
+      const { agent } = createStaffAgent({ bus })
+
+      await fireSpeechFinal(agent, {
+        session_id: 'session-1',
+        text: 'Fitaly, pausa',
+        speaker_id: 'spk_cashier',
+        role: 'cashier',
+      })
+      expect(agent.isSessionActivated('session-1')).toBe(true)
+
+      await agent.onEvent('bus:SESSION_RESUMED', {
+        event: 'SESSION_RESUMED',
+        session_id: 'session-1',
+        resumed_by: 'manager_ana',
+        resumed_by_role: 'manager',
+        timestamp: Date.now(),
+      })
+
+      expect(resumeEvents).toHaveLength(1)
+      expect(agent.isSessionActivated('session-1')).toBe(false)
+    })
+
+    it('ignores external SESSION_RESUMED when the session is not activated', async () => {
+      const bus = new InMemoryBus()
+      const resumeEvents: unknown[] = []
+      bus.subscribe('bus:INTERACTION_RESUME', (d) => resumeEvents.push(d))
+
+      const { agent } = createStaffAgent({ bus })
+
+      await agent.onEvent('bus:SESSION_RESUMED', {
+        event: 'SESSION_RESUMED',
+        session_id: 'session-1',
+        resumed_by: 'manager_ana',
+        resumed_by_role: 'manager',
+        timestamp: Date.now(),
+      })
+
+      expect(resumeEvents).toHaveLength(0)
     })
   })
 

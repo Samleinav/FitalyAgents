@@ -37,6 +37,7 @@ Avatar presence follows the same principle: `AvatarAgent` is a pure renderer tha
 | Contextual risk adjustment        | Safety can change per session using memory, sentiment, fraud, VIP status, or store context without redeploying.   |
 | Sentiment-aware escalation        | Ambient emotional signals can trigger proactive help before a customer interaction deteriorates.                  |
 | Presence-aware approvals          | Approval routing can wait for an available manager or higher-role approver instead of timing out blindly.         |
+| Human session handoff             | Staff takeovers receive a live context packet with conversation, draft, memory, and sentiment state.              |
 | Speculative dispatch              | SAFE tools can be classified and prefetched while the user is still speaking, reducing perceived latency.         |
 | MemPalace-powered memory          | Agents can remember customers, employees, groups, stores, and prior decisions without mixing actor contexts.      |
 | Professional avatar presence      | `AvatarAgent` turns bus events into brand-safe expressions, gestures, gaze, and speech for kiosk or web avatars.  |
@@ -222,7 +223,7 @@ Channels can run in `parallel` (first to respond wins) or `sequential` (fallback
 | Agent                 | Purpose                                                                                                        |
 | --------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `InteractionAgent`    | Main conversational agent. Streams LLM responses. Enforces SafetyGuard on every tool call.                     |
-| `StaffAgent`          | Listens for privileged-role speakers. Pauses the InteractionAgent, executes privileged commands, then resumes. |
+| `StaffAgent`          | Listens for privileged-role speakers, pauses the InteractionAgent, publishes handoff context, then resumes.    |
 | `UIAgent`             | Reactive agent that translates bus events into UI update instructions. No LLM required.                        |
 | `AmbientAgent`        | Analyzes background audio and enriches the ContextStore silently. No output to end user.                       |
 | `SentimentGuard`      | Converts ambient emotional signals into session alerts and proactive escalation triggers.                      |

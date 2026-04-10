@@ -1012,6 +1012,15 @@ export class InteractionAgent {
       }),
     )
 
+    unsubs.push(
+      this.bus.subscribe('bus:SESSION_RESUMED', (data) => {
+        const event = data as { session_id: string }
+        if (event.session_id) {
+          this.pausedSessions.delete(event.session_id)
+        }
+      }),
+    )
+
     return () => {
       for (const unsub of unsubs) unsub()
     }

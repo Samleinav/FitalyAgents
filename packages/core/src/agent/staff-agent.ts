@@ -4,6 +4,7 @@ import type { IStreamingLLM, InteractionToolDef, IToolExecutor } from './interac
 import type { SafetyGuard } from '../safety/safety-guard.js'
 import { defaultLimits } from '../safety/safety-guard.js'
 import type { HumanProfile, HumanRole } from '../safety/channels/types.js'
+import type { HandoffBuilder } from '../session/handoff-builder.js'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,8 @@ export interface StaffAgentDeps {
   config?: StaffAgentConfig
   /** Optional pre-loaded staff profiles for permission lookups. */
   staffProfiles?: Map<string, HumanProfile>
+  /** Optional handoff builder for pushing context to human devices on takeover. */
+  handoffBuilder?: HandoffBuilder
 }
 
 /**
@@ -105,12 +108,13 @@ export class StaffAgent extends StreamAgent {
   private readonly autoResumeTimeoutMs: number
   private readonly systemPrompt: string
   private readonly staffProfiles: Map<string, HumanProfile>
+  private readonly handoffBuilder: HandoffBuilder | undefined
 
   /** Per-session activation state. */
   private readonly sessions = new Map<string, SessionActivation>()
 
   protected get channels(): string[] {
-    return ['bus:SPEECH_FINAL']
+    return ['bus:SPEECH_FINAL', 'bus:SESSION_RESUMED']
   }
 
   constructor(deps: StaffAgentDeps) {
@@ -128,11 +132,17 @@ export class StaffAgent extends StreamAgent {
         'Responde de forma directa y técnica. ' +
         'Puedes ejecutar comandos del sistema cuando te lo pidan.'
     this.staffProfiles = deps.staffProfiles ?? new Map()
+    this.handoffBuilder = deps.handoffBuilder
   }
 
   // ── StreamAgent lifecycle ──────────────────────────────────────────────────
 
   async onEvent(channel: string, payload: unknown): Promise<void> {
+    if (channel === 'bus:SESSION_RESUMED') {
+      await this.handleSessionResumed(payload)
+      return
+    }
+
     if (channel !== 'bus:SPEECH_FINAL') return
 
     const data = payload as StaffSpeechPayload
@@ -171,6 +181,8 @@ export class StaffAgent extends StreamAgent {
           staff_id: staffId,
         })
 
+        await this.publishSessionHandoff(session_id, staffId, role)
+
         this.startAutoResumeTimer(session_id)
 
         const inlineCommand = this.extractInlineCommand(text)
@@ -192,7 +204,10 @@ export class StaffAgent extends StreamAgent {
 
     // Check for resume command
     if (this.isResumeCommand(text)) {
-      await this.deactivateAndResume(session_id)
+      await this.deactivateAndResume(session_id, {
+        resumedBy: staffId,
+        resumedByRole: role,
+      })
       return
     }
 
@@ -246,21 +261,30 @@ export class StaffAgent extends StreamAgent {
 
   // ── Activation lifecycle ───────────────────────────────────────────────────
 
-  private async deactivateAndResume(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId)
+  private async deactivateAndResume(
+    sessionId: string,
+    opts: {
+      resumedBy?: string
+      resumedByRole?: HumanRole
+      notes?: string
+    } = {},
+  ): Promise<void> {
+    const session = this.clearSessionActivation(sessionId)
     if (!session) return
-
-    if (session.resumeTimer) {
-      clearTimeout(session.resumeTimer)
-    }
-
-    session.isActivated = false
-    session.staffId = null
-    session.resumeTimer = null
 
     await this.bus.publish('bus:INTERACTION_RESUME', {
       event: 'INTERACTION_RESUME',
       session_id: sessionId,
+    })
+
+    await this.bus.publish('bus:SESSION_RESUMED', {
+      event: 'SESSION_RESUMED',
+      session_id: sessionId,
+      resumed_by: opts.resumedBy ?? session.staffId ?? 'unknown_staff',
+      resumed_by_role: opts.resumedByRole ?? session.role,
+      notes: opts.notes,
+      source_agent_id: 'StaffAgent',
+      timestamp: Date.now(),
     })
   }
 
@@ -275,7 +299,7 @@ export class StaffAgent extends StreamAgent {
     }
 
     session.resumeTimer = setTimeout(() => {
-      void this.deactivateAndResume(sessionId)
+      void this.deactivateAndResume(sessionId, { resumedBy: 'timeout' })
     }, this.autoResumeTimeoutMs)
 
     // Don't keep the Node process alive for timers
@@ -288,6 +312,57 @@ export class StaffAgent extends StreamAgent {
     const session = this.sessions.get(sessionId)
     if (!session?.isActivated) return
     this.startAutoResumeTimer(sessionId)
+  }
+
+  private async handleSessionResumed(payload: unknown): Promise<void> {
+    const event = payload as {
+      session_id?: string
+      resumed_by?: string
+      resumed_by_role?: HumanRole
+      notes?: string
+      source_agent_id?: string
+    }
+    if (!event.session_id || event.source_agent_id === 'StaffAgent') return
+
+    const session = this.sessions.get(event.session_id)
+    if (!session?.isActivated) return
+
+    this.clearSessionActivation(event.session_id)
+
+    await this.bus.publish('bus:INTERACTION_RESUME', {
+      event: 'INTERACTION_RESUME',
+      session_id: event.session_id,
+    })
+  }
+
+  private clearSessionActivation(sessionId: string): SessionActivation | null {
+    const session = this.sessions.get(sessionId)
+    if (!session?.isActivated) return null
+
+    if (session.resumeTimer) {
+      clearTimeout(session.resumeTimer)
+    }
+
+    const previous = { ...session }
+    session.isActivated = false
+    session.staffId = null
+    session.resumeTimer = null
+    return previous
+  }
+
+  private async publishSessionHandoff(
+    sessionId: string,
+    staffId: string,
+    role: HumanRole,
+  ): Promise<void> {
+    if (!this.handoffBuilder) return
+
+    try {
+      const handoff = await this.handoffBuilder.build(sessionId, staffId, role, 'InteractionAgent')
+      await this.bus.publish('bus:SESSION_HANDOFF', handoff)
+    } catch {
+      // Handoff context is helpful, but the safety pause must remain reliable.
+    }
   }
 
   // ── Staff profile resolution ──────────────────────────────────────────────

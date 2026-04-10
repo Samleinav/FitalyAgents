@@ -6,7 +6,7 @@ This package contains the core runtime:
 
 - `InMemoryBus`, `RedisBus`, `createBus`
 - `InteractionAgent`, `StaffAgent`, `UIAgent`, `AmbientAgent`, `SentimentGuard`, `ContextBuilderAgent`, `ProactiveAgent`, `AvatarAgent`
-- `SafetyGuard`, `InMemoryDraftStore`, `ApprovalOrchestrator`
+- `SafetyGuard`, `InMemoryDraftStore`, `ApprovalOrchestrator`, `HandoffBuilder`
 - `InMemoryContextStore`, `InMemoryPresenceManager`, `InMemorySessionManager`, `TargetGroupBridge`
 - tracing primitives such as `NoopTracer` and `LangfuseTracer`
 
@@ -123,7 +123,7 @@ calls keep working; use `evaluateAsync()` when the resolver reads async context.
 ### Agents
 
 - `InteractionAgent` handles the main LLM turn and safety pipeline
-- `StaffAgent` pauses customer interaction, handles privileged commands, and resumes the session
+- `StaffAgent` pauses customer interaction, publishes handoff context, handles privileged commands, and resumes the session
 - `UIAgent` converts bus events into UI update payloads
 - `AmbientAgent` enriches context from non-targeted speech
 - `SentimentGuard` detects tense/frustrated/angry ambient signals and publishes session alerts
@@ -151,6 +151,30 @@ const sentimentGuard = new SentimentGuard({
 })
 
 await sentimentGuard.start()
+```
+
+### Session handoff
+
+`HandoffBuilder` creates a structured context packet for the human taking over a
+session. It can include the current context snapshot, recent conversation turns,
+a pending draft, and optional memory hits. When passed to `StaffAgent`, the
+agent publishes `bus:SESSION_HANDOFF` immediately after pausing the
+`InteractionAgent`.
+
+```ts
+import { HandoffBuilder, InMemoryContextStore, StaffAgent } from 'fitalyagents'
+
+const contextStore = new InMemoryContextStore()
+const handoffBuilder = new HandoffBuilder({ contextStore })
+
+const staffAgent = new StaffAgent({
+  bus,
+  llm,
+  safetyGuard,
+  toolRegistry,
+  executor,
+  handoffBuilder,
+})
 ```
 
 ### Avatar rendering

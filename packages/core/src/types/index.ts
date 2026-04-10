@@ -387,6 +387,46 @@ export const InteractionResumeEventSchema = z.object({
 })
 export type InteractionResumeEvent = z.infer<typeof InteractionResumeEventSchema>
 
+export const SessionHandoffConversationTurnSchema = z.object({
+  role: z.enum(['agent', 'customer', 'staff']),
+  text: z.string(),
+  timestamp: z.number(),
+})
+export type SessionHandoffConversationTurn = z.infer<typeof SessionHandoffConversationTurnSchema>
+
+export const SessionHandoffMemoryHitSchema = z.object({
+  text: z.string(),
+  wing: z.string(),
+  room: z.string(),
+  similarity: z.number(),
+})
+export type SessionHandoffMemoryHit = z.infer<typeof SessionHandoffMemoryHitSchema>
+
+export const SessionHandoffSchema = z.object({
+  event: z.literal('SESSION_HANDOFF'),
+  session_id: z.string(),
+  from_agent_id: z.string(),
+  to_human_id: z.string().nullable().optional(),
+  to_role: z.string(),
+  context_snapshot: z.record(z.unknown()),
+  conversation_summary: z.array(SessionHandoffConversationTurnSchema),
+  pending_draft: z.unknown().optional(),
+  memory_context: z.array(SessionHandoffMemoryHitSchema).optional(),
+  timestamp: z.number(),
+})
+export type SessionHandoff = z.infer<typeof SessionHandoffSchema>
+
+export const SessionResumedSchema = z.object({
+  event: z.literal('SESSION_RESUMED'),
+  session_id: z.string(),
+  resumed_by: z.string(),
+  resumed_by_role: z.string().optional(),
+  notes: z.string().optional(),
+  source_agent_id: z.string().optional(),
+  timestamp: z.number(),
+})
+export type SessionResumed = z.infer<typeof SessionResumedSchema>
+
 export const StaffCommandEventSchema = z.object({
   event: z.literal('STAFF_COMMAND'),
   session_id: z.string(),

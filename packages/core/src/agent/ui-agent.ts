@@ -37,6 +37,8 @@ export interface UIAgentDeps {
  * - `TARGET_GROUP_CHANGED`  → queue_status update
  * - `APPROVAL_RESOLVED`     → approval_bar update
  * - `ORDER_QUEUED_NO_APPROVER` → approval_queue show
+ * - `SESSION_HANDOFF`       → handoff_panel show
+ * - `SESSION_RESUMED`       → handoff_panel hide
  * - `PROACTIVE_TRIGGER`     → suggestion show
  * - `STAFF_COMMAND`         → staff_bar show
  *
@@ -62,6 +64,8 @@ export class UIAgent extends StreamAgent {
       'bus:TARGET_GROUP_CHANGED',
       'bus:APPROVAL_RESOLVED',
       'bus:ORDER_QUEUED_NO_APPROVER',
+      'bus:SESSION_HANDOFF',
+      'bus:SESSION_RESUMED',
       'bus:PROACTIVE_TRIGGER',
       'bus:STAFF_COMMAND',
     ]
@@ -167,6 +171,38 @@ export class UIAgent extends StreamAgent {
             session_id: data.session_id,
             required_role: data.required_role,
             queued_at: data.queued_at,
+          },
+        }
+        break
+
+      case 'bus:SESSION_HANDOFF':
+        update = {
+          component: 'handoff_panel',
+          action: 'show',
+          data: {
+            session_id: data.session_id,
+            from_agent_id: data.from_agent_id,
+            to_human_id: data.to_human_id,
+            to_role: data.to_role,
+            context_snapshot: data.context_snapshot,
+            conversation_summary: data.conversation_summary,
+            pending_draft: data.pending_draft,
+            memory_context: data.memory_context,
+            timestamp: data.timestamp,
+          },
+        }
+        break
+
+      case 'bus:SESSION_RESUMED':
+        update = {
+          component: 'handoff_panel',
+          action: 'hide',
+          data: {
+            session_id: data.session_id,
+            resumed_by: data.resumed_by,
+            resumed_by_role: data.resumed_by_role,
+            notes: data.notes,
+            timestamp: data.timestamp,
           },
         }
         break

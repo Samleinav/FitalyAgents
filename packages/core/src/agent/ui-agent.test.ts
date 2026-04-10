@@ -228,6 +228,64 @@ describe('UIAgent', () => {
     })
   })
 
+  describe('SESSION_HANDOFF / SESSION_RESUMED', () => {
+    it('publishes UI_UPDATE handoff_panel show for handoffs', async () => {
+      const { agent, updates } = createUIAgent()
+
+      await agent.onEvent('bus:SESSION_HANDOFF', {
+        event: 'SESSION_HANDOFF',
+        session_id: 'session-1',
+        from_agent_id: 'InteractionAgent',
+        to_human_id: 'manager_ana',
+        to_role: 'manager',
+        context_snapshot: { sentiment_alert_level: 'frustrated' },
+        conversation_summary: [
+          {
+            role: 'customer',
+            text: 'I have been waiting too long.',
+            timestamp: Date.now(),
+          },
+        ],
+        pending_draft: { id: 'draft_001' },
+        timestamp: Date.now(),
+      })
+
+      expect(updates).toHaveLength(1)
+      expect(updates[0]).toMatchObject({
+        component: 'handoff_panel',
+        action: 'show',
+        data: {
+          session_id: 'session-1',
+          to_role: 'manager',
+          pending_draft: { id: 'draft_001' },
+        },
+      })
+    })
+
+    it('publishes UI_UPDATE handoff_panel hide when the session resumes', async () => {
+      const { agent, updates } = createUIAgent()
+
+      await agent.onEvent('bus:SESSION_RESUMED', {
+        event: 'SESSION_RESUMED',
+        session_id: 'session-1',
+        resumed_by: 'manager_ana',
+        resumed_by_role: 'manager',
+        notes: 'Customer accepted replacement.',
+        timestamp: Date.now(),
+      })
+
+      expect(updates).toHaveLength(1)
+      expect(updates[0]).toMatchObject({
+        component: 'handoff_panel',
+        action: 'hide',
+        data: {
+          resumed_by: 'manager_ana',
+          notes: 'Customer accepted replacement.',
+        },
+      })
+    })
+  })
+
   // ── PROACTIVE_TRIGGER ──────────────────────────────────────────
 
   describe('PROACTIVE_TRIGGER', () => {

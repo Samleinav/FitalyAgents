@@ -847,6 +847,40 @@ describe('InteractionAgent', () => {
       expect(ttsLog).toHaveLength(1)
     })
 
+    it('SESSION_RESUMED also unpauses the session', async () => {
+      const llm = createMockLLM([
+        { type: 'text', text: 'Back online' },
+        { type: 'end', stop_reason: 'end_turn' },
+      ])
+
+      const { agent, bus } = createAgent({ llm })
+      agent.subscribePauseResume()
+
+      await bus.publish('bus:INTERACTION_PAUSE', {
+        event: 'INTERACTION_PAUSE',
+        session_id: 'session-1',
+        reason: 'staff_override',
+        staff_id: 'spk_cashier',
+      })
+      expect(agent.isSessionPaused('session-1')).toBe(true)
+
+      await bus.publish('bus:SESSION_RESUMED', {
+        event: 'SESSION_RESUMED',
+        session_id: 'session-1',
+        resumed_by: 'manager_ana',
+        resumed_by_role: 'manager',
+        timestamp: Date.now(),
+      })
+      expect(agent.isSessionPaused('session-1')).toBe(false)
+
+      const result = await agent.handleSpeechFinal({
+        session_id: 'session-1',
+        text: 'hello again',
+      })
+
+      expect(result.textChunks).toEqual(['Back online'])
+    })
+
     it('pause of session A does NOT affect session B', async () => {
       const llm = createMockLLM([
         { type: 'text', text: 'Session B response' },

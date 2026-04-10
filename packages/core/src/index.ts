@@ -53,6 +53,10 @@ export type {
   ResponseEndEvent,
   InteractionPauseEvent,
   InteractionResumeEvent,
+  SessionHandoffConversationTurn,
+  SessionHandoffMemoryHit,
+  SessionHandoff,
+  SessionResumed,
   StaffCommandEvent,
   UIUpdateEvent,
   BusHandler,
@@ -104,6 +108,10 @@ export {
   ResponseEndEventSchema,
   InteractionPauseEventSchema,
   InteractionResumeEventSchema,
+  SessionHandoffConversationTurnSchema,
+  SessionHandoffMemoryHitSchema,
+  SessionHandoffSchema,
+  SessionResumedSchema,
   StaffCommandEventSchema,
   UIUpdateEventSchema,
 } from './types/index.js'
@@ -199,6 +207,12 @@ export type { IPresenceManager, PresenceEntry } from './presence/types.js'
 // Session
 export { InMemorySessionManager } from './session/in-memory-session-manager.js'
 export { TargetGroupStateMachine } from './session/target-group.js'
+export { HandoffBuilder } from './session/handoff-builder.js'
+export type {
+  HandoffBuilderDeps,
+  HandoffMemoryQueryOptions,
+  HandoffMemoryStore,
+} from './session/handoff-builder.js'
 export type { TargetState, TargetEvent, SpeakerEntry } from './session/target-group.js'
 export type {
   ISessionManager,

@@ -465,6 +465,8 @@ bus:DRAFT_CANCELLED          {draft_id, session_id, reason}
 bus:ORDER_PENDING_APPROVAL   {request, channels, strategy, approver}
 bus:HUMAN_PRESENCE_CHANGED   {human_id, role, status, store_id?, timestamp}
 bus:ORDER_QUEUED_NO_APPROVER {request_id, draft_id, session_id, required_role, queued_at}
+bus:SESSION_HANDOFF          {session_id, from_agent_id, to_human_id?, to_role, context_snapshot, conversation_summary, pending_draft?, memory_context?, timestamp}
+bus:SESSION_RESUMED          {session_id, resumed_by, resumed_by_role?, notes?, timestamp}
 bus:APPROVAL_VOICE_REQUEST   {request_id, draft_id, approver_id, prompt_text}
 bus:APPROVAL_WEBHOOK_REQUEST {request_id, draft_id, required_role, action, amount?, session_id}
 bus:APPROVAL_EXTERNAL_REQUEST  {request_id, draft_id, payload}
@@ -626,6 +628,7 @@ Employee: "fitaly, apply 20% discount to this order"
    ▼
 StaffAgent: keyword detected
    → bus:INTERACTION_PAUSE { session_id, staff_id }
+   → bus:SESSION_HANDOFF { context_snapshot, conversation_summary, pending_draft?, memory_context? }
    → InteractionAgent: paused (ignores all SPEECH_FINAL)
    │
    ▼
@@ -640,21 +643,39 @@ Employee: "fitaly, done"
    ▼
 StaffAgent: resume keyword detected
    → bus:INTERACTION_RESUME
+   → bus:SESSION_RESUMED { session_id, resumed_by, notes? }
    → InteractionAgent: resumes
 ```
 
 Configuration:
 
 ```typescript
+const handoffBuilder = new HandoffBuilder({
+  contextStore,
+  draftStore,
+  memoryStore, // optional; compatible with MemPalace-backed IMemoryStore
+})
+
 const staffAgent = new StaffAgent({
   bus,
   llm,
   safetyGuard: guard,
-  activationKeywords: ['fitaly', 'system'], // default
-  staffRoles: ['staff', 'agent', 'cashier', 'operator', 'manager', 'supervisor', 'owner'],
-  autoResumeTimeoutMs: 30_000, // auto-resume if employee goes silent
+  toolRegistry,
+  executor,
+  handoffBuilder,
+  config: {
+    activationKeywords: ['fitaly', 'system'], // default
+    staffRoles: ['staff', 'agent', 'cashier', 'operator', 'manager', 'supervisor', 'owner'],
+    autoResumeTimeoutMs: 30_000, // auto-resume if employee goes silent
+  },
 })
 ```
+
+`SESSION_HANDOFF` is designed for tablets, dashboards, and manager devices. It
+lets the receiving human see why the handoff happened, what the customer said,
+which draft is pending, and what memory or sentiment context matters before
+they speak. External systems can also publish `SESSION_RESUMED`; both
+`StaffAgent` and `InteractionAgent` treat it as a resume signal.
 
 ---
 
