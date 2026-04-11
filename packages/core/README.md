@@ -266,8 +266,10 @@ await approvals.orchestrate(request, [{ type: 'webhook', timeout_ms: 60_000 }], 
 
 - Root docs: `../../README.md`
 - Governance guide: `../../docs/GOVERNANCE.md`
+- Approval channels: `../../docs/APPROVAL-CHANNELS.md`
 - Human roles: `../../docs/HUMAN-ROLES.md`
 - Safety model: `../../docs/SAFETY-MODEL.md`
+- Quorum example: `../../examples/governance-quorum/README.md`
 
 ## License
 

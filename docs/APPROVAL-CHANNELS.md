@@ -1,379 +1,314 @@
-# Approval Channels — FitalyAgents v2
+# Approval Channels
 
-> El rol define **quién** puede aprobar. El canal define **cómo** llega la aprobación.
-> Los canales son configurables por tool. El sistema los coordina automáticamente.
+Roles define **who** can approve. Channels define **how** the approval request
+reaches a human or external system.
 
----
-
-## Concepto Central
-
-Cuando un tool RESTRICTED necesita aprobación, `ApprovalOrchestrator` coordina uno o más canales:
-
-```
-Tool RESTRICTED detectado
-  → SafetyGuard: ¿speaker ya tiene rol suficiente?
-    → SÍ: ejecutar directo (el speaker IS la aprobación)
-    → NO: ApprovalOrchestrator.orchestrate(request, channels)
-          → lanza canales configurados (parallel o sequential)
-          → primer canal en responder → cancela los demás
-          → bus:APPROVAL_RESOLVED { approved, approver_id, channel_used }
-```
+In FitalyAgents, approval channels are configured per tool and coordinated by
+`ApprovalOrchestrator`.
 
 ---
 
-## IApprovalChannel
+## Core Flow
 
-```typescript
-interface IApprovalChannel {
-  id: string
-  type: 'voice' | 'vision' | 'webhook' | 'external_tool'
+When a `restricted` tool needs escalation:
 
-  /**
-   * Notifica al aprobador que hay una acción pendiente.
-   * Ej: hablar al empleado, enviar push notification, llamar API externa.
-   */
-  notify(request: ApprovalRequest, approver: HumanProfile): Promise<void>
+```text
+restricted tool detected
+  -> SafetyGuard checks speaker role and limits
+    -> allowed: execute directly
+    -> needs_approval: publish ORDER_PENDING_APPROVAL
+      -> ApprovalOrchestrator routes through one or more channels
+      -> result published as APPROVAL_RESOLVED / ORDER_APPROVED / ORDER_APPROVAL_TIMEOUT
+```
 
-  /**
-   * Espera la respuesta del aprobador en este canal.
-   * Resuelve con ApprovalResponse si responde antes del timeout.
-   * Resuelve con null si se agota el tiempo.
-   */
-  waitForResponse(
-    request: ApprovalRequest,
-    timeoutMs: number
-  ): Promise<ApprovalResponse | null>
+The same tool can use:
 
-  /**
-   * Cancela la espera activa (llamado cuando otro canal ya respondió).
-   */
-  cancel(requestId: string): void
+- `parallel` for fastest response
+- `sequential` for preferred-channel fallback
+- `quorum` for N-of-M approvals on high-risk actions
+
+---
+
+## Channel Interface
+
+```ts
+type ApprovalChannelType = 'voice' | 'webhook' | 'external_tool'
+
+type ApprovalStrategy = 'parallel' | 'sequential' | 'quorum'
+
+interface QuorumConfig {
+  required: number
+  eligible_roles: HumanRole[]
+  reject_on_any_no?: boolean
 }
 
 interface ApprovalRequest {
   id: string
   draft_id: string
-  action: string               // 'refund_create', 'payment_process', etc.
+  action: string
   amount?: number
   session_id: string
   required_role: HumanRole
   context: Record<string, unknown>
   timeout_ms: number
+  quorum?: QuorumConfig
 }
 
 interface ApprovalResponse {
   approved: boolean
   approver_id: string
-  channel_used: string         // 'voice' | 'webhook' | 'external_tool'
-  reason?: string              // si rejected
+  approvers?: string[]
+  channel_used: string
+  reason?: string
   timestamp: number
+}
+
+interface IApprovalChannel {
+  id: string
+  type: ApprovalChannelType
+  notify(request: ApprovalRequest, approver: HumanProfile): Promise<void>
+  waitForResponse(
+    request: ApprovalRequest,
+    timeoutMs: number,
+  ): Promise<ApprovalResponse | null>
+  cancel(requestId: string): void
 }
 ```
 
 ---
 
-## Los 4 Canales
+## Built-In Channels
 
-### 1. VoiceApprovalChannel
+### `VoiceApprovalChannel`
 
-El más natural para empleados en piso. Fitaly pregunta en voz alta.
+Best for in-store staff who are physically present.
 
-**Notify:**
-```
-Publica bus:APPROVAL_VOICE_REQUEST
-  → AudioQueueService del store genera audio:
-    "María, ¿apruebas el reembolso de ₡15,000 para la orden #4521?"
-```
+What it does:
 
-**Listen:**
-```
-Suscribe bus:SPEECH_FINAL donde:
-  → VoiceIdentifierAgent confirma speaker == approver esperado
-  → NLU simple detecta:
-      afirmativo: "sí", "dale", "aprobado", "ok", "confirmo"
-      negativo:   "no", "rechaza", "no autorizo", "denegar"
-  → Resuelve con { approved: true/false, approver_id, channel_used: 'voice' }
-```
+- publishes `bus:APPROVAL_VOICE_REQUEST`
+- waits for `bus:SPEECH_FINAL`
+- checks the expected approver identity when the request is targeted
+- resolves from simple yes/no language
 
-**Configuración:**
-```typescript
+Typical config:
+
+```ts
 { type: 'voice', timeout_ms: 15_000 }
-// 15 segundos — tiempo razonable si el empleado está en la tienda
 ```
 
-**Cuándo usarlo:** Empleado está presente físicamente en la tienda.
+Use it when:
 
----
+- the approver is on the floor
+- the fastest path is spoken approval
+- hands-free approval matters
 
-### 2. WebhookApprovalChannel
+### `WebhookApprovalChannel`
 
-Para empleados fuera del piso o gerentes remotos. Notificación a app móvil.
+Best for mobile apps, remote managers, tablets, browser dashboards, or custom
+bridges.
 
-**Notify:**
-```
-Publica bus:APPROVAL_WEBHOOK_REQUEST
-  → Push notification a app del empleado con rol requerido
-    Título: "Aprobación requerida"
-    Cuerpo: "Reembolso ₡15,000 — orden #4521. Tap para aprobar/rechazar"
-```
+What it does:
 
-**Listen:**
-```
-Espera HTTP POST /webhook/approval:
-  { action: 'approve', draft_id: 'xxx', approver_id: 'emp_001' }
-  o
-  { action: 'reject',  draft_id: 'xxx', reason: 'monto incorrecto' }
-```
+- publishes `bus:APPROVAL_WEBHOOK_REQUEST`
+- includes `approver_id` when the request targets a specific person
+- waits for `bus:APPROVAL_WEBHOOK_RESPONSE`
 
-**Configuración:**
-```typescript
+Typical config:
+
+```ts
 { type: 'webhook', timeout_ms: 90_000 }
-// 90 segundos — tiempo para que el gerente revise su teléfono
 ```
 
-**Cuándo usarlo:** Empleado no está físicamente presente, tiene app en teléfono.
+Use it when:
 
----
+- the approver is remote
+- you already have a browser, mobile, or POS UI
+- you want HTTP or MCP adapters around the event bus
 
-### 3. ExternalToolChannel
+### `ExternalToolChannel`
 
-Para integración con sistemas externos: POS, WhatsApp Business, sistema propio.
+Best for organizations that already have their own authorization backend.
 
-**Notify:**
-```
-HTTP POST a URL configurada con payload:
-  {
-    request_id: 'req_abc',
-    action: 'refund_create',
-    amount: 15000,
-    order_id: '#4521',
-    required_role: 'manager',
-    store_id: 'store_001',
-    timeout_ms: 60000
-  }
-El sistema externo decide cómo notificar al aprobador.
-```
+What it does:
 
-**Listen:**
-```
-Suscribe bus:APPROVAL_EXTERNAL_RESPONSE donde payload.request_id == request.id
-  { request_id, approved: true, approver_id: 'ext_user_123' }
-```
+- sends an outbound HTTP request to your external approval system
+- waits for `bus:APPROVAL_EXTERNAL_RESPONSE`
 
-**Configuración:**
-```typescript
+Typical config:
+
+```ts
 {
   type: 'external_tool',
   timeout_ms: 60_000,
   config: {
-    url: 'https://mi-sistema.com/api/approval',
+    url: 'https://example.com/api/approvals',
     method: 'POST',
-    auth: 'Bearer TOKEN_SECRETO',
-  }
+    auth: 'Bearer secret-token',
+  },
 }
 ```
 
-**Cuándo usarlo:**
-- Tienda tiene su propio sistema de aprobaciones ya desarrollado
-- Integración con WhatsApp Business (el gerente aprueba por WhatsApp)
-- Integración con POS que tiene botón de aprobación
-- Sistema legado que ya maneja autorizaciones
+Use it when:
+
+- approvals already live in a separate backend
+- you need enterprise policy enforcement outside the agent runtime
+- you want FitalyAgents to plug into an existing operational workflow
 
 ---
 
-### 4. VisionApprovalChannel *(Sprint futuro)*
+## Coordination Strategies
 
-Para aprobación por gesto facial o gesture recognition.
+### `parallel`
 
-**Notify:** Señal visual en pantalla/LED al empleado identificado por cámara.
+All configured channels launch immediately. First response wins.
 
-**Listen:** `VisionDetectorAgent` detecta gesto de aprobación (nod, thumbs up) del empleado identificado.
-
-**Depende de:** FitalyVoice + VisionDetectorAgent (Sprint 5.x).
-
----
-
-## Estrategias de Coordinación
-
-### `parallel` (default recomendado)
-
-Todos los canales se lanzan simultáneamente. El primero en responder gana y cancela los demás.
-
-```
-ApprovalOrchestrator.orchestrate(request, channels, strategy='parallel')
-  │
-  ├── VoiceChannel.notify() + VoiceChannel.waitForResponse(15s)
-  │
-  └── WebhookChannel.notify() + WebhookChannel.waitForResponse(90s)
-  │
-  Empleado responde por voz a los 8 segundos
-  → VoiceChannel resuelve { approved: true, channel_used: 'voice' }
-  → WebhookChannel.cancel()  ← se cancela inmediatamente
-  → bus:APPROVAL_RESOLVED { approved: true, channel_used: 'voice' }
+```text
+voice notifies
+webhook notifies
+employee answers voice first
+-> webhook is cancelled
+-> APPROVAL_RESOLVED
 ```
 
-**Usar cuando:** Queremos la respuesta más rápida posible.
+Use it when speed matters most.
 
 ### `sequential`
 
-Prueba los canales en orden. Si el primero no responde en su timeout, pasa al siguiente.
+Channels run in order. If one times out, the next starts.
 
-```
-ApprovalOrchestrator.orchestrate(request, channels, strategy='sequential')
-  │
-  ├── VoiceChannel.waitForResponse(15s)
-  │     → timeout (empleado no respondió en 15s)
-  │
-  └── WebhookChannel.waitForResponse(90s)
-        → empleado responde desde app a los 30s
-        → { approved: true, channel_used: 'webhook' }
+```text
+voice waits 15s -> timeout
+webhook starts -> approved
 ```
 
-**Usar cuando:** Hay un canal preferido (voz) y un fallback (app) si el primero no funciona.
+Use it when one channel is preferred and another is a fallback.
+
+### `quorum`
+
+Multiple eligible humans are contacted, and the request only succeeds after the
+configured number of distinct approvers say yes.
+
+```ts
+const request: ApprovalRequest = {
+  id: 'approval_001',
+  draft_id: 'draft_001',
+  action: 'inventory_writeoff',
+  amount: 50_000,
+  session_id: 'session-1',
+  required_role: 'manager',
+  context: { store_id: 'store_001' },
+  timeout_ms: 120_000,
+  quorum: {
+    required: 2,
+    eligible_roles: ['manager', 'owner'],
+    reject_on_any_no: true,
+  },
+}
+```
+
+Behavior:
+
+- approvers receive distinct targeted requests
+- `APPROVAL_RESOLVED` keeps `approver_id` for compatibility and adds
+  `approvers`
+- by default, any explicit rejection ends the quorum immediately
+- if quorum is not reached in time, timeout events can include
+  `partial_approvals`
+
+Use it when shared accountability matters:
+
+- large refunds
+- high-value inventory write-offs
+- pricing overrides above policy thresholds
+- destructive operational changes
 
 ---
 
-## Configuración por Tool
+## Presence-Aware Routing
 
-```typescript
-const tools: ToolDefinition[] = [
-  // Cobro — cajero presente o en app
-  {
-    name: 'payment_process',
-    safety: 'restricted',
-    required_role: 'cashier',
-    approval_channels: [
-      { type: 'voice',   timeout_ms: 15_000 },
-      { type: 'webhook', timeout_ms: 90_000 },
-    ],
-    approval_strategy: 'parallel',
-    approval_timeout_ms: 120_000,
-  },
+If you use `InMemoryPresenceManager`, approvals become availability-aware.
 
-  // Reembolso — gerente (límite por rol)
-  {
-    name: 'refund_create',
-    safety: 'restricted',
-    required_role: 'manager',
-    approval_channels: [
-      { type: 'voice',   timeout_ms: 20_000 },
-      { type: 'webhook', timeout_ms: 100_000 },
-    ],
-    approval_strategy: 'parallel',
-    approval_timeout_ms: 120_000,
-  },
+Single approver flow:
 
-  // Override de precio — dueño o sistema externo
-  {
-    name: 'price_override',
-    safety: 'restricted',
-    required_role: 'owner',
-    approval_channels: [
-      { type: 'external_tool', timeout_ms: 60_000, config: {
-          url: 'https://mi-sistema.com/api/approval',
-          method: 'POST',
-          auth: 'Bearer SECRET',
-        }
-      },
-      { type: 'webhook', timeout_ms: 120_000 },
-    ],
-    approval_strategy: 'sequential',  // intenta externo primero
-    approval_timeout_ms: 180_000,
-  },
-]
+- the orchestrator looks for an available human with the required role or
+  higher
+- if none are available, it publishes `ORDER_QUEUED_NO_APPROVER`
+- the request resumes when presence changes make an approver available
+
+Quorum flow:
+
+- the orchestrator looks for enough distinct eligible humans
+- if fewer than `quorum.required` are available, the request stays queued
+- once enough approvers are present, quorum notification begins
+
+Relevant events:
+
+```text
+bus:HUMAN_PRESENCE_CHANGED
+bus:ORDER_QUEUED_NO_APPROVER
+bus:APPROVAL_RESOLVED
+bus:ORDER_APPROVED
+bus:ORDER_APPROVAL_TIMEOUT
 ```
 
 ---
 
-## ApprovalOrchestrator
+## Tool Configuration Examples
 
-```typescript
-class ApprovalOrchestrator {
-  constructor(deps: {
-    bus: IEventBus
-    channelRegistry: Map<string, IApprovalChannel>
-    defaultTimeoutMs?: number
-  })
+### Fast retail approval
 
-  start(): Unsubscribe
-  // Suscribe bus:ORDER_PENDING_APPROVAL
+```ts
+{
+  name: 'refund_create',
+  safety: 'restricted',
+  required_role: 'manager',
+  approval_channels: [
+    { type: 'voice', timeout_ms: 15_000 },
+    { type: 'webhook', timeout_ms: 90_000 },
+  ],
+  approval_strategy: 'parallel',
+}
+```
 
-  async orchestrate(
-    request: ApprovalRequest
-  ): Promise<ApprovalResponse>
-  // Coordina canales según request.approval_strategy
-  // Publica bus:APPROVAL_RESOLVED cuando hay respuesta
-  // Publica bus:ORDER_APPROVAL_TIMEOUT si todos timeout
+### Preferred voice with remote fallback
 
-  dispose(): void
+```ts
+{
+  name: 'price_override',
+  safety: 'restricted',
+  required_role: 'supervisor',
+  approval_channels: [
+    { type: 'voice', timeout_ms: 15_000 },
+    { type: 'webhook', timeout_ms: 90_000 },
+  ],
+  approval_strategy: 'sequential',
+}
+```
+
+### Shared approval for a high-risk action
+
+```ts
+{
+  name: 'inventory_writeoff',
+  safety: 'restricted',
+  required_role: 'manager',
+  approval_channels: [{ type: 'webhook', timeout_ms: 60_000 }],
+  approval_strategy: 'quorum',
+  quorum: {
+    required: 2,
+    eligible_roles: ['manager', 'owner'],
+    reject_on_any_no: true,
+  },
 }
 ```
 
 ---
 
-## Ejemplos de Flujo Completo
+## Runnable Examples
 
-### Tienda pequeña — solo webhook
+- [Governance Webhook Example](../examples/governance-webhook/README.md) —
+  single-approver approval through a browser or external app bridge
+- [Governance Quorum Example](../examples/governance-quorum/README.md) —
+  presence-aware 2-of-N approvals for high-risk actions
 
-```typescript
-const approvalOrchestrator = new ApprovalOrchestrator({
-  bus,
-  channelRegistry: new Map([
-    ['webhook', new WebhookApprovalChannel({ bus })]
-  ])
-})
-
-// Tool config:
-approval_channels: [{ type: 'webhook', timeout_ms: 120_000 }]
-```
-
-### Tienda mediana — voz + webhook en paralelo
-
-```typescript
-const approvalOrchestrator = new ApprovalOrchestrator({
-  bus,
-  channelRegistry: new Map([
-    ['voice',   new VoiceApprovalChannel({ bus, audioQueue })],
-    ['webhook', new WebhookApprovalChannel({ bus })],
-  ])
-})
-
-// Tool config:
-approval_channels: [
-  { type: 'voice',   timeout_ms: 15_000 },
-  { type: 'webhook', timeout_ms: 90_000 },
-]
-approval_strategy: 'parallel'
-```
-
-### Cadena con sistema de autorizaciones propio
-
-```typescript
-const approvalOrchestrator = new ApprovalOrchestrator({
-  bus,
-  channelRegistry: new Map([
-    ['voice',         new VoiceApprovalChannel({ bus, audioQueue })],
-    ['webhook',       new WebhookApprovalChannel({ bus })],
-    ['external_tool', new ExternalToolChannel({
-        bus,
-        url: process.env.APPROVAL_API_URL!,
-        auth: process.env.APPROVAL_API_TOKEN!,
-      })
-    ],
-  ])
-})
-```
-
----
-
-## Backwards Compatibility
-
-`IApprovalQueue` (v1) se mantiene como re-export de `WebhookApprovalChannel`:
-
-```typescript
-// packages/core/src/approval/types.ts
-export { IApprovalChannel as IApprovalQueue } from '../safety/channels/types.js'
-// + re-export ApprovalRecord, ApprovalStatus para no romper código existente
-```
-
-Los webhooks existentes (`POST /webhook/approval`) siguen funcionando sin cambios.
+For the full governance model, see [Governance Guide](GOVERNANCE.md).

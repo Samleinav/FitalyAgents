@@ -495,6 +495,8 @@ participants.
 Use when: high-impact operations require shared accountability, such as large
 refunds, inventory write-offs, pricing overrides, or policy changes.
 
+Runnable example: [Governance Quorum Example](../examples/governance-quorum/README.md)
+
 ### Bus events emitted by the governance system
 
 ```
@@ -723,4 +725,6 @@ they speak. External systems can also publish `SESSION_RESUMED`; both
 - [Safety Model](SAFETY-MODEL.md) — full decision matrix, 15 concrete flow diagrams
 - [Human Roles](HUMAN-ROLES.md) — role details, voice identification, scenarios
 - [Approval Channels](APPROVAL-CHANNELS.md) — channel interface, configuration, examples
+- [Governance Webhook Example](../examples/governance-webhook/README.md) — single-approver browser and HTTP bridge flow
+- [Governance Quorum Example](../examples/governance-quorum/README.md) — presence-aware multi-approver quorum flow
 - [Speculative Dispatcher](DISPATCHER-SPECULATIVE.md) — how drafts are pre-created before the user finishes speaking

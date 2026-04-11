@@ -4,6 +4,9 @@ Demonstrates the full RESTRICTED action flow: an agent triggers an action that r
 
 No Redis required — uses `InMemoryBus`.
 
+If you need multiple human approvals instead of a single approver, see
+[Governance Quorum Example](../governance-quorum/README.md).
+
 ---
 
 ## What this shows

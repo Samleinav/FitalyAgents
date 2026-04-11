@@ -215,7 +215,7 @@ When escalation is needed, `ApprovalOrchestrator` coordinates one or more channe
 - **WebhookChannel** — push notification to a mobile app; employee taps approve/reject
 - **ExternalToolChannel** — HTTP call to an external authorization system (POS, WhatsApp, etc.)
 
-Channels can run in `parallel` (first to respond wins) or `sequential` (fallback chain).
+Channels can run in `parallel` (first to respond wins), `sequential` (fallback chain), or `quorum` (N-of-M approvals for high-risk actions).
 
 ---
 
@@ -413,7 +413,9 @@ npx vitest run --reporter=verbose --root examples/voice-retail
 - [Governance Guide](docs/GOVERNANCE.md) — how safety levels, roles, and approval channels work together
 - [Safety Model](docs/SAFETY-MODEL.md) — complete decision matrix and flow diagrams
 - [Human Roles](docs/HUMAN-ROLES.md) — role hierarchy, limits, and voice identification
-- [Approval Channels](docs/APPROVAL-CHANNELS.md) — VoiceChannel, WebhookChannel, ExternalToolChannel
+- [Approval Channels](docs/APPROVAL-CHANNELS.md) — built-in channels plus parallel, sequential, and quorum coordination
+- [Governance Webhook Example](examples/governance-webhook/README.md) — single-approver remote approval flow through a browser or external app
+- [Governance Quorum Example](examples/governance-quorum/README.md) — presence-aware 2-of-N approvals for high-risk actions
 - [Speculative Dispatcher](docs/DISPATCHER-SPECULATIVE.md) — speculative pre-fetching architecture
 - [Memory Integration](docs/MEMORY-INTEGRATION.md) — actor-scoped memory, AAAK, and MemPalace CLI/MCP backends
 - [Avatar Retail Example](examples/avatar-retail/README.md) — professional avatar presence for in-store and web retail
