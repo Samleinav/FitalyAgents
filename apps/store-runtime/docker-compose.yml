@@ -1,0 +1,135 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  store-runtime:
+    build:
+      context: ../..
+      dockerfile: apps/store-runtime/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      STORE_CONFIG_PATH: /app/apps/store-runtime/store.config.redis.json
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./store.config.redis.json:/app/apps/store-runtime/store.config.redis.json:ro
+
+  store-ui-bridge:
+    build:
+      context: ../..
+      dockerfile: apps/store-runtime/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      STORE_CONFIG_PATH: /app/apps/store-runtime/store.config.redis.json
+      UI_BRIDGE_PORT: 3010
+    ports:
+      - "3010:3010"
+    volumes:
+      - ./store.config.redis.json:/app/apps/store-runtime/store.config.redis.json:ro
+    command:
+      - node
+      - apps/store-runtime/dist/external/ui-bridge.js
+
+  customer-display:
+    build:
+      context: ../..
+      dockerfile: apps/store-runtime/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      STORE_CONFIG_PATH: /app/apps/store-runtime/store.config.redis.json
+      CUSTOMER_DISPLAY_PORT: 3020
+    ports:
+      - "3020:3020"
+    volumes:
+      - ./store.config.redis.json:/app/apps/store-runtime/store.config.redis.json:ro
+    command:
+      - node
+      - apps/store-runtime/dist/external/customer-display.js
+
+  fitaly-voice:
+    profiles: ["voice"]
+    build:
+      context: ../../fitaly-voice
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+      STORE_ID: store-001
+      BUS_MODE: redis
+      STT_ENABLED: "true"
+      STT_PROVIDER: whisper
+      STT_MODEL: tiny
+      STT_DEVICE: cpu
+      DIARIZER_BACKEND: stub
+      DENOISER_BACKEND: spectral
+      AOSC_CACHE_PATH: /app/data/aosc_cache.npz
+    volumes:
+      - ./data:/app/data
+    command:
+      - python
+      - -m
+      - fitaly_voice
+      - run
+      - --mode
+      - redis
+      - --source
+      - udp
+      - --udp-port
+      - "5005"
+      - --session
+      - room-a
+      - --store
+      - store-001
+    ports:
+      - "5005:5005/udp"
+
+  store-avatar:
+    profiles: ["avatar"]
+    build:
+      context: ../..
+      dockerfile: apps/store-runtime/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      STORE_CONFIG_PATH: /app/apps/store-runtime/store.config.redis.json
+    volumes:
+      - ./store.config.redis.json:/app/apps/store-runtime/store.config.redis.json:ro
+    command:
+      - node
+      - apps/store-runtime/dist/external/avatar-service.js
+
+volumes:
+  redis-data:

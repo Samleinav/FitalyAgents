@@ -295,9 +295,20 @@ describe('SafetyGuard', () => {
       expect(guard.roleHasPermission(cashier, 'payment_process', { amount: 50_001 })).toBe(false)
     })
 
-    it('cashier cannot refund at all', () => {
-      const cashier = makeProfile({ role: 'cashier' })
-      expect(guard.roleHasPermission(cashier, 'refund_create', { amount: 1 })).toBe(false)
+    it('cashier can refund when a refund_max limit is configured', () => {
+      const cashier = makeProfile({
+        role: 'cashier',
+        approval_limits: { payment_max: 50_000, refund_max: 20 },
+      })
+      expect(guard.roleHasPermission(cashier, 'refund_create', { amount: 20 })).toBe(true)
+    })
+
+    it('cashier still cannot refund above the configured limit', () => {
+      const cashier = makeProfile({
+        role: 'cashier',
+        approval_limits: { payment_max: 50_000, refund_max: 20 },
+      })
+      expect(guard.roleHasPermission(cashier, 'refund_create', { amount: 21 })).toBe(false)
     })
 
     it('manager can refund ≤ 100,000', () => {

@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Store Runtime Config",
+  "type": "object",
+  "required": ["store", "providers"],
+  "properties": {
+    "store": {
+      "type": "object",
+      "required": ["store_id", "name"],
+      "properties": {
+        "store_id": { "type": "string" },
+        "name": { "type": "string" },
+        "timezone": { "type": "string" },
+        "locale": { "type": "string" }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "properties": {
+        "bus": { "type": "object" },
+        "llm": { "type": "object" },
+        "stt": { "type": "object" },
+        "tts": { "type": "object" },
+        "memory": { "type": "object" }
+      }
+    },
+    "employees": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "capture": {
+      "type": "object"
+    },
+    "approvals": {
+      "type": "object"
+    },
+    "webhooks": {
+      "type": "object"
+    },
+    "tools": {
+      "type": "object"
+    },
+    "safety": {
+      "type": "object"
+    },
+    "storage": {
+      "type": "object"
+    },
+    "retail": {
+      "type": "object"
+    },
+    "connectors": {
+      "type": "object"
+    },
+    "devices": {
+      "type": "object"
+    },
+    "policies": {
+      "type": "object"
+    },
+    "http": {
+      "type": "object"
+    },
+    "avatar": {
+      "type": "object"
+    }
+  }
+}

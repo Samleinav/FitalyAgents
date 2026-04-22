@@ -1,0 +1,120 @@
+{
+  "store": {
+    "store_id": "store-001",
+    "name": "Fitaly Demo Store",
+    "timezone": "UTC",
+    "locale": "es"
+  },
+  "providers": {
+    "bus": { "driver": "inmemory" },
+    "llm": { "driver": "groq", "model": "llama-3.1-8b-instant" },
+    "stt": { "driver": "mock" },
+    "tts": { "driver": "mock" },
+    "memory": { "driver": "sqlite" }
+  },
+  "capture": {
+    "driver": "local-stt",
+    "input": "stdin"
+  },
+  "employees": [
+    {
+      "id": "mgr-001",
+      "name": "Gerencia",
+      "role": "manager",
+      "approval_limits": {},
+      "voice_id": "voice-manager-1"
+    }
+  ],
+  "approvals": {
+    "default_channels": [
+      { "type": "webhook", "timeout_ms": 60000 },
+      { "type": "voice", "timeout_ms": 45000 }
+    ],
+    "default_strategy": "parallel"
+  },
+  "webhooks": {
+    "approval_response_path": "/approvals/respond"
+  },
+  "tools": {
+    "enabled": [
+      "product_search",
+      "inventory_check",
+      "customer_lookup",
+      "order_create",
+      "order_update",
+      "order_confirm",
+      "payment_intent_create",
+      "receipt_print"
+    ]
+  },
+  "safety": {
+    "unknown_tool_default": "restricted",
+    "tool_overrides": []
+  },
+  "storage": {
+    "sqlite_path": "./data/store.db"
+  },
+  "voice": {
+    "mode": "direct-device",
+    "barge_in_enabled": true,
+    "turn_detection": "hybrid",
+    "sample_rate": 16000
+  },
+  "retail": {
+    "service_mode": "assisted-retail",
+    "store_position": "cashier",
+    "greeting_style": "Saluda con calidez y ayuda al cliente a cerrar su compra con claridad.",
+    "upsell_policy": "light",
+    "handoff_policy": "manual",
+    "customer_display_enabled": false,
+    "customer_display_mode": "order"
+  },
+  "connectors": {
+    "products": { "driver": "mock" },
+    "orders": { "driver": "mock" },
+    "customers": { "driver": "mock" },
+    "payments": { "driver": "mock" },
+    "inventory": { "driver": "mock" },
+    "receipts": { "driver": "mock" }
+  },
+  "devices": {
+    "payment_terminal": { "driver": "mock" },
+    "receipt_printer": { "driver": "mock" },
+    "cash_drawer": { "driver": "mock" },
+    "customer_display": { "driver": "mock" }
+  },
+  "policies": {
+    "discount_max_pct": 10,
+    "refund_max": 150,
+    "price_override_requires_role": "manager",
+    "cancellation_window_minutes": 30,
+    "allowed_payment_methods": ["card", "cash"],
+    "role_approval_defaults": {
+      "cashier": { "payment_max": 1000, "refund_max": 20 },
+      "manager": { "payment_max": 50000 },
+      "supervisor": { "refund_max": 1000, "discount_max_pct": 30 },
+      "owner": { "refund_max": 100000, "discount_max_pct": 100 }
+    }
+  },
+  "http": {
+    "host": "127.0.0.1",
+    "port": 3000,
+    "admin_secret_env": "STORE_ADMIN_SECRET"
+  },
+  "web_voice_bridge": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 3040,
+    "mount_path": "/ws/voice",
+    "transport": "websocket",
+    "audio_format": "pcm_s16le",
+    "surface_defaults": ["avatar", "customer-display"],
+    "publish_mode": "local",
+    "browser_vad": true,
+    "require_auth": false
+  },
+  "avatar": {
+    "enabled": false,
+    "mode": "internal"
+  }
+}

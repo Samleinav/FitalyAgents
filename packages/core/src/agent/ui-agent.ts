@@ -121,11 +121,18 @@ export class UIAgent extends StreamAgent {
       case 'bus:TOOL_RESULT': {
         const toolName = String(data.tool_name ?? data.tool_id ?? '')
         if (toolName.includes('product_search')) {
+          const resultPayload =
+            data.result && typeof data.result === 'object'
+              ? (data.result as Record<string, unknown>)
+              : null
           update = {
             component: 'product_grid',
             action: 'show',
             data: {
-              results: data.result ?? data.results,
+              results:
+                (Array.isArray(resultPayload?.products) ? resultPayload.products : null) ??
+                (Array.isArray(data.result) ? data.result : null) ??
+                data.results,
               query: data.query,
             },
           }

@@ -1,0 +1,87 @@
+{
+  "project": {
+    "name": "Fitaly Store Deploy Center",
+    "store_config_path": "../store-runtime/store.config.redis.json",
+    "compose_file_path": "../store-runtime/docker-compose.yml",
+    "working_directory": "../store-runtime",
+    "env_file_path": "../store-runtime/.env",
+    "env_example_path": "../store-runtime/.env.example",
+    "logs_tail_lines": 120,
+    "profiles": []
+  },
+  "http": {
+    "host": "127.0.0.1",
+    "port": 3030
+  },
+  "services": [
+    {
+      "id": "redis",
+      "label": "Redis",
+      "service_name": "redis",
+      "kind": "infra",
+      "enabled": true
+    },
+    {
+      "id": "store-runtime",
+      "label": "Store Runtime",
+      "service_name": "store-runtime",
+      "kind": "runtime",
+      "health_url": "http://127.0.0.1:3000/health",
+      "enabled": true
+    },
+    {
+      "id": "store-ui-bridge",
+      "label": "Staff UI",
+      "service_name": "store-ui-bridge",
+      "kind": "ui",
+      "health_url": "http://127.0.0.1:3010/health",
+      "enabled": true
+    },
+    {
+      "id": "customer-display",
+      "label": "Customer Display",
+      "service_name": "customer-display",
+      "kind": "customer-display",
+      "health_url": "http://127.0.0.1:3020/health",
+      "enabled": true
+    },
+    {
+      "id": "store-avatar",
+      "label": "Avatar Service",
+      "service_name": "store-avatar",
+      "kind": "avatar",
+      "enabled": false
+    },
+    {
+      "id": "fitaly-voice",
+      "label": "Voice Service",
+      "service_name": "fitaly-voice",
+      "kind": "voice",
+      "enabled": false
+    }
+  ],
+  "screens": [
+    {
+      "id": "staff-ui",
+      "label": "Staff UI",
+      "kind": "staff-ui",
+      "url": "http://127.0.0.1:3010/",
+      "health_url": "http://127.0.0.1:3010/health",
+      "enabled": true
+    },
+    {
+      "id": "customer-display",
+      "label": "Customer Display",
+      "kind": "customer-display",
+      "url": "http://127.0.0.1:3020/",
+      "health_url": "http://127.0.0.1:3020/health",
+      "enabled": true
+    },
+    {
+      "id": "avatar",
+      "label": "Avatar Screen",
+      "kind": "avatar",
+      "enabled": false
+    }
+  ]
+}

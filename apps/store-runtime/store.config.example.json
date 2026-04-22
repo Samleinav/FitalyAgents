@@ -1,0 +1,185 @@
+{
+  "store": {
+    "store_id": "store-001",
+    "name": "Fitaly Retail Example",
+    "timezone": "UTC",
+    "locale": "es"
+  },
+  "providers": {
+    "bus": { "driver": "redis", "url": "redis://redis:6379" },
+    "llm": { "driver": "groq", "model": "llama-3.1-8b-instant" },
+    "stt": { "driver": "mock" },
+    "tts": { "driver": "mock" },
+    "memory": { "driver": "sqlite" }
+  },
+  "capture": {
+    "driver": "external-bus"
+  },
+  "employees": [
+    {
+      "id": "cash-001",
+      "name": "Caja Principal",
+      "role": "cashier",
+      "approval_limits": {}
+    },
+    {
+      "id": "mgr-001",
+      "name": "Gerencia",
+      "role": "manager",
+      "approval_limits": {},
+      "voice_id": "voice-manager-1"
+    },
+    {
+      "id": "owner-001",
+      "name": "Propietario",
+      "role": "owner",
+      "approval_limits": {
+        "refund_max": 250000
+      },
+      "voice_id": "voice-owner-1"
+    }
+  ],
+  "approvals": {
+    "default_channels": [
+      { "type": "webhook", "timeout_ms": 60000 },
+      { "type": "voice", "timeout_ms": 45000 }
+    ],
+    "default_strategy": "parallel"
+  },
+  "webhooks": {
+    "approval_response_path": "/approvals/respond"
+  },
+  "tools": {
+    "enabled": [
+      "product_search",
+      "inventory_check",
+      "customer_lookup",
+      "customer_register",
+      "order_create",
+      "order_update",
+      "order_confirm",
+      "payment_intent_create",
+      "receipt_print"
+    ]
+  },
+  "safety": {
+    "unknown_tool_default": "restricted",
+    "tool_overrides": [
+      {
+        "name": "receipt_print",
+        "safety": "protected"
+      }
+    ]
+  },
+  "storage": {
+    "sqlite_path": "./data/store.db"
+  },
+  "voice": {
+    "mode": "hybrid",
+    "barge_in_enabled": true,
+    "turn_detection": "hybrid",
+    "sample_rate": 16000
+  },
+  "retail": {
+    "service_mode": "assisted-retail",
+    "store_position": "cashier",
+    "greeting_style": "Recibe al cliente, resume su orden y guía el cobro con frases claras.",
+    "upsell_policy": "light",
+    "handoff_policy": "manual",
+    "customer_display_enabled": true,
+    "customer_display_mode": "full"
+  },
+  "connectors": {
+    "products": {
+      "driver": "mock",
+      "health_timeout_ms": 3000,
+      "retry_policy": { "max_attempts": 3, "backoff_ms": 250 }
+    },
+    "orders": {
+      "driver": "mock",
+      "health_timeout_ms": 3000,
+      "retry_policy": { "max_attempts": 3, "backoff_ms": 250 }
+    },
+    "customers": {
+      "driver": "mock",
+      "health_timeout_ms": 3000,
+      "retry_policy": { "max_attempts": 3, "backoff_ms": 250 }
+    },
+    "payments": {
+      "driver": "mock",
+      "health_timeout_ms": 3000,
+      "retry_policy": { "max_attempts": 3, "backoff_ms": 250 }
+    },
+    "inventory": {
+      "driver": "mock",
+      "health_timeout_ms": 3000,
+      "retry_policy": { "max_attempts": 3, "backoff_ms": 250 }
+    },
+    "receipts": {
+      "driver": "mock",
+      "health_timeout_ms": 3000,
+      "retry_policy": { "max_attempts": 3, "backoff_ms": 250 }
+    }
+  },
+  "devices": {
+    "payment_terminal": {
+      "driver": "mock",
+      "connection": {
+        "device_id": "terminal-demo"
+      }
+    },
+    "receipt_printer": {
+      "driver": "mock",
+      "connection": {
+        "printer_id": "printer-demo"
+      }
+    },
+    "cash_drawer": {
+      "driver": "mock",
+      "connection": {
+        "drawer_id": "drawer-demo"
+      }
+    },
+    "customer_display": {
+      "driver": "web",
+      "connection": {
+        "url": "http://localhost:3020"
+      }
+    }
+  },
+  "policies": {
+    "discount_max_pct": 10,
+    "refund_max": 250,
+    "price_override_requires_role": "manager",
+    "cancellation_window_minutes": 30,
+    "allowed_payment_methods": ["card", "cash"],
+    "role_approval_defaults": {
+      "cashier": { "payment_max": 1000, "refund_max": 20 },
+      "manager": { "payment_max": 75000, "discount_max_pct": 15 },
+      "supervisor": { "refund_max": 1000, "discount_max_pct": 30 },
+      "owner": { "refund_max": 100000, "discount_max_pct": 100 }
+    }
+  },
+  "http": {
+    "host": "0.0.0.0",
+    "port": 3000,
+    "admin_secret_env": "STORE_ADMIN_SECRET"
+  },
+  "web_voice_bridge": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 3040,
+    "mount_path": "/ws/voice",
+    "transport": "websocket",
+    "audio_format": "pcm_s16le",
+    "surface_defaults": ["avatar", "customer-display"],
+    "publish_mode": "redis",
+    "browser_vad": true,
+    "require_auth": false
+  },
+  "avatar": {
+    "enabled": true,
+    "mode": "external",
+    "airi_url": "ws://airi:6006"
+  }
+}

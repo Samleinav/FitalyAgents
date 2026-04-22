@@ -33,6 +33,7 @@ export const TARGET_BRIDGE_CHANNELS = [
   'bus:SPEAKER_DETECTED',
   'bus:SPEAKER_LOST',
   'bus:SPEAKER_AMBIENT',
+  'bus:AMBIENT_CONTEXT',
   'bus:RESPONSE_START',
   'bus:RESPONSE_END',
 ] as const
@@ -65,6 +66,12 @@ export interface TargetGroupBridgeConfig {
    * Can be overridden per-speaker via `SPEAKER_DETECTED.metadata`.
    */
   defaultSessionMetadata?: Record<string, unknown>
+  /**
+   * Optional resolver to derive the runtime session ID for a speaker.
+   * Useful when upstream emits a source-level session_id and the runtime
+   * needs a speaker-scoped session instead.
+   */
+  resolveSessionId?: (speakerId: string, preferredSessionId?: string) => string
 }
 
 // ── TargetGroupBridge ──────────────────────────────────────────────────────────
@@ -99,6 +106,7 @@ export class TargetGroupBridge extends StreamAgent {
   private readonly sessionManager: ISessionManager
   private readonly storeId: string
   private readonly defaultMetadata: Record<string, unknown>
+  private readonly resolveSessionId?: (speakerId: string, preferredSessionId?: string) => string
 
   // Track which speakers already have sessions
   private readonly speakerSessions = new Map<string, string>()
@@ -108,6 +116,7 @@ export class TargetGroupBridge extends StreamAgent {
     this.sessionManager = config.sessionManager
     this.storeId = config.storeId
     this.defaultMetadata = config.defaultSessionMetadata ?? {}
+    this.resolveSessionId = config.resolveSessionId
   }
 
   async onEvent(channel: string, payload: unknown): Promise<void> {
@@ -125,6 +134,18 @@ export class TargetGroupBridge extends StreamAgent {
       case 'bus:SPEAKER_AMBIENT': {
         const data = payload as SpeakerAmbientPayload
         await this.handleSpeakerAmbient(data)
+        break
+      }
+      case 'bus:AMBIENT_CONTEXT': {
+        const data = payload as { speaker_id?: string; text?: string }
+        if (!data.speaker_id) {
+          break
+        }
+        await this.handleSpeakerAmbient({
+          session_id: '',
+          speaker_id: data.speaker_id,
+          text: data.text,
+        })
         break
       }
       case 'bus:RESPONSE_START': {
@@ -153,10 +174,10 @@ export class TargetGroupBridge extends StreamAgent {
 
     if (newState === 'targeted') {
       // Create session if none exists
-      await this.ensureSession(data.speaker_id)
+      await this.ensureSession(data.speaker_id, data.session_id)
     } else if (newState === 'queued') {
       // Create session and set priority to 0 (lower, waiting)
-      const sessionId = await this.ensureSession(data.speaker_id)
+      const sessionId = await this.ensureSession(data.speaker_id, data.session_id)
       await this.sessionManager.setPriorityGroup(sessionId, 0)
     }
 
@@ -197,7 +218,7 @@ export class TargetGroupBridge extends StreamAgent {
   /**
    * Ensure a session exists for the speaker. Returns the session ID.
    */
-  private async ensureSession(speakerId: string): Promise<string> {
+  private async ensureSession(speakerId: string, preferredSessionId?: string): Promise<string> {
     const existing = this.speakerSessions.get(speakerId)
     if (existing) {
       // Verify session still exists in manager
@@ -205,8 +226,26 @@ export class TargetGroupBridge extends StreamAgent {
       if (session && session.status === 'active') return existing
     }
 
+    let sessionId = `session_${speakerId}_${Date.now()}`
+    const candidateSessionId =
+      this.resolveSessionId?.(speakerId, preferredSessionId) ?? preferredSessionId
+
+    if (candidateSessionId) {
+      const preferredSession = await this.sessionManager.getSession(candidateSessionId)
+      const preferredSpeakerId =
+        preferredSession?.metadata &&
+        typeof preferredSession.metadata === 'object' &&
+        'speaker_id' in preferredSession.metadata &&
+        typeof preferredSession.metadata.speaker_id === 'string'
+          ? preferredSession.metadata.speaker_id
+          : undefined
+
+      if (!preferredSession || preferredSpeakerId === speakerId) {
+        sessionId = candidateSessionId
+      }
+    }
+
     // Create new session
-    const sessionId = `session_${speakerId}_${Date.now()}`
     await this.sessionManager.createSession(sessionId, {
       ...this.defaultMetadata,
       speaker_id: speakerId,

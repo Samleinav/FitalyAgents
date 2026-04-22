@@ -1,0 +1,7 @@
+interface:
+  display_name: "Store Runtime Ops"
+  short_description: "Run and troubleshoot the Redis-first store stack"
+  default_prompt: "Use $store-runtime-ops to validate or troubleshoot the Redis-first store-runtime deployment and smoke flows."
+
+policy:
+  allow_implicit_invocation: true

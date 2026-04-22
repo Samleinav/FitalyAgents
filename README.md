@@ -442,11 +442,13 @@ The framework is provider-agnostic. Any STT/TTS/LLM that implements the correspo
 
 | Layer       | Cloud options           | Local / edge options             |
 | ----------- | ----------------------- | -------------------------------- |
-| STT         | Deepgram, AssemblyAI    | Whisper, VibeVoice (Microsoft)   |
+| STT         | Deepgram, AssemblyAI    | Vosk, sherpa-onnx, NVIDIA Riva   |
 | TTS         | ElevenLabs, Cartesia    | Piper (ONNX)                     |
 | LLM         | OpenAI, Anthropic, Groq | Ollama                           |
 | Diarization | Deepgram                | NeMo SortFormer (GPU), VibeVoice |
 
+> **Whisper note:** Whisper can still be useful for offline or batch transcription, but it is not the recommended primary local STT for low-latency store conversations because FitalyAgents voice runtimes assume streaming partial and final speech events.
+>
 > **VibeVoice** (Microsoft) is a lightweight, fast, multilingual local speech pipeline. It runs on a Jetson NX (16 GB) and can support 1–4 FitalyAgents instances simultaneously — zero cloud cost for audio processing.
 
 ---

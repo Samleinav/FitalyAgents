@@ -93,6 +93,47 @@ describe('TargetGroupBridge', () => {
       await bridge.stop()
     })
 
+    it('reuses the provided session_id for speaker routing', async () => {
+      const { bridge, bus, sessionManager } = createBridge()
+      await bridge.start()
+
+      await bus.publish('bus:SPEAKER_DETECTED', {
+        session_id: 'session_store_spk_1',
+        speaker_id: 'spk-1',
+        store_id: 'store_test',
+      })
+      await tick()
+
+      expect(bridge.getSessionForSpeaker('spk-1')).toBe('session_store_spk_1')
+      expect(await sessionManager.getSession('session_store_spk_1')).not.toBeNull()
+
+      await bridge.stop()
+    })
+
+    it('supports custom runtime session resolution', async () => {
+      const bus = new InMemoryBus()
+      const sessionManager = new InMemorySessionManager()
+      const bridge = new TargetGroupBridge({
+        bus,
+        sessionManager,
+        storeId: 'store_test',
+        resolveSessionId: (speakerId) => `runtime_${speakerId}`,
+      })
+      await bridge.start()
+
+      await bus.publish('bus:SPEAKER_DETECTED', {
+        session_id: 'source-room-a',
+        speaker_id: 'spk-1',
+        store_id: 'store_test',
+      })
+      await tick()
+
+      expect(bridge.getSessionForSpeaker('spk-1')).toBe('runtime_spk-1')
+      expect(await sessionManager.getSession('runtime_spk-1')).not.toBeNull()
+
+      await bridge.stop()
+    })
+
     it('FSM state is targeted for primary speaker', async () => {
       const { bridge, bus } = createBridge()
       await bridge.start()
@@ -174,6 +215,31 @@ describe('TargetGroupBridge', () => {
       expect(sessionId2).toBeDefined()
       const session2 = await sessionManager.getSession(sessionId2!)
       expect(session2!.priorityGroup).toBe(0)
+
+      await bridge.stop()
+    })
+
+    it('falls back to a unique session when upstream reuses the same session_id for another speaker', async () => {
+      const { bridge, bus } = createBridge()
+      await bridge.start()
+
+      await bus.publish('bus:SPEAKER_DETECTED', {
+        session_id: 'shared-session',
+        speaker_id: 'spk-1',
+        store_id: 'store_test',
+      })
+      await tick()
+
+      await bus.publish('bus:SPEAKER_DETECTED', {
+        session_id: 'shared-session',
+        speaker_id: 'spk-2',
+        store_id: 'store_test',
+      })
+      await tick()
+
+      expect(bridge.getSessionForSpeaker('spk-1')).toBe('shared-session')
+      expect(bridge.getSessionForSpeaker('spk-2')).toBeDefined()
+      expect(bridge.getSessionForSpeaker('spk-2')).not.toBe('shared-session')
 
       await bridge.stop()
     })

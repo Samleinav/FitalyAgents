@@ -110,14 +110,18 @@ describe('UIAgent', () => {
   describe('TOOL_RESULT', () => {
     it('publishes UI_UPDATE product_grid show on product_search', async () => {
       const { agent, updates } = createUIAgent()
+      const products = [
+        { name: 'Nike Air Max', price: 18500 },
+        { name: 'Adidas Superstar', price: 15000 },
+      ]
 
       await agent.onEvent('bus:TOOL_RESULT', {
         event: 'TOOL_RESULT',
         tool_name: 'product_search',
-        result: [
-          { name: 'Nike Air Max', price: 18500 },
-          { name: 'Adidas Superstar', price: 15000 },
-        ],
+        result: {
+          products,
+          text: 'Encontré dos opciones.',
+        },
         query: 'tenis',
       })
 
@@ -127,6 +131,7 @@ describe('UIAgent', () => {
         action: 'show',
       })
       expect((updates[0].data as any).results).toHaveLength(2)
+      expect((updates[0].data as any).results).toEqual(products)
     })
 
     it('ignores TOOL_RESULT for non-product_search tools', async () => {

@@ -240,8 +240,6 @@ export class SafetyGuard {
 
     // Refund checks — needs role hierarchy + refund_max
     if (toolName.includes('refund')) {
-      const requiredRole = tool.required_role ?? 'manager'
-      if (ROLE_HIERARCHY[speaker.role] < ROLE_HIERARCHY[requiredRole]) return false
       return (limits.refund_max ?? 0) >= amount
     }
 

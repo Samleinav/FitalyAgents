@@ -1,0 +1,27 @@
+{
+  "name": "store-deploy-center",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/main.ts",
+    "lint": "eslint src test vitest.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.4.0",
+    "fastify": "^5.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^25.5.0",
+    "tsup": "^8.3.6",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}

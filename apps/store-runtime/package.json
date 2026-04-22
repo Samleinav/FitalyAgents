@@ -1,0 +1,36 @@
+{
+  "name": "store-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/main.ts",
+    "dev:avatar": "tsx src/external/avatar-service.ts",
+    "dev:customer-display": "tsx src/external/customer-display.ts",
+    "dev:demo": "tsx src/external/demo-publisher.ts",
+    "dev:ui": "tsx src/external/ui-bridge.ts",
+    "dev:web-voice": "tsx src/external/web-voice-bridge.ts",
+    "lint": "eslint src test vitest.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fitalyagents/dispatcher": "workspace:*",
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.4.0",
+    "fastify": "^5.0.0",
+    "fitalyagents": "workspace:*",
+    "ws": "^8.18.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^25.5.0",
+    "@types/ws": "^8.5.14",
+    "tsup": "^8.3.6",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}

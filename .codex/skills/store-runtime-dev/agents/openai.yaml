@@ -1,0 +1,7 @@
+interface:
+  display_name: "Store Runtime Dev"
+  short_description: "Build and review the store runtime app"
+  default_prompt: "Use $store-runtime-dev to implement or review changes in apps/store-runtime and its immediate Redis-first integrations."
+
+policy:
+  allow_implicit_invocation: true
