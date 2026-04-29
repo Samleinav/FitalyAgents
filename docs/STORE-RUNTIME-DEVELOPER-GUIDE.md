@@ -53,6 +53,9 @@ Para el contexto de producto y el plan de construcción, consulta también
   Sidecar opcional para voz web por WebSocket y publicación de `SPEECH_*` al bus.
 - `src/external/web-voice-bridge-page.ts`
   Página HTML de prueba para micrófono, transcript y turn-state.
+- `src/external/livekit-voice-bridge.ts`
+  Sidecar LiveKit Redis-first. Mantiene el contrato LiveKit/Fitaly separado del
+  runtime principal.
 - `src/bootstrap/tts-audio-sink.ts`
   Fanout de audio TTS hacia salida local y eventos `TTS_*` para clientes web.
 - `src/external/avatar-service.ts`
@@ -141,6 +144,7 @@ pnpm --filter store-runtime dev -- --config apps/store-runtime/store.config.json
 ```bash
 pnpm --filter store-runtime dev -- --config apps/store-runtime/store.config.redis.json
 pnpm --filter store-runtime dev:ui -- --config apps/store-runtime/store.config.redis.json
+pnpm --filter store-runtime dev:livekit-voice -- --config apps/store-runtime/store.config.redis.json
 pnpm --filter store-runtime dev:demo -- --config apps/store-runtime/store.config.redis.json
 ```
 

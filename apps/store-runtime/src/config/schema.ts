@@ -18,6 +18,7 @@ export const QuorumSchema = z.object({
 const VoiceModeSchema = z.enum(['direct-device', 'web-bridge', 'hybrid'])
 const VoiceTurnDetectionSchema = z.enum(['browser-vad', 'server-vad', 'hybrid'])
 const WebVoiceSurfaceSchema = z.enum(['avatar', 'customer-display', 'staff-ui', 'voice-only'])
+const LiveKitSpeakerIdSourceSchema = z.enum(['participant_identity', 'participant_metadata'])
 
 export const StoreConfigSchema = z.object({
   store: z.object({
@@ -219,6 +220,29 @@ export const StoreConfigSchema = z.object({
       publish_mode: z.enum(['redis', 'local']).default('redis'),
       browser_vad: z.boolean().default(true),
       require_auth: z.boolean().default(false),
+    })
+    .default({}),
+
+  livekit_voice_bridge: z
+    .object({
+      enabled: z.boolean().default(false),
+      host: z.string().default('0.0.0.0'),
+      port: z.number().int().positive().default(3050),
+      agent_name: z.string().min(1).default('fitaly-store-runtime'),
+      transport: z.enum(['noop', 'livekit-rtc']).default('noop'),
+      websocket_url_env: z.string().min(1).default('LIVEKIT_URL'),
+      api_key_env: z.string().min(1).default('LIVEKIT_API_KEY'),
+      api_secret_env: z.string().min(1).default('LIVEKIT_API_SECRET'),
+      room_name: z.string().min(1).optional(),
+      room_name_env: z.string().min(1).default('LIVEKIT_ROOM'),
+      participant_identity: z.string().min(1).default('fitaly-store-runtime'),
+      speaker_id_source: LiveKitSpeakerIdSourceSchema.default('participant_identity'),
+      input_topic: z.string().min(1).default('fitaly.transcript'),
+      output_topic: z.string().min(1).default('fitaly.runtime'),
+      audio_track_name: z.string().min(1).default('fitaly-audio'),
+      publish_transcripts: z.boolean().default(true),
+      forward_tts_audio: z.boolean().default(true),
+      debug_ingress_enabled: z.boolean().default(false),
     })
     .default({}),
 

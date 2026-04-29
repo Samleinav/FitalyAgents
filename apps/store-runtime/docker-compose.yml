@@ -72,6 +72,28 @@ services:
       - node
       - apps/store-runtime/dist/external/customer-display.js
 
+  livekit-voice-bridge:
+    profiles: ["livekit"]
+    build:
+      context: ../..
+      dockerfile: apps/store-runtime/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      STORE_CONFIG_PATH: /app/apps/store-runtime/store.config.redis.json
+      LIVEKIT_VOICE_BRIDGE_PORT: 3050
+    ports:
+      - "3050:3050"
+    volumes:
+      - ./store.config.redis.json:/app/apps/store-runtime/store.config.redis.json:ro
+    command:
+      - node
+      - apps/store-runtime/dist/external/livekit-voice-bridge.js
+
   fitaly-voice:
     profiles: ["voice"]
     build:

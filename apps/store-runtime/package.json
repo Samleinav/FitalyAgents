@@ -9,6 +9,8 @@
     "dev:avatar": "tsx src/external/avatar-service.ts",
     "dev:customer-display": "tsx src/external/customer-display.ts",
     "dev:demo": "tsx src/external/demo-publisher.ts",
+    "dev:livekit-voice": "tsx src/external/livekit-voice-bridge.ts",
+    "dev:livekit-smoke": "tsx src/external/livekit-smoke.ts",
     "dev:ui": "tsx src/external/ui-bridge.ts",
     "dev:web-voice": "tsx src/external/web-voice-bridge.ts",
     "lint": "eslint src test vitest.config.ts",
@@ -18,10 +20,12 @@
   },
   "dependencies": {
     "@fitalyagents/dispatcher": "workspace:*",
+    "@livekit/rtc-node": "^0.13.27",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.4.0",
     "fastify": "^5.0.0",
     "fitalyagents": "workspace:*",
+    "livekit-server-sdk": "^2.15.2",
     "ws": "^8.18.0",
     "zod": "^3.24.2"
   },

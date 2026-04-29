@@ -176,6 +176,80 @@ Notas:
   - `mp3_44100_128` para reproducción por segmento en navegador
   - `pcm_16000` para retorno PCM más directo cuando tu tier lo permita
 
+## LiveKit Voice Bridge
+
+`livekit-voice-bridge` es el nuevo punto de integración para usar LiveKit como
+capa de media sin mover la lógica de tienda fuera de Fitaly.
+
+La topología esperada es:
+
+- `providers.bus.driver = "redis"`
+- `capture.driver = "external-bus"`
+- `livekit_voice_bridge.enabled = true`
+
+Script local:
+
+```bash
+pnpm --filter store-runtime dev:livekit-voice -- --config apps/store-runtime/store.config.redis.json
+```
+
+Puerto por defecto: `3050`.
+
+Estado:
+
+- `GET /health`
+- `GET /state`
+
+La primera fase del bridge usaba `transport = "noop"` para validar contrato. Para
+conectar un room real usa `transport = "livekit-rtc"` y define:
+
+- `LIVEKIT_URL`
+- `LIVEKIT_API_KEY`
+- `LIVEKIT_API_SECRET`
+- `LIVEKIT_ROOM`
+
+`LIVEKIT_ROOM` no tiene que existir de antemano. Es un nombre estable para la
+sesión, por ejemplo `fitaly-demo-store-001`; LiveKit crea el room automáticamente
+cuando entra el primer participante. Si quieres controlar `emptyTimeout` o
+`maxParticipants`, también puedes precrearlo con RoomService API o LiveKit CLI.
+
+El bridge se une al room como participante `participant_identity`, escucha data o
+text streams en `input_topic` (`fitaly.transcript` por defecto), traduce
+transcripts a `SPEAKER_DETECTED`, `SPEECH_PARTIAL`, `SPEECH_FINAL` y `BARGE_IN`,
+y reenvía eventos runtime por `output_topic` (`fitaly.runtime` por defecto).
+Cuando el TTS sale como `pcm_s16le`, también publica un track de audio LiveKit.
+
+Payload de transcript esperado en `input_topic`:
+
+```json
+{
+  "type": "transcript",
+  "participant_identity": "customer-1",
+  "text": "quiero unos tenis talla 42",
+  "final": true,
+  "role": "customer"
+}
+```
+
+Smoke contra un room real:
+
+```bash
+LIVEKIT_URL=wss://...
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+LIVEKIT_ROOM=fitaly-demo
+pnpm --filter store-runtime dev:livekit-smoke -- \
+  --config apps/store-runtime/store.config.redis.json \
+  --text "quiero ver tenis talla 42"
+```
+
+Por defecto el smoke envía el transcript por data packet. Para probar text
+streams, añade `--text-stream`. Para comprobar solo conexión/envío sin esperar
+respuesta del runtime, añade `--no-wait-output`.
+
+Para seguimiento del trabajo:
+[docs/STORE-RUNTIME-LIVEKIT-BRIDGE.md](/config/workspace/FitalyAgents/docs/STORE-RUNTIME-LIVEKIT-BRIDGE.md:1)
+
 ## Conectores Retail
 
 `product_search` e `inventory_check` soportan:

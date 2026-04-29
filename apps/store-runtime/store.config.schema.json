@@ -61,6 +61,20 @@
     "http": {
       "type": "object"
     },
+    "web_voice_bridge": {
+      "type": "object"
+    },
+    "livekit_voice_bridge": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "transport": { "type": "string", "enum": ["noop", "livekit-rtc"] },
+        "room_name": { "type": "string" },
+        "room_name_env": { "type": "string" },
+        "input_topic": { "type": "string" },
+        "output_topic": { "type": "string" }
+      }
+    },
     "avatar": {
       "type": "object"
     }

@@ -177,6 +177,25 @@
     "browser_vad": true,
     "require_auth": false
   },
+  "livekit_voice_bridge": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 3050,
+    "agent_name": "fitaly-store-runtime",
+    "transport": "noop",
+    "websocket_url_env": "LIVEKIT_URL",
+    "api_key_env": "LIVEKIT_API_KEY",
+    "api_secret_env": "LIVEKIT_API_SECRET",
+    "room_name_env": "LIVEKIT_ROOM",
+    "participant_identity": "fitaly-store-runtime",
+    "speaker_id_source": "participant_identity",
+    "input_topic": "fitaly.transcript",
+    "output_topic": "fitaly.runtime",
+    "audio_track_name": "fitaly-audio",
+    "publish_transcripts": true,
+    "forward_tts_audio": true,
+    "debug_ingress_enabled": false
+  },
   "avatar": {
     "enabled": true,
     "mode": "external",

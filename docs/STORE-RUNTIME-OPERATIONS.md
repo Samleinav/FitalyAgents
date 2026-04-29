@@ -17,6 +17,9 @@ Servicios principales:
   Segunda pantalla orientada al cliente, separada del avatar.
 - `web-voice-bridge`
   Opcional; captura voz desde navegador por WebSocket y publica `SPEECH_*` al bus.
+- `livekit-voice-bridge`
+  Opcional; integra rooms LiveKit con el bus Redis de Fitaly para demos web/mobile
+  o despliegues self-hosted.
 - `fitaly-voice`
   Opcional; captura, diariza y publica `SPEAKER_*`, `AMBIENT_CONTEXT`,
   `SPEECH_*`.
@@ -55,12 +58,28 @@ Servicios principales:
 - `GET /state`
 - `WS /ws/voice`
 
+### `livekit-voice-bridge`
+
+- `GET /health`
+- `GET /state`
+- `POST /debug/transcript` si `debug_ingress_enabled=true`
+
+Con `livekit_voice_bridge.transport = "livekit-rtc"`, el bridge también se une
+a un room LiveKit usando `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+y `LIVEKIT_ROOM`.
+
+`LIVEKIT_ROOM` es un nombre de room, no un secreto. Puedes usar algo estable como
+`fitaly-demo-store-001`. LiveKit puede crear el room automáticamente cuando entra
+el primer participante, o puedes crearlo antes con RoomService/CLI si necesitas
+configurar `emptyTimeout` o `maxParticipants`.
+
 Puertos por defecto:
 
 - `store-runtime`: `3000`
 - `store-ui-bridge`: `3010`
 - `customer-display`: `3020`
 - `web-voice-bridge`: `3040`
+- `livekit-voice-bridge`: `3050`
 - `redis`: `6379`
 
 ## Config Baseline
@@ -71,6 +90,8 @@ Para topología Redis-first, la base esperada es:
 - `capture.driver = "external-bus"`
 - `avatar.mode = "external"` cuando uses `store-avatar`
 - `web_voice_bridge.enabled = true` cuando quieras probar voz desde navegador
+- `livekit_voice_bridge.enabled = true` cuando quieras probar LiveKit como media
+  layer
 
 Referencia rápida:
 [apps/store-runtime/store.config.redis.json](/config/workspace/FitalyAgents/apps/store-runtime/store.config.redis.json:1)
@@ -84,6 +105,7 @@ pnpm --filter store-runtime dev -- --config apps/store-runtime/store.config.redi
 pnpm --filter store-runtime dev:ui -- --config apps/store-runtime/store.config.redis.json
 pnpm --filter store-runtime dev:customer-display -- --config apps/store-runtime/store.config.redis.json
 pnpm --filter store-runtime dev:web-voice -- --config apps/store-runtime/store.config.redis.json
+pnpm --filter store-runtime dev:livekit-voice -- --config apps/store-runtime/store.config.redis.json
 pnpm --filter store-runtime dev:demo -- --config apps/store-runtime/store.config.redis.json
 ```
 
@@ -93,6 +115,8 @@ Resultado esperado:
 - `http://127.0.0.1:3010/health` devuelve `status: ok`
 - `http://127.0.0.1:3020/health` devuelve `status: ok`
 - `http://127.0.0.1:3040/health` devuelve `status: ok`
+- `http://127.0.0.1:3050/health` devuelve `status: ok` si el bridge LiveKit
+  está habilitado
 - `http://127.0.0.1:3010/` muestra target group, transcripción y paneles
 - `http://127.0.0.1:3020/` muestra pedido, totales, cambios y sugerencias
 - `http://127.0.0.1:3040/` abre la prueba web de voz/transcript
@@ -111,7 +135,33 @@ Perfiles opcionales:
 ```bash
 docker compose --profile voice up --build
 docker compose --profile avatar up --build
+docker compose --profile livekit up --build
 ```
+
+Para usar el profile `livekit`, habilita primero en config:
+
+```json
+{
+  "livekit_voice_bridge": {
+    "enabled": true,
+    "transport": "livekit-rtc"
+  }
+}
+```
+
+Smoke de room real:
+
+```bash
+pnpm --filter store-runtime dev:livekit-smoke -- \
+  --config apps/store-runtime/store.config.redis.json \
+  --text "quiero ver tenis talla 42"
+```
+
+El smoke crea un participante temporal, publica el transcript en
+`livekit_voice_bridge.input_topic` y espera un evento en
+`livekit_voice_bridge.output_topic`. Usa `--no-wait-output` para validar solo
+conexión y publicación de transcript, o `--text-stream` para probar la ruta de
+LiveKit text streams.
 
 ## Validation Checklist
 
