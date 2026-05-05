@@ -12,10 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     # VAD — TEN Framework (ONNX-based, ~306KB model, no PyTorch needed)
     "ten-vad @ git+https://github.com/TEN-framework/ten-vad.git",
-    # Diarization + Speaker ID — NeMo (needed once for model load or ONNX export)
-    "nemo_toolkit[asr]>=2.0",
     # Denoising
-    "rnnoise-python>=0.1",
     "noisereduce>=3.0",
     "scipy>=1.11",
     # Bus
@@ -28,6 +25,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Full NeMo pipeline for diarization + speaker ID (model training / ONNX export)
+# NeMo pins numpy<2, so install this on Python <=3.12 or in a separate env
+nemo = [
+    "nemo_toolkit[asr]>=2.0",
+]
+# RNNoise denoiser backend (not available on Python 3.14+)
+rnnoise = [
+    "rnnoise-python>=0.1",
+]
 # Lightweight runtime after ONNX export (no full NeMo needed)
 onnx = [
     "onnxruntime-gpu>=1.17",
@@ -48,6 +54,9 @@ fitaly-voice = "fitaly_voice.__main__:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["fitaly_voice"]

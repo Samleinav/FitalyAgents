@@ -96,6 +96,10 @@
       "owner": { "refund_max": 100000, "discount_max_pct": 100 }
     }
   },
+  "livekit_voice_bridge": {
+    "enabled": true,
+    "transport": "livekit-rtc"
+  },
   "http": {
     "host": "127.0.0.1",
     "port": 3000,
