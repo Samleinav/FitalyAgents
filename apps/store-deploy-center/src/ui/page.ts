@@ -373,16 +373,16 @@ iframe{flex:1;border:none;background:#fff;width:100%;height:100%}
 
   function renderServiceGrid(services) {
     q('serviceGrid').innerHTML = services.map(function(s) {
-      return '<div class="svc-row">' +
+      return '<div class="svc-row" data-svc="' + esc(s.id) + '">' +
         '<span class="dot dot-' + esc(s.status) + '"></span>' +
         '<div><div class="svc-name">' + esc(s.label) + '</div>' +
         '<div class="svc-meta">' + esc(s.service_name) + ' &middot; ' + esc(s.status) + (s.error ? ' &middot; ' + esc(s.error) : '') + '</div></div>' +
         '<div class="svc-btns">' +
-          '<button class="svc-btn" onclick="startSvc(' + "'" + esc(s.id) + "'" + ')">&#9654;</button>' +
-          '<button class="svc-btn" onclick="stopSvc(' + "'" + esc(s.id) + "'" + ')">&#9646;&#9646;</button>' +
-          '<button class="svc-btn" onclick="restartSvc(' + "'" + esc(s.id) + "'" + ')">&#8634;</button>' +
+          '<button class="svc-btn" data-action="start">&#9654;</button>' +
+          '<button class="svc-btn" data-action="stop">&#9646;&#9646;</button>' +
+          '<button class="svc-btn" data-action="restart">&#8634;</button>' +
         '</div>' +
-        '<button class="svc-btn" onclick="openLogs(' + "'" + esc(s.id) + "'" + ')">logs</button>' +
+        '<button class="svc-btn" data-action="logs">logs</button>' +
       '</div>'
     }).join('')
   }
@@ -440,8 +440,11 @@ iframe{flex:1;border:none;background:#fff;width:100%;height:100%}
   function renderPresets(presets) {
     q('presetList').innerHTML = presets.map(function(p) {
       return '<div class="preset-card"><h4>' + esc(p.label) + '</h4><p>' + esc(p.description) + '</p>' +
-        '<button class="btn ghost xs" onclick="applyPreset(' + "'" + esc(p.id) + "'" + ')">Aplicar</button></div>'
+        '<button class="btn ghost xs" data-preset="' + esc(p.id) + '">Aplicar</button></div>'
     }).join('')
+    q('presetList').querySelectorAll('[data-preset]').forEach(function(btn) {
+      btn.addEventListener('click', function() { applyPreset(btn.dataset.preset) })
+    })
   }
 
   function renderEnv(envState) {
@@ -651,7 +654,7 @@ iframe{flex:1;border:none;background:#fff;width:100%;height:100%}
     q('logsResult').textContent = 'Cargando...'
     return api('/api/services/' + svcId + '/logs?tail=' + encodeURIComponent(tail))
       .then(function(r) {
-        q('logsResult').textContent = [r.stdout, r.stderr].filter(Boolean).join('\n') || 'Sin salida.'
+        q('logsResult').textContent = [r.stdout, r.stderr].filter(Boolean).join('\\n') || 'Sin salida.'
         q('logsResult').scrollTop = q('logsResult').scrollHeight
       })
   }
@@ -748,8 +751,18 @@ iframe{flex:1;border:none;background:#fff;width:100%;height:100%}
   })
   q('envList').addEventListener('input', function() { S.envDirty = true; if (S.dashboard && S.envState) renderWizard(S.dashboard, S.envState) })
 
-  window.startSvc = startSvc; window.stopSvc = stopSvc; window.restartSvc = restartSvc
-  window.openLogs = openLogs; window.applyPreset = applyPreset
+  q('serviceGrid').addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-action]')
+    if (!btn) return
+    var row = btn.closest('[data-svc]')
+    if (!row) return
+    var svcId = row.dataset.svc
+    var action = btn.dataset.action
+    if (action === 'start') startSvc(svcId)
+    else if (action === 'stop') stopSvc(svcId)
+    else if (action === 'restart') restartSvc(svcId)
+    else if (action === 'logs') openLogs(svcId)
+  })
 
   // init
   q('customerPayload').value = JSON.stringify(customerSamples.lookup, null, 2)

@@ -1,92 +1,73 @@
-# TASK GP-01 — Visual IDs en customer display y selección natural
+# TASK GP-05 — Cierre de sesión limpio + alternativas sin stock
 
 **Skill:** `$store-runtime-dev`
 **Branch:** `feat/store-agent-golden-path`
-**Prioridad:** P0
+**Prioridad:** P1
 
 ## Contexto
 
-El customer display ya muestra productos en `state.suggestions` cuando `product_search`
-devuelve resultados (`customer-display-state.ts:applyToolResult`). Pero los productos no
-tienen ID visual corto (A1, A2...), y el agente no sabe resolver cuando el cliente dice
-"el A2" o "el primero".
+Dos gaps que cierran el P1:
 
-## Cambios requeridos
+1. Cuando el cliente se despide, la sesión queda abierta en BD y el display no se limpia.
+2. Cuando hay productos agotados, el agente no ofrece alternativas proactivamente.
 
-### 1. `apps/store-runtime/src/retail/ui/customer-display-state.ts`
+---
 
-Añadir `visualId: string` a la interfaz `CustomerDisplaySuggestion`:
+## Cambio 1 — Cierre de sesión en farewell
+
+### `apps/store-runtime/src/agents/interaction-runtime-agent.ts`
+
+En `handleStoreShortcutIntent`, el bloque `isFarewellIntent` actualmente solo habla.
+Después de `ttsStream.speakText`, añadir:
 
 ```ts
-export interface CustomerDisplaySuggestion {
-  id: string
-  visualId: string   // 'A1', 'A2', ... 'A6'
-  name: string
-  price: number
-  description: string
-  stock?: number
-}
+this.deps.sessionRepository.end(event.session_id, {
+  closed_by: 'farewell',
+  last_user_text: event.text,
+})
+this.deps.bus.publish('bus:SESSION_ENDED', {
+  session_id: event.session_id,
+  store_id: event.store_id,
+  timestamp: Date.now(),
+})
 ```
 
-En la función `readProductSuggestions`, asignar `visualId` en orden:
-`visualId = 'A' + (index + 1)` → A1, A2, A3, A4, A5, A6 (máx 6).
+`sessionRepository` ya existe en `deps` como `deps.sessionRepository` y tiene método `end()`.
+`bus` ya existe en `deps` como `deps.bus`.
 
-### 2. `apps/store-runtime/src/retail/ui/customer-display-page.ts`
+### `apps/store-runtime/src/retail/ui/customer-display-state.ts`
 
-En el HTML del product grid, mostrar el `visualId` como badge prominente junto al nombre.
-Estilo sugerido: `[A1]` en negrita antes del nombre del producto.
+Añadir case en `applyCustomerDisplayBusEvent` para `'bus:SESSION_ENDED'`:
 
-### 3. `apps/store-runtime/src/agents/interaction-runtime-agent.ts`
-
-**3a. Mapa de última lista visible por sesión:**
-
-Añadir propiedad privada en la clase:
 ```ts
-private lastProductList = new Map<string, CustomerDisplaySuggestion[]>()
+case 'bus:SESSION_ENDED':
+  applySessionEnded(next, event, timestamp)
+  break
 ```
 
-Añadir `'bus:TOOL_RESULT'` a `channels`.
+Implementar `applySessionEnded`:
+- Resetea `sessionId` a `null`
+- Resetea `speakerId` a `null`
+- Resetea `order` a estado idle (mismos defaults que `createCustomerDisplayState`)
+- Limpia `suggestions` a `[]`
+- Pone `message` a `null`
 
-En `onEvent`, cuando `channel === 'bus:TOOL_RESULT'`:
+---
+
+## Cambio 2 — Alternativas proactivas en sin stock
+
+### `apps/store-runtime/src/retail/preset.ts`
+
+Añadir al system prompt:
+
 ```ts
-const e = payload as { tool_name?: string; session_id?: string; result?: unknown }
-if ((e.tool_name === 'product_search' || e.tool_name === 'inventory_check') && e.session_id) {
-  const products = extractSuggestionsFromResult(e.result)
-  if (products.length > 0) {
-    this.lastProductList.set(e.session_id, products)
-  }
-}
+'Cuando muestres productos, si alguno aparece como agotado (stock 0), no lo incluyas ' +
+'en tu respuesta oral principal. Si todos estan agotados, dilo claramente y ofrece ' +
+'buscar alternativas: usa product_search con un termino relacionado. ' +
+'Si hay mezcla de disponibles y agotados, menciona solo los disponibles con sus codigos visuales.',
 ```
 
-Implementar `extractSuggestionsFromResult(result: unknown): CustomerDisplaySuggestion[]`
-que lea `result.products` o `result` como array y mapee igual que `readProductSuggestions`,
-incluyendo el `visualId`.
-
-**3b. Resolución de intent visual antes del LLM:**
-
-Añadir función `resolveVisualIdSelection(text: string, sessionId: string): CustomerDisplaySuggestion | null`
-que detecte:
-
-- `A1`, `A2`...`A6` (con o sin artículo: "el A2", "la A1", "A3 por favor")
-- Ordinales: `el primero` → índice 0, `el segundo` → 1, `el tercero` → 2, `el cuarto` → 3
-- Atributo único si solo un producto coincide: `el azul`, `el nike`, `el barato`
-  (el más barato = precio mínimo), `el caro` (precio máximo)
-
-Si retorna producto, llamar directamente `order_create` vía `handleToolCall` con:
-```ts
-{ product_id: product.id, name: product.name, quantity: 1, price: product.price }
-```
-y retornar sin pasar al LLM.
-
-Insertar este check en `onEvent` **antes** de `handleStoreShortcutIntent`.
-
-Si no hay lista activa para la sesión, retornar `null` (pasa al LLM normalmente).
-
-## Lo que NO tocar
-- `packages/core/` — no tocar
-- `apps/store-deploy-center/` — no tocar
-- Tipos del bus de eventos existentes
-- Lógica de draft/approval existente
+---
 
 ## Validación requerida
 ```bash
@@ -96,11 +77,10 @@ pnpm --filter store-runtime test
 ```
 
 ## Criterio de aceptación
-- `CustomerDisplaySuggestion.visualId` existe y vale `A1`...`A6`
-- Agent resuelve "el A2" → selecciona segundo producto de la lista activa en sesión
-- Agent resuelve "el primero" → selecciona primer producto
-- Agent resuelve "el azul" cuando solo hay un producto azul en la lista
-- Si no hay lista activa, la resolución retorna null y el flujo continúa normal
+- Farewell → `session_summaries.ended_at` se actualiza en BD
+- Farewell → display se limpia (suggestions vacías, order idle, message null)
+- System prompt indica al LLM ignorar agotados en respuesta oral
+- Tests cubriendo el reset del display en `bus:SESSION_ENDED`
 
 ## Al terminar
-Escribir `.codex/tasks/LAST-RESULT.md` según el PROTOCOL.md y hacer commit.
+Escribir `.codex/tasks/LAST-RESULT.md` según PROTOCOL.md y hacer commit.
