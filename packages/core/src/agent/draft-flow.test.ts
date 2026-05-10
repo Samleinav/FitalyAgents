@@ -180,6 +180,26 @@ describe('Draft Flow (Sprint 3.2)', () => {
         size: 'M',
       })
     })
+
+    it('formats nested draft values without object placeholders', async () => {
+      const llm = createChangesLLM({ customer_id: '12345' })
+      const { agent, draftStore, ttsLog } = createDraftAgent({ llm })
+
+      await draftStore.create('session-1', {
+        intent_id: 'order_create',
+        items: {
+          items: [{ product_id: 'sku_nike_air_42', quantity: 1, price: 129.99 }],
+        },
+      })
+
+      const result = await agent.handleDraftFlow('session-1', 'cambia el cliente')
+      expect(result.type).toBe('modified')
+
+      const updateText = ttsLog.find((entry) => entry.includes('Actualizado'))
+      expect(updateText).toBeTruthy()
+      expect(updateText).not.toContain('[object Object]')
+      expect(updateText).toContain('sku_nike_air_42')
+    })
   })
 
   // ── crear → modificar N veces → cancelar ─────────────────────────

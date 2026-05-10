@@ -314,6 +314,45 @@ export function renderCustomerDisplayHtml(deps: {
         border: 1px solid rgba(255, 255, 255, 0.05);
       }
 
+      .suggestion-item {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 14px;
+        align-items: center;
+        border-radius: 8px;
+      }
+
+      .suggestion-code {
+        min-width: 74px;
+        max-width: 140px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: rgba(52, 211, 153, 0.14);
+        color: var(--success);
+        font-size: 12px;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+        text-align: center;
+      }
+
+      .suggestion-name {
+        display: block;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .suggestion-meta {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.35;
+      }
+
+      .suggestion-price {
+        text-align: right;
+      }
+
       .suggestion-item strong,
       .change-item strong {
         display: block;
@@ -356,6 +395,14 @@ export function renderCustomerDisplayHtml(deps: {
 
         .line-item {
           grid-template-columns: 1fr;
+        }
+
+        .suggestion-item {
+          grid-template-columns: 1fr;
+        }
+
+        .suggestion-price {
+          text-align: left;
         }
 
         .right {
@@ -617,19 +664,26 @@ export function renderCustomerDisplayHtml(deps: {
       function renderSuggestions() {
         const state = app.state;
         if (!state || state.suggestions.length === 0) {
-          elements.suggestionsSlot.innerHTML = emptyState('Cuando haya sugerencias o bundles, se mostrarán aquí.');
+          elements.suggestionsSlot.innerHTML = emptyState('Cuando haya productos, se mostraran aqui con su codigo.');
           return;
         }
 
         elements.suggestionsSlot.innerHTML = state.suggestions
           .map((product) => {
+            const stockLabel = typeof product.stock === 'number'
+              ? product.stock > 0
+                ? product.stock + ' disponibles'
+                : 'sin stock'
+              : 'stock por confirmar';
+            const detail = [product.description || 'Producto disponible', stockLabel].filter(Boolean).join(' - ');
             return \`
               <article class="suggestion-item">
-                <strong>\${escapeHtml(product.name)}</strong>
-                <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
-                  <span>\${escapeHtml(product.description || 'Producto recomendado')}</span>
-                  <span class="mono">\${formatCurrency(product.price)}</span>
+                <div class="suggestion-code">\${escapeHtml(product.id)}</div>
+                <div class="suggestion-main">
+                  <span class="suggestion-name">\${escapeHtml(product.name)}</span>
+                  <span class="suggestion-meta">\${escapeHtml(detail)}</span>
                 </div>
+                <div class="suggestion-price mono">\${formatCurrency(product.price)}</div>
               </article>
             \`;
           })

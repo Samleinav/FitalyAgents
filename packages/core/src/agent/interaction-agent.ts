@@ -581,6 +581,13 @@ export class InteractionAgent {
     // Create a new draft
     const inputItems =
       typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {}
+
+    const invalidReason = validateStagedDraftInput(toolDef.tool_id, inputItems)
+    if (invalidReason) {
+      this.emitSpeechChunk(invalidReason, sessionId)
+      return { type: 'error', toolId: toolDef.tool_id, error: invalidReason }
+    }
+
     const draftId = await this.draftStore.create(sessionId, {
       intent_id: toolDef.tool_id,
       items: inputItems,
@@ -603,8 +610,7 @@ export class InteractionAgent {
     // Store the pending confirmation so we can resolve it on the next turn
     this.pendingConfirmations.set(sessionId, { toolDef, input })
 
-    const prompt =
-      promptOverride ?? toolDef.confirm_prompt ?? `¿Desea confirmar la acción "${toolDef.tool_id}"?`
+    const prompt = promptOverride ?? toolDef.confirm_prompt ?? 'Confirmas esta accion?'
     this.emitSpeechChunk(prompt, sessionId)
 
     return {
@@ -757,12 +763,22 @@ export class InteractionAgent {
 
     switch (intent) {
       case 'confirm': {
+        const invalidReason = validateStagedDraftInput(draft.intent_id, draft.items)
+        if (invalidReason) {
+          await this.draftStore.cancel(draft.id)
+          this.emitSpeechChunk(invalidReason, sessionId)
+          return { type: 'cancelled', draftId: draft.id }
+        }
+
         await this.draftStore.confirm(draft.id)
 
         // Execute the real action now
         try {
           const result = await this.executor.execute(draft.intent_id, draft.items)
-          this.emitSpeechChunk('Listo, orden confirmada.', sessionId)
+          this.emitSpeechChunk(
+            readTextFromToolResult(result) ?? 'Listo, orden confirmada.',
+            sessionId,
+          )
 
           await this.bus.publish('bus:ACTION_COMPLETED', {
             event: 'ACTION_COMPLETED',
@@ -788,10 +804,8 @@ export class InteractionAgent {
         // Re-present the modified draft
         const updatedDraft = await this.draftStore.get(draft.id)
         if (updatedDraft) {
-          const summary = Object.entries(updatedDraft.items)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(', ')
-          this.emitSpeechChunk(`Actualizado. Ahora tienes: ${summary}. ¿Confirmas?`, sessionId)
+          const summary = formatDraftSummary(updatedDraft.items)
+          this.emitSpeechChunk(`Actualizado. Ahora tienes: ${summary}. Confirmas?`, sessionId)
         }
 
         return { type: 'modified', draftId: draft.id, changes }
@@ -904,7 +918,10 @@ export class InteractionAgent {
 
       try {
         const result = await this.executor.execute(pending.toolDef.tool_id, pending.input)
-        this.emitSpeechChunk('Acción ejecutada correctamente.', sessionId)
+        this.emitSpeechChunk(
+          readTextFromToolResult(result) ?? 'Listo, solicitud procesada.',
+          sessionId,
+        )
 
         await this.bus.publish('bus:ACTION_COMPLETED', {
           event: 'ACTION_COMPLETED',
@@ -930,9 +947,8 @@ export class InteractionAgent {
     }
 
     // Unknown — re-prompt
-    const prompt =
-      pending.toolDef.confirm_prompt ?? `¿Desea confirmar "${pending.toolDef.tool_id}"?`
-    this.emitSpeechChunk(`No entendí. ${prompt}`, sessionId)
+    const prompt = pending.toolDef.confirm_prompt ?? 'Confirmas esta accion?'
+    this.emitSpeechChunk(`No entendi. ${prompt}`, sessionId)
     return { type: 'no_pending', sessionId }
   }
 
@@ -1042,4 +1058,78 @@ export class InteractionAgent {
 
 function toRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+}
+
+function readTextFromToolResult(result: unknown): string | null {
+  const record = toRecord(result)
+  return typeof record.text === 'string' && record.text.trim().length > 0 ? record.text : null
+}
+
+function validateStagedDraftInput(toolId: string, input: Record<string, unknown>): string | null {
+  if (toolId !== 'order_create') {
+    return null
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(input, 'items')) {
+    return null
+  }
+
+  const items = Array.isArray(input.items) ? input.items : []
+  const validItems = items.filter((item) => {
+    const line = toRecord(item)
+    const productId =
+      typeof line.product_id === 'string'
+        ? line.product_id.trim()
+        : typeof line.id === 'string'
+          ? line.id.trim()
+          : ''
+    const quantity = readFiniteNumber(line.quantity)
+    const price = readFiniteNumber(line.price)
+    return productId.length > 0 && quantity != null && quantity > 0 && price != null && price >= 0
+  })
+
+  if (validItems.length > 0) {
+    return null
+  }
+
+  return 'Para preparar el pedido necesito un producto especifico, cantidad y precio. Primero puedo mostrarte productos disponibles.'
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  const numeric =
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function formatDraftSummary(items: Record<string, unknown>): string {
+  return Object.entries(items)
+    .map(([key, value]) => `${key}: ${formatDraftValue(value)}`)
+    .join(', ')
+}
+
+function formatDraftValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return '[]'
+    }
+
+    return value.map((entry) => formatDraftArrayEntry(entry)).join('; ')
+  }
+
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+
+  return String(value)
+}
+
+function formatDraftArrayEntry(value: unknown): string {
+  const record = toRecord(value)
+  if (Object.keys(record).length === 0) {
+    return String(value)
+  }
+
+  return Object.entries(record)
+    .map(([key, entry]) => `${key} ${String(entry)}`)
+    .join(', ')
 }

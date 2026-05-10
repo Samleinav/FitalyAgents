@@ -183,6 +183,9 @@ export function createBaseConfig(overrides: Record<string, unknown> = {}): Store
       publish_transcripts: true,
       forward_tts_audio: true,
       debug_ingress_enabled: false,
+      room_idle_timeout_ms: 60_000,
+      delete_room_on_idle: true,
+      token_ttl: '30m',
     },
     avatar: {
       enabled: false,

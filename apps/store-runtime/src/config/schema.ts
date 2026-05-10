@@ -243,6 +243,9 @@ export const StoreConfigSchema = z.object({
       publish_transcripts: z.boolean().default(true),
       forward_tts_audio: z.boolean().default(true),
       debug_ingress_enabled: z.boolean().default(false),
+      room_idle_timeout_ms: z.number().int().positive().default(60_000),
+      delete_room_on_idle: z.boolean().default(true),
+      token_ttl: z.string().min(1).default('30m'),
     })
     .default({}),
 

@@ -23,7 +23,11 @@ import type { PersistentApprovalOrchestrator } from '../bootstrap/persistent-app
 import type { PersistentDraftStore } from '../bootstrap/persistent-draft-store.js'
 import { buildSpeakerSessionId } from '../bootstrap/speaker-session.js'
 import type { TtsStreamService } from '../bootstrap/tts-stream.js'
-import type { SessionRepository, DraftRepository } from '../storage/repositories/index.js'
+import type {
+  DraftRepository,
+  OrderRepository,
+  SessionRepository,
+} from '../storage/repositories/index.js'
 import type { ToolRegistry } from '../tools/registry.js'
 import { InteractionRuntimeAgent } from './interaction-runtime-agent.js'
 import { buildRetailSystemPrompt } from '../retail/preset.js'
@@ -47,6 +51,7 @@ export function buildAgents(deps: {
   ttsStream: TtsStreamService
   sessionRepository: SessionRepository
   draftRepository: DraftRepository
+  orderRepository: OrderRepository
   config: StoreConfig
   memoryStore?: IMemoryStore
   memoryScopeResolver?: MemoryScopeResolver
@@ -137,8 +142,10 @@ export function buildAgents(deps: {
       sessionRepository: deps.sessionRepository,
       draftStore: deps.draftStore,
       draftRepository: deps.draftRepository,
+      orderRepository: deps.orderRepository,
       ttsStream: deps.ttsStream,
       storeId: deps.config.store.store_id,
+      paymentMethods: deps.config.policies.allowed_payment_methods,
       captureDriver: deps.config.capture.driver,
       memoryStore: deps.memoryStore,
       memoryScopeResolver: deps.memoryScopeResolver,

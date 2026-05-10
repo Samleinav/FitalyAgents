@@ -114,8 +114,8 @@ describe('customer-display-state', () => {
       session_id: 'session-2',
       result: {
         products: [
-          { id: 'sku-1', name: 'Cloud Pace', price: 89.9, description: 'Daily trainer' },
-          { id: 'sku-2', name: 'Tempo Rise', price: 109.5, description: 'Tempo option' },
+          { id: 'sku-1', name: 'Cloud Pace', price: 89.9, description: 'Daily trainer', stock: 4 },
+          { id: 'sku-2', name: 'Tempo Rise', price: 109.5, description: 'Tempo option', stock: 2 },
         ],
         text: 'Tengo dos opciones.',
       },
@@ -143,6 +143,7 @@ describe('customer-display-state', () => {
     })
 
     expect(state.suggestions).toHaveLength(2)
+    expect(state.suggestions[0]).toMatchObject({ id: 'sku-1', stock: 4 })
     expect(state.order.approvalStatus).toBe('approved')
     expect(state.order.refundStatus).toBe('idle')
     expect(state.message).toMatchObject({

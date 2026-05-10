@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { InMemoryBus, InMemoryContextStore, InMemorySessionManager } from 'fitalyagents'
 import { InteractionRuntimeAgent } from './interaction-runtime-agent.js'
-import { SessionRepository, DraftRepository } from '../storage/repositories/index.js'
+import {
+  DraftRepository,
+  OrderRepository,
+  SessionRepository,
+} from '../storage/repositories/index.js'
 import { buildSpeakerSessionId } from '../bootstrap/speaker-session.js'
 import {
   cleanupTempDir,
@@ -142,6 +146,128 @@ describe('InteractionRuntimeAgent', () => {
       await cleanupHarness(harness)
     }
   })
+
+  it('cancels a pending draft when the customer starts a fresh product browse', async () => {
+    const harness = await createHarness()
+    harness.draftStore.getBySession.mockResolvedValue({ id: 'draft-1' })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'Quiero ver tenis talla 42',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).toHaveBeenCalledWith('draft-1')
+      expect(harness.interaction.handleDraftFlow).not.toHaveBeenCalled()
+      expect(harness.interaction.handleSpeechFinal).toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('continues an active order when the customer asks how to pay', async () => {
+    const harness = await createHarness()
+    harness.orderRepository.insert({
+      id: 'ord-1',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-1', quantity: 1, price: 25 }],
+      },
+      result: {
+        order_id: 'ord-1',
+        total: 25,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'como pago?',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        expect.stringContaining('Puedes pagar con tarjeta o efectivo'),
+        7,
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('prepares a protected payment intent when the customer chooses card', async () => {
+    const harness = await createHarness()
+    harness.orderRepository.insert({
+      id: 'ord-2',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-2', quantity: 2, price: 10 }],
+      },
+      result: {
+        order_id: 'ord-2',
+        total: 20,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'quiero pagar con tarjeta',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'payment_intent_create',
+        {
+          order_id: 'ord-2',
+          amount: 20,
+          payment_method: 'card',
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
 })
 
 async function createHarness(overrides?: {
@@ -165,6 +291,11 @@ async function createHarness(overrides?: {
   const interaction = {
     hasPendingConfirmation: vi.fn(() => false),
     handleProtectedConfirm: vi.fn(),
+    handleToolCall: vi.fn().mockResolvedValue({
+      type: 'needs_confirmation',
+      toolId: 'payment_intent_create',
+      prompt: 'Tengo listo el cobro. Preparo el pago?',
+    }),
     handleDraftFlow: vi.fn(),
     handleSpeechFinal: vi.fn().mockResolvedValue({
       textChunks: [],
@@ -175,6 +306,7 @@ async function createHarness(overrides?: {
 
   const draftStore = {
     getBySession: vi.fn().mockResolvedValue(null),
+    cancel: vi.fn().mockResolvedValue(undefined),
   }
 
   const toolRegistry = {
@@ -188,6 +320,7 @@ async function createHarness(overrides?: {
   const ttsStream = {
     speakText: vi.fn().mockResolvedValue(undefined),
   }
+  const orderRepository = new OrderRepository(db)
 
   const agent = new InteractionRuntimeAgent({
     bus,
@@ -199,8 +332,10 @@ async function createHarness(overrides?: {
     sessionRepository: new SessionRepository(db),
     draftStore: draftStore as never,
     draftRepository: new DraftRepository(db),
+    orderRepository,
     ttsStream: ttsStream as never,
     storeId: 'store-test',
+    paymentMethods: ['card', 'cash'],
     captureDriver: overrides?.captureDriver ?? 'local-stt',
     memoryStore: memoryStore as never,
     memoryScopeResolver: async () => ({ wing: 'customer', room: 'customer-1' }),
@@ -211,6 +346,9 @@ async function createHarness(overrides?: {
     bus,
     llm,
     interaction,
+    draftStore,
+    orderRepository,
+    ttsStream,
     memoryStore,
     sessionManager,
     dbPath,

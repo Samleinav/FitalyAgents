@@ -50,16 +50,40 @@ export function createMockPaymentAdapter(deps: RetailAdapterCatalogDeps): Paymen
         throw new Error('payment_intent_create requires a positive amount')
       }
 
+      const paymentIntentId = `pay_${Date.now()}`
+      deps.repositories.orders.update(input.order_id, {
+        result: {
+          ...(order.result ?? {}),
+          order_id: input.order_id,
+          total: amount,
+          payment_status: 'awaiting_payment',
+          payment_method: paymentMethod,
+          payment_intent_id: paymentIntentId,
+        },
+      })
+
       return {
-        payment_intent_id: `pay_${Date.now()}`,
+        payment_intent_id: paymentIntentId,
         order_id: input.order_id,
         amount,
         payment_method: paymentMethod,
         status: 'ready',
-        text: `Preparé el cobro por ${formatCurrency(amount)} con método ${paymentMethod}.`,
+        text: paymentText(paymentMethod, amount),
       }
     },
   }
+}
+
+function paymentText(method: string, amount: number): string {
+  if (method === 'cash') {
+    return `Listo. El empleado puede recibir ${formatCurrency(amount)} en efectivo.`
+  }
+
+  if (method === 'card') {
+    return `Listo. El datafono queda esperando la tarjeta por ${formatCurrency(amount)}.`
+  }
+
+  return `Listo. El cobro queda preparado por ${formatCurrency(amount)}.`
 }
 
 function formatCurrency(amount: number): string {

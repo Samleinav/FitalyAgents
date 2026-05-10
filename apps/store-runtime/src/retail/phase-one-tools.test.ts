@@ -49,6 +49,20 @@ describe('retail phase-one tools', () => {
       )
       expect((searchResult as { products: unknown[] }).products.length).toBeGreaterThan(0)
 
+      const naturalLanguageSearch = await harness.registry.runWithContext(baseContext(), () =>
+        harness.registry.execute('product_search', { query: 'quiero ver tenis talla 42' }),
+      )
+      expect((naturalLanguageSearch as { products: Array<{ id: string }> }).products[0]?.id).toBe(
+        'sku_nike_air_42',
+      )
+
+      const catalogSearch = await harness.registry.runWithContext(baseContext(), () =>
+        harness.registry.execute('product_search', {
+          query: 'me puedes mostrar que productos venden',
+        }),
+      )
+      expect((catalogSearch as { products: unknown[] }).products.length).toBeGreaterThan(0)
+
       const inventoryResult = await harness.registry.runWithContext(baseContext(), () =>
         harness.registry.execute('inventory_check', { query: 'Nike' }),
       )

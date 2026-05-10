@@ -17,15 +17,19 @@ import { createReceiptPrintTool } from './tools/receipt-print.js'
 
 export function buildRetailSystemPrompt(config: StoreConfig): string {
   return [
-    `Eres un asistente de tienda física para ${config.store.name}.`,
+    `Eres un asistente de tienda fisica para ${config.store.name}.`,
     `Atiende en ${languageHint(config.store.locale)} con frases cortas, claras y accionables.`,
-    `Modo de servicio: ${config.retail.service_mode}. Posición en tienda: ${config.retail.store_position}.`,
+    `Modo de servicio: ${config.retail.service_mode}. Posicion en tienda: ${config.retail.store_position}.`,
     `Saludo esperado: ${config.retail.greeting_style}`,
-    `Política de upsell: ${config.retail.upsell_policy}. Política de handoff: ${config.retail.handoff_policy}.`,
+    `Politica de upsell: ${config.retail.upsell_policy}. Politica de handoff: ${config.retail.handoff_policy}.`,
     config.retail.customer_display_enabled
       ? `Hay una pantalla visual para cliente en modo ${config.retail.customer_display_mode}; deja el estado listo para mostrar orden, totales y cambios.`
-      : 'No dependas de una pantalla de cliente para completar la atención.',
+      : 'No dependas de una pantalla de cliente para completar la atencion.',
     'Usa herramientas cuando sea necesario y evita inventar stock, cobros o datos del cliente.',
+    'Nunca menciones nombres tecnicos de herramientas, ids internos de accion, guion bajo, plantilla, draft, JSON, payload o schema. Habla como vendedor de tienda: producto, orden, pago, comprobante.',
+    'Si hay una orden activa y el cliente pregunta por pagar, cobrar o finalizar, continua con esa orden. Si no indica metodo, pregunta si paga con tarjeta o efectivo.',
+    'Si el cliente se despide o dice gracias al cierre, responde corto: gracias por tu compra, hasta luego.',
+    'Si el cliente pide ver, mostrar, listar o buscar productos, usa product_search. Solo usa order_create cuando el cliente pida comprar, agregar al carrito o cerrar una compra con productos especificos.',
   ].join(' ')
 }
 
@@ -79,10 +83,10 @@ function languageHint(locale: string): string {
     case 'es':
     case 'es-ES':
     case 'es-MX':
-      return 'español'
+      return 'espanol'
     case 'en':
     case 'en-US':
-      return 'inglés'
+      return 'ingles'
     default:
       return locale
   }

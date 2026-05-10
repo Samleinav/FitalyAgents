@@ -137,6 +137,7 @@ export async function bootstrap(configPath: string): Promise<() => Promise<void>
     ttsStream,
     sessionRepository: repositories.sessions,
     draftRepository: repositories.drafts,
+    orderRepository: repositories.orders,
     config,
     memoryStore,
     memoryScopeResolver,

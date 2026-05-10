@@ -25,6 +25,7 @@ export interface CustomerDisplaySuggestion {
   name: string
   price: number
   description: string
+  stock?: number
 }
 
 export interface CustomerDisplayState {
@@ -629,6 +630,7 @@ function readProductSuggestions(value: unknown): CustomerDisplaySuggestion[] {
         name,
         price,
         description: readString(record.description) ?? '',
+        stock: readNumber(record.stock) ?? undefined,
       },
     ]
   })

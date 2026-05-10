@@ -140,4 +140,33 @@ describe('livekit-voice-bridge', () => {
       }),
     ])
   })
+
+  it('closes the transport room and clears bridge participants', async () => {
+    const bus = new InMemoryBus()
+    const transport = new NoopLiveKitBridgeTransport()
+    const manager = new LiveKitVoiceBridgeManager({
+      bus,
+      config: createBaseConfig({
+        livekit_voice_bridge: {
+          ...createBaseConfig().livekit_voice_bridge,
+          enabled: true,
+        },
+      }),
+      transport,
+    })
+
+    await manager.ensureParticipantDetected({
+      participantIdentity: 'browser-customer-1',
+    })
+
+    expect(manager.getState().participant_count).toBe(1)
+
+    await manager.closeRoom('test')
+
+    expect(transport.closeRoomCalls).toBe(1)
+    expect(manager.getState()).toMatchObject({
+      participant_count: 0,
+      active_sessions: 0,
+    })
+  })
 })
