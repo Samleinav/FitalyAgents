@@ -261,4 +261,51 @@ describe('customer-display-state', () => {
       'available',
     ])
   })
+
+  it('resets customer display state when the session ends', () => {
+    let state = createCustomerDisplayState('store-test', 'full')
+
+    state = applyCustomerDisplayBusEvent(state, 'bus:TOOL_RESULT', {
+      event: 'TOOL_RESULT',
+      tool_name: 'product_search',
+      session_id: 'session-ended',
+      speaker_id: 'customer-1',
+      result: {
+        products: [
+          { id: 'sku-1', name: 'Cloud Pace', price: 89.9, description: 'Daily trainer', stock: 8 },
+        ],
+        text: 'Tengo una opcion.',
+      },
+      timestamp: 30,
+    })
+    state = applyCustomerDisplayBusEvent(state, 'bus:TOOL_RESULT', {
+      event: 'TOOL_RESULT',
+      tool_name: 'order_create',
+      session_id: 'session-ended',
+      result: {
+        order_id: 'ord-ended',
+        order_state: 'open',
+        total: 89.9,
+        items: [{ product_id: 'sku-1', name: 'Cloud Pace', quantity: 1, price: 89.9 }],
+        text: 'Orden preparada.',
+      },
+      timestamp: 31,
+    })
+
+    state = applyCustomerDisplayBusEvent(state, 'bus:SESSION_ENDED', {
+      event: 'SESSION_ENDED',
+      session_id: 'session-ended',
+      store_id: 'store-test',
+      timestamp: 32,
+    })
+
+    expect(state).toMatchObject({
+      sessionId: null,
+      speakerId: null,
+      suggestions: [],
+      message: null,
+      updatedAt: 32,
+      order: createCustomerDisplayState('store-test', 'full').order,
+    })
+  })
 })

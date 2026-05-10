@@ -492,6 +492,16 @@ export class InteractionRuntimeAgent extends StreamAgent {
         hasPaymentStarted ? 'Gracias por tu compra. Hasta luego.' : 'Con gusto. Hasta luego.',
         6,
       )
+      this.deps.sessionRepository.end(event.session_id, {
+        closed_by: 'farewell',
+        last_user_text: event.text,
+      })
+      await this.deps.bus.publish('bus:SESSION_ENDED', {
+        event: 'SESSION_ENDED',
+        session_id: event.session_id,
+        store_id: event.store_id,
+        timestamp: Date.now(),
+      })
       return true
     }
 

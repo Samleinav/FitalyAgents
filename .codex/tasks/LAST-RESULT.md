@@ -1,19 +1,20 @@
-## Task completada: GP-04
+## Task completada: GP-05
 
 ### Archivos creados
 - Ninguno.
 
 ### Archivos modificados
-- apps/store-runtime/src/retail/preset.ts - agrega instruccion de correccion de seleccion al system prompt.
-- apps/store-runtime/src/agents/interaction-runtime-agent.ts - cancela drafts ante intent de correccion, pregunta por opciones visibles y agrega stockStatus a listas recordadas.
-- apps/store-runtime/src/agents/interaction-runtime-agent.test.ts - cubre correccion con draft activo y fallback sin draft.
-- apps/store-runtime/src/retail/ui/customer-display-state.ts - agrega stockStatus a sugerencias de producto.
-- apps/store-runtime/src/retail/ui/customer-display-state.test.ts - cubre estados low/out/available.
-- apps/store-runtime/src/retail/ui/customer-display-page.ts - muestra indicadores visuales de stock bajo y agotado.
-- .codex/tasks/LAST-RESULT.md - actualiza el reporte de la tarea GP-04.
+- apps/store-runtime/src/agents/interaction-runtime-agent.ts - cierra la sesion runtime en despedidas y publica bus:SESSION_ENDED.
+- apps/store-runtime/src/agents/interaction-runtime-agent.test.ts - cubre cierre de sesion y evento SESSION_ENDED en despedidas.
+- apps/store-runtime/src/retail/preset.ts - agrega instruccion para omitir productos agotados en la respuesta oral.
+- apps/store-runtime/src/retail/ui/customer-display-bridge.ts - suscribe el display a bus:SESSION_ENDED.
+- apps/store-runtime/src/retail/ui/customer-display-bridge.test.ts - valida reset del display desde el bridge al cerrar sesion.
+- apps/store-runtime/src/retail/ui/customer-display-state.ts - resetea estado de pantalla cliente cuando llega bus:SESSION_ENDED.
+- apps/store-runtime/src/retail/ui/customer-display-state.test.ts - cubre reset de display a estado idle.
+- .codex/tasks/LAST-RESULT.md - actualiza el reporte de la tarea GP-05.
 
-### Qué se implementó
-Se agrego el flujo de correccion "no, mejor el otro" para cancelar el draft activo y pedir una nueva seleccion con codigos visuales. Tambien se agregaron estados de stock a sugerencias y al customer display, con "Últimas unidades" para stock bajo y "Agotado" con producto atenuado cuando no hay stock.
+### Que se implemento
+Se agrego cierre limpio de sesion cuando el cliente se despide: el runtime marca ended_at en session_summaries, guarda el resumen de cierre y emite bus:SESSION_ENDED. La pantalla cliente escucha ese evento y vuelve a estado idle, limpiando sesion, speaker, orden, sugerencias y mensaje. Tambien se reforzo el prompt retail para que el agente no mencione oralmente productos agotados y busque alternativas cuando todo este sin stock.
 
 ### Tests ejecutados
 - [ ] type-check: OK

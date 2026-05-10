@@ -157,6 +157,10 @@ export function applyCustomerDisplayBusEvent(
       applyAvatarSpeak(next, event, timestamp)
       break
 
+    case 'bus:SESSION_ENDED':
+      applySessionEnded(next)
+      break
+
     default:
       return current
   }
@@ -474,6 +478,15 @@ function applyAvatarSpeak(
     tone: 'info',
     updatedAt: timestamp,
   }
+}
+
+function applySessionEnded(state: CustomerDisplayState): void {
+  const clean = createCustomerDisplayState(state.storeId, state.mode)
+  state.sessionId = clean.sessionId
+  state.speakerId = clean.speakerId
+  state.order = clean.order
+  state.suggestions = clean.suggestions
+  state.message = clean.message
 }
 
 function applyOrderItems(

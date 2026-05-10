@@ -310,6 +310,56 @@ describe('InteractionRuntimeAgent', () => {
     }
   })
 
+  it('ends the runtime session and publishes SESSION_ENDED on farewell', async () => {
+    const harness = await createHarness()
+    const sessionEndedEvents: unknown[] = []
+    const unsubscribe = harness.bus.subscribe('bus:SESSION_ENDED', (payload) => {
+      sessionEndedEvents.push(payload)
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'gracias, eso es todo',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'Con gusto. Hasta luego.',
+        6,
+      )
+      expect(harness.sessionRepository.list()).toEqual([
+        expect.objectContaining({
+          session_id: 'session-1',
+          ended_at: expect.any(Number),
+          summary: {
+            closed_by: 'farewell',
+            last_user_text: 'gracias, eso es todo',
+          },
+        }),
+      ])
+      expect(sessionEndedEvents).toEqual([
+        expect.objectContaining({
+          event: 'SESSION_ENDED',
+          session_id: 'session-1',
+          store_id: 'store-test',
+        }),
+      ])
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
   it('continues an active order when the customer asks how to pay', async () => {
     const harness = await createHarness()
     harness.orderRepository.insert({
@@ -692,6 +742,7 @@ async function createHarness(overrides?: {
     speakText: vi.fn().mockResolvedValue(undefined),
   }
   const orderRepository = new OrderRepository(db)
+  const sessionRepository = new SessionRepository(db)
 
   const agent = new InteractionRuntimeAgent({
     bus,
@@ -700,7 +751,7 @@ async function createHarness(overrides?: {
     toolRegistry: toolRegistry as never,
     contextStore,
     sessionManager,
-    sessionRepository: new SessionRepository(db),
+    sessionRepository,
     draftStore: draftStore as never,
     draftRepository: new DraftRepository(db),
     orderRepository,
@@ -719,6 +770,7 @@ async function createHarness(overrides?: {
     interaction,
     draftStore,
     orderRepository,
+    sessionRepository,
     ttsStream,
     memoryStore,
     sessionManager,
