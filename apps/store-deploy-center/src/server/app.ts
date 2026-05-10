@@ -24,7 +24,27 @@ export function buildDeployCenterServer(deps: {
     project: deps.config.project.name,
   }))
 
-  server.get('/api/state', async () => deps.projectService.getDashboardState())
+  server.get('/api/state', async () => {
+    const [dashboard, dockerStates] = await Promise.all([
+      deps.projectService.getDashboardState(),
+      deps.supervisor.getContainerStates().catch(() => null),
+    ])
+
+    if (dockerStates !== null) {
+      for (const service of dashboard.services) {
+        if (!service.enabled) continue
+        const containerState = dockerStates[service.service_name]
+        if (containerState !== undefined) {
+          service.status = containerState
+          if (containerState === 'running') service.error = null
+        } else {
+          service.status = 'down'
+        }
+      }
+    }
+
+    return dashboard
+  })
   server.get('/api/store-config', async () => deps.projectService.readStoreConfigRaw())
   server.get('/api/env', async () => deps.projectService.readEnvState())
 
@@ -137,6 +157,22 @@ export function buildDeployCenterServer(deps: {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
       }
+    }
+  })
+
+  server.post('/api/deploy/restart-runtime', async (_request, reply) => {
+    try {
+      const runtimeService = deps.config.services.find(
+        (s) => s.kind === 'runtime' || s.id === 'store-runtime',
+      )
+      if (!runtimeService) {
+        reply.code(404)
+        return { ok: false, error: 'No se encontró el servicio runtime en la configuración.' }
+      }
+      return await deps.supervisor.restartService(runtimeService.id)
+    } catch (error) {
+      reply.code(500)
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
   })
 

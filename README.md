@@ -221,17 +221,17 @@ Channels can run in `parallel` (first to respond wins), `sequential` (fallback c
 
 ## Agents
 
-| Agent                 | Purpose                                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `InteractionAgent`    | Main conversational agent. Streams LLM responses. Enforces SafetyGuard on every tool call.                     |
-| `StaffAgent`          | Listens for privileged-role speakers, pauses the InteractionAgent, publishes handoff context, then resumes.    |
-| `UIAgent`             | Reactive agent that translates bus events into UI update instructions. No LLM required.                        |
-| `AmbientAgent`        | Analyzes background audio and enriches the ContextStore silently. No output to end user.                       |
-| `SentimentGuard`      | Converts ambient emotional signals into session alerts and proactive escalation triggers.                      |
-| `ProactiveAgent`      | Triggers suggestions based on context signals (e.g., session inactivity, thresholds).                          |
-| `TargetGroupBridge`   | Routes events to the right session group based on session priority.                                            |
-| `ContextBuilderAgent` | Builds and maintains the session context from multiple sources.                                                |
-| `AvatarAgent`         | Renders bus events into avatar state, expression, gesture, gaze, and speech commands. No decision-making.      |
+| Agent                 | Purpose                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `InteractionAgent`    | Main conversational agent. Streams LLM responses. Enforces SafetyGuard on every tool call.                  |
+| `StaffAgent`          | Listens for privileged-role speakers, pauses the InteractionAgent, publishes handoff context, then resumes. |
+| `UIAgent`             | Reactive agent that translates bus events into UI update instructions. No LLM required.                     |
+| `AmbientAgent`        | Analyzes background audio and enriches the ContextStore silently. No output to end user.                    |
+| `SentimentGuard`      | Converts ambient emotional signals into session alerts and proactive escalation triggers.                   |
+| `ProactiveAgent`      | Triggers suggestions based on context signals (e.g., session inactivity, thresholds).                       |
+| `TargetGroupBridge`   | Routes events to the right session group based on session priority.                                         |
+| `ContextBuilderAgent` | Builds and maintains the session context from multiple sources.                                             |
+| `AvatarAgent`         | Renders bus events into avatar state, expression, gesture, gaze, and speech commands. No decision-making.   |
 
 All agents extend `StreamAgent` and communicate exclusively through the event bus.
 
@@ -419,6 +419,10 @@ npx vitest run --reporter=verbose --root examples/voice-retail
 - [Speculative Dispatcher](docs/DISPATCHER-SPECULATIVE.md) — speculative pre-fetching architecture
 - [Memory Integration](docs/MEMORY-INTEGRATION.md) — actor-scoped memory, AAAK, and MemPalace CLI/MCP backends
 - [Avatar Retail Example](examples/avatar-retail/README.md) — professional avatar presence for in-store and web retail
+- [Store Runtime Operations](docs/STORE-RUNTIME-OPERATIONS.md) — Redis-first local store stack, health checks, sidecars, and LiveKit cleanup
+- [Store Runtime LiveKit Bridge](docs/STORE-RUNTIME-LIVEKIT-BRIDGE.md) — LiveKit room transport, event contract, and lifecycle controls
+- [Store Agent Improvement Plan](docs/STORE-AGENT-IMPROVEMENT-PLAN.md) — golden path, checkout mock, display UX, voice tests, and observability roadmap
+- [Store Deploy Center](docs/STORE-DEPLOY-CENTER.md) — local deploy portal for config, compose, logs, and embedded store screens
 - [API Reference](docs/api/) — generated TypeDoc
 
 ---

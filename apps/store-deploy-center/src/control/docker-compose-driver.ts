@@ -8,6 +8,7 @@ export interface DeploySupervisor {
   stopService(serviceId: string): Promise<CommandResult>
   restartService(serviceId: string): Promise<CommandResult>
   serviceLogs(serviceId: string, tailLines?: number): Promise<CommandResult>
+  getContainerStates(): Promise<Record<string, 'running' | 'down'> | null>
 }
 
 export class DockerComposeDriver implements DeploySupervisor {
@@ -113,6 +114,21 @@ export class DockerComposeDriver implements DeploySupervisor {
     })
   }
 
+  async getContainerStates(): Promise<Record<string, 'running' | 'down'> | null> {
+    const result = await this.runner.run({
+      command: 'docker',
+      args: ['compose', '-f', this.config.project.compose_file_path, 'ps', '--format', 'json'],
+      cwd: this.config.project.working_directory,
+    })
+
+    if (!result.ok) return null
+
+    const text = result.stdout.trim()
+    if (!text) return {}
+
+    return parseDockerPsStates(text)
+  }
+
   private buildProfileArgs(): string[] {
     return this.config.project.profiles.flatMap((profile) => ['--profile', profile])
   }
@@ -125,4 +141,39 @@ export class DockerComposeDriver implements DeploySupervisor {
 
     return service
   }
+}
+
+function parseDockerPsStates(stdout: string): Record<string, 'running' | 'down'> {
+  const states: Record<string, 'running' | 'down'> = {}
+
+  // Try as JSON array (Docker Compose v2.20+)
+  try {
+    const parsed = JSON.parse(stdout)
+    if (Array.isArray(parsed)) {
+      for (const entry of parsed) {
+        if (typeof entry.Service === 'string' && typeof entry.State === 'string') {
+          states[entry.Service] = entry.State === 'running' ? 'running' : 'down'
+        }
+      }
+      return states
+    }
+  } catch {
+    // fall through to NDJSON
+  }
+
+  // Try as NDJSON (one JSON object per line)
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      const entry = JSON.parse(trimmed)
+      if (typeof entry.Service === 'string' && typeof entry.State === 'string') {
+        states[entry.Service] = entry.State === 'running' ? 'running' : 'down'
+      }
+    } catch {
+      // skip non-JSON lines (table headers, etc.)
+    }
+  }
+
+  return states
 }

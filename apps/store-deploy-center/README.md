@@ -3,6 +3,9 @@
 Portal web local para configurar y desplegar el stack del store desde una sola
 pantalla.
 
+Runbook largo:
+[docs/STORE-DEPLOY-CENTER.md](/config/workspace/FitalyAgents/docs/STORE-DEPLOY-CENTER.md:1)
+
 ## Qué hace hoy
 
 - edita `store.config.json` o `store.config.redis.json`
@@ -18,6 +21,8 @@ pantalla.
 - inicia, detiene y reinicia servicios individuales del compose
 - lee logs recientes por servicio con `docker compose logs --tail`
 - embebe `staff-ui` y `customer-display` en split view
+- sirve como panel operativo del stack local `3000`/`3010`/`3020`/`3030`, y se
+  puede extender para controlar `livekit-voice-bridge` en `3050`
 
 ## Uso rápido
 
@@ -50,7 +55,7 @@ Campos principales:
 - `project.env_example_path`
   plantilla inicial para sembrar variables si `.env` todavía no existe
 - `project.profiles`
-  profiles opcionales como `avatar` o `voice`
+  profiles opcionales como `avatar`, `voice` o `livekit`
 - `project.logs_tail_lines`
   número por defecto de líneas para logs por servicio
 - `services`
@@ -62,6 +67,22 @@ Campos principales:
 
 - `docker` y `docker compose` instalados si quieres usar deploy real
 - `apps/store-runtime` construido si el compose levanta imágenes locales
+- `.env` completo para profiles opcionales como `livekit`, `voice` o `avatar`
+
+## LiveKit en pruebas locales
+
+El deploy center trabaja sobre el mismo compose de `apps/store-runtime`. Para
+probar LiveKit, agrega el servicio `livekit-voice-bridge` a
+`deploy-center.config.json` si quieres controlarlo desde el portal, o levanta el
+profile manualmente:
+
+```bash
+cd apps/store-runtime
+docker compose --profile livekit up -d --build livekit-voice-bridge
+```
+
+La pantalla de prueba queda en `http://127.0.0.1:3050`. Cuando no hay navegador
+conectado, `GET /health` debe devolver `room_connected:false`.
 
 ## Validación
 

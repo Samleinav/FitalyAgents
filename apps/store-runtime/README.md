@@ -6,6 +6,9 @@ Runtime local para una sola tienda física, impulsado por `fitalyagents`.
 
 - Desarrollo: [docs/STORE-RUNTIME-DEVELOPER-GUIDE.md](/config/workspace/FitalyAgents/docs/STORE-RUNTIME-DEVELOPER-GUIDE.md:1)
 - Operación: [docs/STORE-RUNTIME-OPERATIONS.md](/config/workspace/FitalyAgents/docs/STORE-RUNTIME-OPERATIONS.md:1)
+- LiveKit: [docs/STORE-RUNTIME-LIVEKIT-BRIDGE.md](/config/workspace/FitalyAgents/docs/STORE-RUNTIME-LIVEKIT-BRIDGE.md:1)
+- Plan de mejoras: [docs/STORE-AGENT-IMPROVEMENT-PLAN.md](/config/workspace/FitalyAgents/docs/STORE-AGENT-IMPROVEMENT-PLAN.md:1)
+- Deploy center: [docs/STORE-DEPLOY-CENTER.md](/config/workspace/FitalyAgents/docs/STORE-DEPLOY-CENTER.md:1)
 - Skills del proyecto: [store-runtime-dev](/config/workspace/FitalyAgents/.codex/skills/store-runtime-dev/SKILL.md:1) y [store-runtime-ops](/config/workspace/FitalyAgents/.codex/skills/store-runtime-ops/SKILL.md:1)
 
 ## Retail Preset
@@ -78,6 +81,7 @@ El `docker-compose.yml` del app ya está preparado para Redis-first:
 - `store-ui-bridge`
 - `customer-display`
 - `web-voice-bridge`
+- `livekit-voice-bridge` bajo profile `livekit`
 - `fitaly-voice` bajo profile `voice`
 - `store-avatar` bajo profile `avatar`
 
@@ -99,6 +103,12 @@ Para añadir avatar externo:
 
 ```bash
 docker compose --profile avatar up --build
+```
+
+Para añadir LiveKit en `:3050`:
+
+```bash
+docker compose --profile livekit up --build
 ```
 
 Por defecto, Compose monta [store.config.redis.json](/config/workspace/FitalyAgents/apps/store-runtime/store.config.redis.json:1) y usa `STORE_CONFIG_PATH`.
@@ -197,8 +207,11 @@ Puerto por defecto: `3050`.
 
 Estado:
 
+- `GET /`
 - `GET /health`
 - `GET /state`
+- `GET /client-token?identity=browser-customer-1&role=customer`
+- `POST /room/close`
 
 La primera fase del bridge usaba `transport = "noop"` para validar contrato. Para
 conectar un room real usa `transport = "livekit-rtc"` y define:
@@ -212,6 +225,29 @@ conectar un room real usa `transport = "livekit-rtc"` y define:
 sesión, por ejemplo `fitaly-demo-store-001`; LiveKit crea el room automáticamente
 cuando entra el primer participante. Si quieres controlar `emptyTimeout` o
 `maxParticipants`, también puedes precrearlo con RoomService API o LiveKit CLI.
+
+El bridge no entra a LiveKit al arrancar. La sala se abre bajo demanda cuando la
+pagina de `:3050` o un cliente llama `/client-token`. Si el navegador se va y el
+room queda sin participantes reales, el bridge agenda cierre con
+`livekit_voice_bridge.room_idle_timeout_ms` y, si
+`livekit_voice_bridge.delete_room_on_idle = true`, borra el room remoto con
+RoomService. Tambien puedes cerrar manualmente desde el boton `Cerrar Sala` o
+con:
+
+```bash
+curl -X POST http://127.0.0.1:3050/room/close \
+  -H "content-type: application/json" \
+  -d "{}"
+```
+
+Campos de ciclo de vida:
+
+- `room_idle_timeout_ms`
+  tiempo maximo con solo el participante interno antes de cerrar el room
+- `delete_room_on_idle`
+  borra el room remoto en LiveKit cuando se cierra por idle o por control manual
+- `token_ttl`
+  TTL de los tokens emitidos por `/client-token`, por ejemplo `30m`
 
 El bridge se une al room como participante `participant_identity`, escucha data o
 text streams en `input_topic` (`fitaly.transcript` por defecto), traduce

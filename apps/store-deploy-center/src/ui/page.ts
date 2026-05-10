@@ -547,6 +547,43 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
       opacity: 1;
       transform: translateY(0);
     }
+    .banner {
+      display: none;
+      align-items: center;
+      gap: 14px;
+      background: rgba(201,125,42,.10);
+      border: 1px solid rgba(201,125,42,.35);
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 13px;
+      color: var(--amber);
+    }
+    .banner.visible { display: flex; }
+    .banner strong { color: var(--ink); }
+    .banner-actions { display: flex; gap: 8px; margin-left: auto; }
+    .btn-sm {
+      border: none;
+      border-radius: 10px;
+      padding: 7px 12px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-amber-sm { background: var(--amber); color: white; }
+    .btn-ghost-sm { background: transparent; color: var(--ink); border: 1px solid var(--cream-border); }
+    .btn-rust { background: var(--rust); color: white; box-shadow: 0 8px 18px rgba(194,90,58,.20); }
+    .btn[disabled] { opacity: .55; cursor: not-allowed; transform: none !important; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
     @media (max-width: 1100px) {
       .shell { grid-template-columns: 1fr; }
       .sidebar { border-right: none; border-bottom: 1px solid var(--cream-border); }
@@ -575,10 +612,19 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
         </div>
         <div class="actions">
           <button class="btn btn-ghost" id="reloadButton">Actualizar</button>
+          <button class="btn btn-ghost" id="restartRuntimeButton">Restart Runtime</button>
           <button class="btn btn-ghost" id="stopButton">Stop All</button>
           <button class="btn btn-amber" id="deployButton">Deploy All</button>
         </div>
       </section>
+
+      <div id="configBanner" class="banner">
+        <span>⚠ <strong>Config actualizada.</strong> El runtime sigue usando la config anterior hasta que lo reinicies.</span>
+        <div class="banner-actions">
+          <button class="btn-sm btn-amber-sm" id="bannerRestartButton">Reiniciar Runtime</button>
+          <button class="btn-sm btn-ghost-sm" id="bannerDismissButton">Ignorar</button>
+        </div>
+      </div>
 
       <section class="card">
         <h3>Resumen</h3>
@@ -846,6 +892,9 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
       envState: null,
       formDirty: false,
       envDirty: false,
+      deployInProgress: false,
+      configNeedsRestart: false,
+      pollingTimer: null,
     }
 
     const serviceList = document.getElementById('serviceList')
@@ -1102,6 +1151,76 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
       renderLogsToolbar(dashboard.services, logsServiceSelect.value)
       renderScreens(dashboard.screens)
       populateForm(dashboard)
+      startPolling()
+    }
+
+    async function refreshStatusOnly() {
+      try {
+        const dashboard = await fetchJson('/api/state')
+        state.dashboard = dashboard
+        renderServices(dashboard.services)
+        renderMetrics(dashboard)
+        if (state.envState) {
+          renderDeployWizard(dashboard, state.envState)
+        }
+      } catch {
+        // silently ignore polling errors to avoid toast spam
+      }
+    }
+
+    function startPolling() {
+      if (state.pollingTimer) return
+      state.pollingTimer = window.setInterval(() => refreshStatusOnly(), 5000)
+    }
+
+    function stopPolling() {
+      if (state.pollingTimer) {
+        window.clearInterval(state.pollingTimer)
+        state.pollingTimer = null
+      }
+    }
+
+    function showConfigBanner() {
+      const runtimeRunning = state.dashboard?.services?.some(
+        (s) => (s.kind === 'runtime' || s.id === 'store-runtime') && s.status === 'running',
+      )
+      if (!runtimeRunning) return
+      state.configNeedsRestart = true
+      document.getElementById('configBanner').classList.add('visible')
+    }
+
+    function hideConfigBanner() {
+      state.configNeedsRestart = false
+      document.getElementById('configBanner').classList.remove('visible')
+    }
+
+    function updateDeployButton() {
+      const btn = document.getElementById('deployButton')
+      if (state.deployInProgress) {
+        btn.disabled = true
+        btn.innerHTML = '<span class="spinner"></span>Desplegando...'
+      } else {
+        btn.disabled = false
+        btn.textContent = 'Deploy All'
+      }
+    }
+
+    async function restartRuntime() {
+      const btn = document.getElementById('restartRuntimeButton')
+      const originalText = btn.textContent
+      btn.disabled = true
+      btn.innerHTML = '<span class="spinner"></span>Reiniciando...'
+      try {
+        const result = await fetchJson('/api/deploy/restart-runtime', { method: 'POST' })
+        showToast(result.ok ? 'Runtime reiniciado.' : 'No se pudo reiniciar el runtime.')
+        hideConfigBanner()
+        await refreshStatusOnly()
+      } catch (error) {
+        handleError(error)
+      } finally {
+        btn.disabled = false
+        btn.textContent = originalText
+      }
     }
 
     async function applyConnectorPreset(presetId) {
@@ -1156,6 +1275,7 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
       if (toast) {
         showToast('Config guardada y validada.')
       }
+      showConfigBanner()
     }
 
     async function saveEnv(options = {}) {
@@ -1258,13 +1378,27 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
     }
 
     async function deployAll(options = {}) {
-      const { reload = true, toast = true } = options
-      const result = await fetchJson('/api/deploy/up', { method: 'POST' })
-      if (toast) {
-        showToast(result.ok ? 'Stack lanzado.' : 'Docker compose respondió con error.')
-      }
-      if (reload) {
-        await loadDashboard()
+      const { reload = true, toast: showToastMsg = true } = options
+      state.deployInProgress = true
+      updateDeployButton()
+      stopPolling()
+
+      // fast-poll during build so sidebar updates while docker compose is building
+      const fastPoll = window.setInterval(() => refreshStatusOnly(), 3000)
+
+      try {
+        const result = await fetchJson('/api/deploy/up', { method: 'POST' })
+        if (showToastMsg) {
+          showToast(result.ok ? 'Stack lanzado.' : 'Docker compose respondió con error.')
+        }
+        if (reload) {
+          await loadDashboard()
+        }
+      } finally {
+        window.clearInterval(fastPoll)
+        state.deployInProgress = false
+        updateDeployButton()
+        startPolling()
       }
     }
 
@@ -1287,6 +1421,7 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
       wizardSummary.textContent = 'Guardando config, escribiendo .env y lanzando el stack...'
       await saveConfig({ reload: false, toast: false })
       await saveEnv({ reload: false, toast: false })
+      hideConfigBanner()
       await deployAll({ reload: true, toast: false })
       wizardSummary.textContent = 'Wizard completado. El stack fue lanzado y el panel ya refleja el estado actualizado de los servicios.'
       showToast('Config, .env y deploy ejecutados.')
@@ -1577,6 +1712,7 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
     window.startService = startService
     window.stopService = stopService
     window.restartService = restartService
+    window.restartRuntime = restartRuntime
     window.openLogs = openLogs
     window.applyConnectorPreset = applyConnectorPreset
     window.runWizardAction = (action) => runWizardAction(action).catch((error) => handleError(error, wizardSummary))
@@ -1601,6 +1737,9 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
       }
     })
     document.getElementById('reloadButton').addEventListener('click', () => loadDashboard().catch((error) => handleError(error)))
+    document.getElementById('restartRuntimeButton').addEventListener('click', () => restartRuntime().catch((error) => handleError(error)))
+    document.getElementById('bannerRestartButton').addEventListener('click', () => restartRuntime().catch((error) => handleError(error)))
+    document.getElementById('bannerDismissButton').addEventListener('click', () => hideConfigBanner())
     document.getElementById('wizardSaveAllButton').addEventListener('click', () => saveAll().catch((error) => handleError(error, wizardSummary)))
     document.getElementById('wizardDeployButton').addEventListener('click', () => saveAllAndDeploy().catch((error) => handleError(error, wizardSummary)))
     document.getElementById('wizardLogsButton').addEventListener('click', () => {

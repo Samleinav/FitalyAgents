@@ -1,6 +1,6 @@
 # Plan: Store Runtime LiveKit Bridge
 
-> Status: Phase 2 implemented; LiveKit smoke pending  
+> Status: Phase 2 implemented; browser bridge and room lifecycle deployed
 > Goal: use LiveKit as an optional media layer while Fitaly keeps target-group,
 > approvals, POS state, and tool governance.
 
@@ -67,6 +67,46 @@ The bridge consumes:
 `transport = "livekit-rtc"` maps them to LiveKit data messages and publishes PCM
 TTS chunks as a LiveKit audio track when possible.
 
+## Room Lifecycle And Cost Control
+
+`livekit-voice-bridge` no longer joins LiveKit at process boot. The HTTP server
+can be healthy while `room_connected:false`, which is the expected idle state.
+
+Flow:
+
+1. A browser or client calls `GET /client-token`.
+2. The bridge creates/joins `LIVEKIT_ROOM` with the configured bridge identity.
+3. The browser joins the same room and sends transcripts on `input_topic`.
+4. When all remote participants leave, the bridge waits
+   `livekit_voice_bridge.room_idle_timeout_ms`.
+5. If the room is still empty and `delete_room_on_idle=true`, the bridge
+   disconnects locally and deletes the remote LiveKit room.
+
+Manual cleanup is available through:
+
+```bash
+curl -X POST http://127.0.0.1:3050/room/close \
+  -H "content-type: application/json" \
+  -d "{}"
+```
+
+The browser test page on `GET /` exposes the same action as `Cerrar Sala`.
+
+Lifecycle fields:
+
+- `room_idle_timeout_ms`
+  idle delay before closing an empty room
+- `delete_room_on_idle`
+  whether to delete the remote LiveKit room on idle/manual close
+- `token_ttl`
+  TTL for `/client-token` credentials
+
+Operational checks:
+
+- idle bridge: `GET /health` returns `room_connected:false`
+- active test: `GET /state` shows at least one participant
+- after cleanup: LiveKit dashboard no longer shows the room as `ACTIVE`
+
 ## Implementation Checklist
 
 ### Phase 1: Contract And Sidecar Shell
@@ -88,7 +128,7 @@ TTS chunks as a LiveKit audio track when possible.
 - [x] Support self-hosted LiveKit server with the same bridge.
 - [x] Map participant lifecycle to `SPEAKER_DETECTED` / `SPEAKER_LOST`.
 - [x] Map LiveKit transcript/data events to `SPEECH_PARTIAL` /
-  `SPEECH_FINAL`.
+      `SPEECH_FINAL`.
 - [x] Publish assistant PCM audio into the room from `TTS_AUDIO_CHUNK`.
 - [x] Forward assistant text/state over LiveKit data channels for UI debugging.
 - [x] Add a `dev:livekit-smoke` runner for Cloud/self-hosted rooms.
@@ -101,11 +141,11 @@ TTS chunks as a LiveKit audio track when possible.
 - [ ] Store-floor path: mixed audio goes through `fitaly-voice` diarization.
 - [ ] Decide when LiveKit VAD is enough and when Fitaly target gate owns turns.
 - [ ] Add sample-rate/resampling validation for outbound TTS.
-- [ ] Add cost controls so sessions start only when a target is active.
+- [x] Add cost controls so sessions start only when a client requests a token.
 
 ### Phase 4: Deploy Modes
 
-- [ ] Document LiveKit Cloud media + self-hosted bridge/runtime.
+- [x] Document LiveKit Cloud media + self-hosted bridge/runtime.
 - [ ] Document fully self-hosted LiveKit.
 - [ ] Add Compose profile for local LiveKit when needed.
 - [x] Add smoke flow for a browser room and mock transcripts.
@@ -113,7 +153,8 @@ TTS chunks as a LiveKit audio track when possible.
 
 ### Phase 5: Production Hardening
 
-- [ ] Add auth for debug ingress and bridge control routes.
+- [x] Add admin-secret gate for bridge control routes when `STORE_ADMIN_SECRET` is set.
+- [ ] Require auth for all browser-facing test controls in production deployments.
 - [ ] Add idempotency keys for transcripts and TTS segments.
 - [ ] Move critical event recovery to PostgreSQL/outbox or Redis Streams.
 - [ ] Add per-room metrics: active minutes, STT/TTS cost, response latency.
