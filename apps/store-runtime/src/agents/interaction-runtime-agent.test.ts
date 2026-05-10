@@ -173,6 +173,83 @@ describe('InteractionRuntimeAgent', () => {
     }
   })
 
+  it('cancels an active draft when the customer says cancela', async () => {
+    const harness = await createHarness()
+    harness.draftStore.getBySession.mockResolvedValue({ id: 'draft-2' })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'cancela',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).toHaveBeenCalledWith('draft-2')
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'Listo, cancelo el pedido.',
+        6,
+      )
+      expect(harness.interaction.handleDraftFlow).not.toHaveBeenCalled()
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('answers with an alternative when cancelling without an active draft', async () => {
+    const harness = await createHarness()
+    harness.orderRepository.insert({
+      id: 'ord-cancel-1',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-1', quantity: 1, price: 25 }],
+      },
+      result: {
+        order_id: 'ord-cancel-1',
+        total: 25,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'cancela',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).not.toHaveBeenCalled()
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'No tengo nada pendiente que cancelar. Quieres buscar otro producto?',
+        6,
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
   it('continues an active order when the customer asks how to pay', async () => {
     const harness = await createHarness()
     harness.orderRepository.insert({
@@ -261,6 +338,69 @@ describe('InteractionRuntimeAgent', () => {
         'session-1',
         'customer-1',
         'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('speaks the payment result when the customer chooses card', async () => {
+    const harness = await createHarness()
+    harness.interaction.handleToolCall.mockResolvedValueOnce({
+      type: 'executed',
+      toolId: 'payment_intent_create',
+      result: {
+        text: 'El datafono queda esperando la tarjeta.',
+      },
+    })
+    harness.orderRepository.insert({
+      id: 'ord-3',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-3', quantity: 1, price: 35 }],
+      },
+      result: {
+        order_id: 'ord-3',
+        total: 35,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'pago con tarjeta',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'payment_intent_create',
+        {
+          order_id: 'ord-3',
+          amount: 35,
+          payment_method: 'card',
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'El datafono queda esperando la tarjeta.',
+        6,
       )
       expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
     } finally {

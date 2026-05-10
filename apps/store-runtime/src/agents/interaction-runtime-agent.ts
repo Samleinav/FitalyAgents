@@ -158,6 +158,10 @@ export class InteractionRuntimeAgent extends StreamAgent {
       return
     }
 
+    if (await this.handleCancelIntent(speechEvent)) {
+      return
+    }
+
     const pendingDraft = await this.deps.draftStore.getBySession(speechEvent.session_id)
     if (pendingDraft) {
       if (isFreshBrowseIntent(speechEvent.text)) {
@@ -298,6 +302,30 @@ export class InteractionRuntimeAgent extends StreamAgent {
           break
       }
     }
+  }
+
+  private async handleCancelIntent(event: { session_id: string; text: string }): Promise<boolean> {
+    if (!isCancelIntent(event.text)) {
+      return false
+    }
+
+    const draft = await this.deps.draftStore.getBySession(event.session_id)
+    if (draft) {
+      await this.deps.draftStore.cancel(draft.id)
+      await this.deps.ttsStream.speakText(event.session_id, 'Listo, cancelo el pedido.', 6)
+      return true
+    }
+
+    if (this.findLatestOpenOrder(event.session_id)) {
+      await this.deps.ttsStream.speakText(
+        event.session_id,
+        'No tengo nada pendiente que cancelar. Quieres buscar otro producto?',
+        6,
+      )
+      return true
+    }
+
+    return false
   }
 
   private rememberProductList(payload: unknown): void {
@@ -463,8 +491,8 @@ export class InteractionRuntimeAgent extends StreamAgent {
       return true
     }
 
-    await this.deps.toolRegistry.runWithContext(executionContext, async () => {
-      await this.deps.interaction.handleToolCall(
+    const result = await this.deps.toolRegistry.runWithContext(executionContext, () =>
+      this.deps.interaction.handleToolCall(
         'payment_intent_create',
         {
           order_id: order.id,
@@ -474,9 +502,10 @@ export class InteractionRuntimeAgent extends StreamAgent {
         event.session_id,
         event.speaker_id,
         event.role,
-      )
-    })
+      ),
+    )
 
+    await this.handleToolResults(event.session_id, [result])
     return true
   }
 
@@ -504,6 +533,25 @@ export class InteractionRuntimeAgent extends StreamAgent {
       .map((method) => method.trim())
       .filter((method) => method.length > 0)
     return configured.length > 0 ? configured : ['card', 'cash']
+  }
+
+  private findLatestOpenOrder(sessionId: string): {
+    id: string
+    params: Record<string, unknown>
+    result?: Record<string, unknown> | null
+    status: string
+  } | null {
+    return (
+      this.deps.orderRepository.listBySession(sessionId).find((order) => {
+        if (order.status !== 'completed') {
+          return false
+        }
+
+        const result = toRecord(order.result)
+        const orderState = typeof result.order_state === 'string' ? result.order_state : 'open'
+        return orderState === 'open'
+      }) ?? null
+    )
   }
 }
 
@@ -660,6 +708,13 @@ function isFreshBrowseIntent(text: string): boolean {
 function isCheckoutIntent(text: string): boolean {
   const normalized = normalizeIntentText(text)
   return /\b(pagar|pago|pagamos|cobrar|cobro|checkout|finalizar|cerrar|datafono|tarjeta|efectivo|cash)\b/.test(
+    normalized,
+  )
+}
+
+function isCancelIntent(text: string): boolean {
+  const normalized = normalizeIntentText(text)
+  return /^(cancela|cancelar|cancelo|anula|anular|olvida|olvida eso|dejalo|no importa|no gracias olvida)\b/.test(
     normalized,
   )
 }
