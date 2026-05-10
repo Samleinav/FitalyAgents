@@ -59,41 +59,48 @@ describe('product connectors', () => {
         config,
       })
 
-      await expect(adapters.products.health()).resolves.toMatchObject({
-        ok: true,
-        driver: 'sqlite',
-      })
+      try {
+        await expect(adapters.products.health()).resolves.toMatchObject({
+          ok: true,
+          driver: 'sqlite',
+        })
 
-      await expect(
-        adapters.products.execute(
-          'search',
-          { query: 'Cloud', limit: 5 },
-          { session_id: 'session-1', store_id: 'store-test' },
-        ),
-      ).resolves.toMatchObject({
-        products: [
-          expect.objectContaining({
-            id: 'sku-1',
-            name: 'Cloud Pace',
-          }),
-        ],
-      })
+        await expect(
+          adapters.products.execute(
+            'search',
+            { query: 'Cloud', limit: 5 },
+            { session_id: 'session-1', store_id: 'store-test' },
+          ),
+        ).resolves.toMatchObject({
+          products: [
+            expect.objectContaining({
+              id: 'sku-1',
+              name: 'Cloud Pace',
+            }),
+          ],
+        })
 
-      await expect(
-        adapters.inventory.execute(
-          'inventory_check',
-          { product_id: 'sku-1' },
-          { session_id: 'session-1', store_id: 'store-test' },
-        ),
-      ).resolves.toMatchObject({
-        in_stock: true,
-        products: [
-          expect.objectContaining({
-            id: 'sku-1',
-            stock: 12,
-          }),
-        ],
-      })
+        await expect(
+          adapters.inventory.execute(
+            'inventory_check',
+            { product_id: 'sku-1' },
+            { session_id: 'session-1', store_id: 'store-test' },
+          ),
+        ).resolves.toMatchObject({
+          in_stock: true,
+          products: [
+            expect.objectContaining({
+              id: 'sku-1',
+              stock: 12,
+            }),
+          ],
+        })
+      } finally {
+        await Promise.all([
+          Promise.resolve(adapters.products.dispose?.()),
+          Promise.resolve(adapters.inventory.dispose?.()),
+        ])
+      }
     } finally {
       closeTestDb(runtimeDbPath)
       closeTestDb(catalogDbPath)

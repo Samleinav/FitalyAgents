@@ -5,6 +5,7 @@ import {
   type IContextStore,
   type InteractionAgent,
   type InMemorySessionManager,
+  type ToolCallResult,
 } from 'fitalyagents'
 import type { IMemoryStore, MemoryScopeResolver } from '@fitalyagents/dispatcher'
 import type { SessionBoundLLM } from '../providers/llm/types.js'
@@ -17,6 +18,7 @@ import type { PersistentDraftStore } from '../bootstrap/persistent-draft-store.j
 import { resolveIngressSessionId } from '../bootstrap/speaker-session.js'
 import type { TtsStreamService } from '../bootstrap/tts-stream.js'
 import type { ToolRegistry } from '../tools/registry.js'
+import type { CustomerDisplaySuggestion } from '../retail/ui/customer-display-state.js'
 
 const STAFF_ROLES = new Set<HumanRole>([
   'staff',
@@ -30,6 +32,7 @@ const STAFF_ROLES = new Set<HumanRole>([
 
 export class InteractionRuntimeAgent extends StreamAgent {
   private currentPrimarySpeakerId: string | null = null
+  private lastProductList = new Map<string, CustomerDisplaySuggestion[]>()
 
   constructor(
     private readonly deps: {
@@ -55,10 +58,15 @@ export class InteractionRuntimeAgent extends StreamAgent {
   }
 
   protected get channels(): string[] {
-    return ['bus:SPEECH_FINAL', 'bus:BARGE_IN', 'bus:TARGET_GROUP_CHANGED']
+    return ['bus:SPEECH_FINAL', 'bus:BARGE_IN', 'bus:TARGET_GROUP_CHANGED', 'bus:TOOL_RESULT']
   }
 
   async onEvent(channel: string, payload: unknown): Promise<void> {
+    if (channel === 'bus:TOOL_RESULT') {
+      this.rememberProductList(payload)
+      return
+    }
+
     if (channel === 'bus:BARGE_IN') {
       const event = payload as { session_id?: string }
       if (event.session_id) {
@@ -169,6 +177,10 @@ export class InteractionRuntimeAgent extends StreamAgent {
       }
     }
 
+    if (await this.handleVisualSelectionIntent(speechEvent, executionContext)) {
+      return
+    }
+
     if (await this.handleStoreShortcutIntent(speechEvent, executionContext)) {
       return
     }
@@ -244,17 +256,7 @@ export class InteractionRuntimeAgent extends StreamAgent {
     })
   }
 
-  private async handleToolResults(
-    sessionId: string,
-    results: Array<
-      | { type: 'executed'; toolId: string; result: unknown }
-      | { type: 'cached'; toolId: string; result: unknown }
-      | { type: 'draft_ready'; toolId: string; draftId: string }
-      | { type: 'needs_confirmation'; toolId: string; prompt: string }
-      | { type: 'pending_approval'; toolId: string; approved: boolean | null; response: unknown }
-      | { type: 'error'; toolId: string; error: string }
-    >,
-  ): Promise<void> {
+  private async handleToolResults(sessionId: string, results: ToolCallResult[]): Promise<void> {
     for (const result of results) {
       switch (result.type) {
         case 'executed':
@@ -296,6 +298,104 @@ export class InteractionRuntimeAgent extends StreamAgent {
           break
       }
     }
+  }
+
+  private rememberProductList(payload: unknown): void {
+    const event = toRecord(payload)
+    const toolName = readString(event.tool_name) ?? readString(event.tool_id)
+    const sessionId = readString(event.session_id)
+
+    if (!sessionId || (toolName !== 'product_search' && toolName !== 'inventory_check')) {
+      return
+    }
+
+    const products = extractSuggestionsFromResult(event.result)
+    if (products.length > 0) {
+      this.lastProductList.set(sessionId, products)
+    }
+  }
+
+  private async handleVisualSelectionIntent(
+    event: {
+      session_id: string
+      text: string
+      speaker_id?: string
+      role: HumanRole
+      store_id: string
+    },
+    executionContext: {
+      session_id: string
+      store_id: string
+      speaker_id?: string
+      role?: HumanRole | null
+    },
+  ): Promise<boolean> {
+    const product = this.resolveVisualIdSelection(event.text, event.session_id)
+    if (!product) {
+      return false
+    }
+
+    const result = await this.deps.toolRegistry.runWithContext(executionContext, () =>
+      this.deps.interaction.handleToolCall(
+        'order_create',
+        {
+          items: [
+            {
+              product_id: product.id,
+              name: product.name,
+              quantity: 1,
+              price: product.price,
+            },
+          ],
+        },
+        event.session_id,
+        event.speaker_id,
+        event.role,
+      ),
+    )
+
+    await this.handleToolResults(event.session_id, [result])
+    return true
+  }
+
+  private resolveVisualIdSelection(
+    text: string,
+    sessionId: string,
+  ): CustomerDisplaySuggestion | null {
+    const products = this.lastProductList.get(sessionId)
+    if (!products || products.length === 0) {
+      return null
+    }
+
+    const normalized = normalizeIntentText(text)
+    const visualMatch = /\ba\s*([1-6])\b/.exec(normalized)
+    if (visualMatch) {
+      return products[Number(visualMatch[1]) - 1] ?? null
+    }
+
+    const ordinalIndex = readOrdinalIndex(normalized)
+    if (ordinalIndex != null) {
+      return products[ordinalIndex] ?? null
+    }
+
+    const priceSelection = resolvePriceSelection(normalized, products)
+    if (priceSelection) {
+      return priceSelection
+    }
+
+    const terms = extractAttributeTerms(normalized)
+    if (terms.length === 0) {
+      return null
+    }
+
+    const matches = products.filter((product) => {
+      const haystack = normalizeIntentText(
+        [product.visualId, product.id, product.name, product.description].join(' '),
+      )
+      return terms.some((term) => haystack.includes(term))
+    })
+
+    return matches.length === 1 ? matches[0] : null
   }
 
   private async handleStoreShortcutIntent(
@@ -415,6 +515,117 @@ function extractResultText(result: unknown): string | null {
   return null
 }
 
+function extractSuggestionsFromResult(result: unknown): CustomerDisplaySuggestion[] {
+  const value = toRecord(result).products ?? result
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const suggestions: Omit<CustomerDisplaySuggestion, 'visualId'>[] = []
+  for (const entry of value) {
+    const record = toRecord(entry)
+    const id = readString(record.id)
+    const name = readString(record.name)
+    const price = readNumber(record.price)
+    if (!id || !name || price == null) {
+      continue
+    }
+
+    suggestions.push({
+      id,
+      name,
+      price,
+      description: readString(record.description) ?? '',
+      stock: readNumber(record.stock) ?? undefined,
+    })
+  }
+
+  return suggestions.slice(0, 6).map((suggestion, index) => ({
+    ...suggestion,
+    visualId: `A${index + 1}`,
+  }))
+}
+
+function readOrdinalIndex(normalized: string): number | null {
+  const ordinalByWord = new Map<string, number>([
+    ['primer', 0],
+    ['primero', 0],
+    ['primera', 0],
+    ['segundo', 1],
+    ['segunda', 1],
+    ['tercero', 2],
+    ['tercera', 2],
+    ['cuarto', 3],
+    ['cuarta', 3],
+  ])
+
+  for (const token of normalized.split(' ')) {
+    const index = ordinalByWord.get(token)
+    if (index != null) {
+      return index
+    }
+  }
+
+  return null
+}
+
+function resolvePriceSelection(
+  normalized: string,
+  products: CustomerDisplaySuggestion[],
+): CustomerDisplaySuggestion | null {
+  if (/\b(barato|barata|economico|economica|menor precio)\b/.test(normalized)) {
+    return uniqueByPrice(products, Math.min(...products.map((product) => product.price)))
+  }
+
+  if (/\b(caro|cara|costoso|costosa|mayor precio)\b/.test(normalized)) {
+    return uniqueByPrice(products, Math.max(...products.map((product) => product.price)))
+  }
+
+  return null
+}
+
+function uniqueByPrice(
+  products: CustomerDisplaySuggestion[],
+  price: number,
+): CustomerDisplaySuggestion | null {
+  const matches = products.filter((product) => product.price === price)
+  return matches.length === 1 ? matches[0] : null
+}
+
+function extractAttributeTerms(normalized: string): string[] {
+  const stopwords = new Set([
+    'a',
+    'al',
+    'con',
+    'dame',
+    'de',
+    'del',
+    'el',
+    'esa',
+    'ese',
+    'eso',
+    'la',
+    'las',
+    'lo',
+    'los',
+    'me',
+    'para',
+    'por',
+    'quiero',
+    'un',
+    'una',
+    'uno',
+    'favor',
+    'producto',
+    'opcion',
+  ])
+
+  return normalized
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1 && !stopwords.has(token) && !/^a[1-6]$/.test(token))
+}
+
 function isAbortLikeError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false
@@ -531,6 +742,10 @@ function promptForDraftTool(toolId: string): string {
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 function readNumber(value: unknown): number | null {

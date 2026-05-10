@@ -676,9 +676,10 @@ export function renderCustomerDisplayHtml(deps: {
                 : 'sin stock'
               : 'stock por confirmar';
             const detail = [product.description || 'Producto disponible', stockLabel].filter(Boolean).join(' - ');
+            const visualId = product.visualId || product.id;
             return \`
               <article class="suggestion-item">
-                <div class="suggestion-code">\${escapeHtml(product.id)}</div>
+                <div class="suggestion-code">[\${escapeHtml(visualId)}]</div>
                 <div class="suggestion-main">
                   <span class="suggestion-name">\${escapeHtml(product.name)}</span>
                   <span class="suggestion-meta">\${escapeHtml(detail)}</span>

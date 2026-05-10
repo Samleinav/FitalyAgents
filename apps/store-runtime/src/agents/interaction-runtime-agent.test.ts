@@ -268,7 +268,178 @@ describe('InteractionRuntimeAgent', () => {
       await cleanupHarness(harness)
     }
   })
+
+  it('selects the A2 product from the latest visible product list', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'quiero el A2',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'order_create',
+        {
+          items: [
+            {
+              product_id: 'sku-blue',
+              name: 'Cloud Runner Azul',
+              quantity: 1,
+              price: 95,
+            },
+          ],
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('selects the first product when the customer says el primero', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'el primero por favor',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'order_create',
+        {
+          items: [
+            {
+              product_id: 'sku-red',
+              name: 'Cloud Runner Rojo',
+              quantity: 1,
+              price: 90,
+            },
+          ],
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('selects a product by a unique visible attribute', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'me llevo el azul',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'order_create',
+        {
+          items: [
+            {
+              product_id: 'sku-blue',
+              name: 'Cloud Runner Azul',
+              quantity: 1,
+              price: 95,
+            },
+          ],
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('continues through the LLM when visual selection has no active product list', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'quiero el A2',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).not.toHaveBeenCalled()
+      expect(harness.interaction.handleSpeechFinal).toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
 })
+
+async function publishProductList(harness: Awaited<ReturnType<typeof createHarness>>) {
+  await harness.bus.publish('bus:TOOL_RESULT', {
+    event: 'TOOL_RESULT',
+    tool_name: 'product_search',
+    session_id: 'session-1',
+    result: {
+      products: [
+        {
+          id: 'sku-red',
+          name: 'Cloud Runner Rojo',
+          price: 90,
+          description: 'Tenis talla 42 color rojo',
+          stock: 3,
+        },
+        {
+          id: 'sku-blue',
+          name: 'Cloud Runner Azul',
+          price: 95,
+          description: 'Tenis talla 42 color azul',
+          stock: 2,
+        },
+      ],
+    },
+    timestamp: Date.now(),
+  })
+}
 
 async function createHarness(overrides?: {
   runWithSession?: ReturnType<typeof vi.fn>

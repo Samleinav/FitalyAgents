@@ -143,7 +143,8 @@ describe('customer-display-state', () => {
     })
 
     expect(state.suggestions).toHaveLength(2)
-    expect(state.suggestions[0]).toMatchObject({ id: 'sku-1', stock: 4 })
+    expect(state.suggestions[0]).toMatchObject({ id: 'sku-1', visualId: 'A1', stock: 4 })
+    expect(state.suggestions[1]).toMatchObject({ id: 'sku-2', visualId: 'A2', stock: 2 })
     expect(state.order.approvalStatus).toBe('approved')
     expect(state.order.refundStatus).toBe('idle')
     expect(state.message).toMatchObject({
@@ -187,5 +188,39 @@ describe('customer-display-state', () => {
     expect(state.order.approvalStatus).toBe('approved')
     expect(state.order.refundStatus).toBe('approved')
     expect(state.order.refundId).toBe('refund-1')
+  })
+
+  it('assigns stable visual ids to the visible product suggestions', () => {
+    const state = applyCustomerDisplayBusEvent(
+      createCustomerDisplayState('store-test', 'full'),
+      'bus:TOOL_RESULT',
+      {
+        event: 'TOOL_RESULT',
+        tool_name: 'product_search',
+        session_id: 'session-4',
+        result: {
+          products: [
+            { id: 'sku-1', name: 'Producto 1', price: 10, description: 'Uno' },
+            { id: 'sku-2', name: 'Producto 2', price: 20, description: 'Dos' },
+            { id: 'sku-3', name: 'Producto 3', price: 30, description: 'Tres' },
+            { id: 'sku-4', name: 'Producto 4', price: 40, description: 'Cuatro' },
+            { id: 'sku-5', name: 'Producto 5', price: 50, description: 'Cinco' },
+            { id: 'sku-6', name: 'Producto 6', price: 60, description: 'Seis' },
+            { id: 'sku-7', name: 'Producto 7', price: 70, description: 'Siete' },
+          ],
+        },
+        timestamp: 22,
+      },
+    )
+
+    expect(state.suggestions.map((product) => product.visualId)).toEqual([
+      'A1',
+      'A2',
+      'A3',
+      'A4',
+      'A5',
+      'A6',
+    ])
+    expect(state.suggestions.map((product) => product.id)).not.toContain('sku-7')
   })
 })

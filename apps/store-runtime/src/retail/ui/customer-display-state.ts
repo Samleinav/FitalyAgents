@@ -22,6 +22,7 @@ export interface CustomerDisplayMessage {
 
 export interface CustomerDisplaySuggestion {
   id: string
+  visualId: string
   name: string
   price: number
   description: string
@@ -611,29 +612,33 @@ function readProductSuggestions(value: unknown): CustomerDisplaySuggestion[] {
     return []
   }
 
-  return value.flatMap((entry) => {
-    if (!entry || typeof entry !== 'object') {
-      return []
-    }
+  const suggestions: Omit<CustomerDisplaySuggestion, 'visualId'>[] = []
 
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
     const record = entry as Record<string, unknown>
     const id = readString(record.id)
     const name = readString(record.name)
     const price = readNumber(record.price)
     if (!id || !name || price == null) {
-      return []
+      continue
     }
 
-    return [
-      {
-        id,
-        name,
-        price,
-        description: readString(record.description) ?? '',
-        stock: readNumber(record.stock) ?? undefined,
-      },
-    ]
-  })
+    suggestions.push({
+      id,
+      name,
+      price,
+      description: readString(record.description) ?? '',
+      stock: readNumber(record.stock) ?? undefined,
+    })
+  }
+
+  return suggestions.slice(0, MAX_SUGGESTIONS).map((suggestion, index) => ({
+    ...suggestion,
+    visualId: `A${index + 1}`,
+  }))
 }
 
 function applyResultMessage(
