@@ -1,23 +1,19 @@
-## Task completada: GP-01
+## Task completada: GP-02
 
 ### Archivos creados
-- .codex/tasks/LAST-RESULT.md
+- Ninguno.
 
 ### Archivos modificados
-- apps/store-runtime/src/retail/ui/customer-display-state.ts - agrega visualId A1-A6 a sugerencias visibles.
-- apps/store-runtime/src/retail/ui/customer-display-page.ts - muestra el visualId como badge del producto.
-- apps/store-runtime/src/agents/interaction-runtime-agent.ts - recuerda la ultima lista visible y resuelve selecciones naturales antes del LLM.
-- apps/store-runtime/src/agents/interaction-runtime-agent.test.ts - cubre seleccion por A2, ordinal, atributo unico y fallback sin lista activa.
-- apps/store-runtime/src/retail/ui/customer-display-state.test.ts - cubre visualId estable y limite de seis productos.
-- apps/store-runtime/src/retail/adapters/product-connectors.test.ts - cierra adapters SQLite externos para evitar bloqueo de catalog.db en Windows.
+- apps/store-runtime/src/retail/preset.ts - amplia el system prompt para mencionar codigos visuales A1-A3 en respuestas orales de productos.
+- .codex/tasks/LAST-RESULT.md - actualiza el reporte de la tarea GP-02.
 
 ### Qué se implementó
-Se agregaron IDs visuales A1-A6 al customer display y el agente ahora puede seleccionar productos desde la lista visible por codigo visual, ordinal o atributo unico. Al detectar una seleccion valida, crea el borrador de orden directamente con order_create sin pasar por el LLM. Tambien se cerro el handle SQLite externo del test de conectores para que la suite completa pueda limpiar temporales correctamente.
+Se agregaron instrucciones al system prompt para que, cuando la pantalla de cliente esta activa, el agente mencione los codigos visuales A1, A2 y A3 al listar productos. Tambien se definio el formato oral de respuesta para busquedas de productos: codigo visual, nombre, precio y talla/color cuando aplique, sin IDs internos ni nombres de herramientas.
 
 ### Tests ejecutados
 - [ ] type-check: OK
 - [ ] lint: OK
-- [ ] test: OK
+- [ ] test: OK (no requerido para GP-02)
 
 ### Bloqueantes o preguntas
 Ninguno.
