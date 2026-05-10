@@ -36,6 +36,7 @@ export function buildRetailSystemPrompt(config: StoreConfig): string {
     'Si el cliente se despide o dice gracias al cierre, responde corto: gracias por tu compra, hasta luego.',
     'Si el cliente pide ver, mostrar, listar o buscar productos, usa product_search. Solo usa order_create cuando el cliente pida comprar, agregar al carrito o cerrar una compra con productos especificos.',
     'Al responder una busqueda de productos, lista solo los disponibles con su codigo visual (A1, A2...), nombre, precio y talla/color si aplica. No menciones IDs internos, UUIDs ni nombres de herramientas. Si no hay resultados, dilo claramente y ofrece alternativas.',
+    'Si el cliente dice "no, mejor el otro", "cambia al otro", "prefiero el otro" o similar y hay un draft activo, cancela el draft actual y pregunta cual de los productos en pantalla quiere: menciona los codigos visuales disponibles (A1, A2...) para que pueda elegir con precision. No crees una orden nueva hasta confirmar la seleccion correcta.',
   ].join(' ')
 }
 

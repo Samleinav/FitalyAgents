@@ -250,6 +250,66 @@ describe('InteractionRuntimeAgent', () => {
     }
   })
 
+  it('cancels an active draft and asks for a corrected visible product choice', async () => {
+    const harness = await createHarness()
+    harness.draftStore.getBySession.mockResolvedValue({
+      id: 'draft-correction-1',
+      items: {
+        items: [{ product_id: 'sku-red', quantity: 1, price: 90 }],
+      },
+    })
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'no, mejor el otro',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).toHaveBeenCalledWith('draft-correction-1')
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'Cual prefieres? A2 Cloud Runner Azul.',
+        6,
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('continues through the LLM for correction intent without an active draft', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'no, mejor el otro',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).not.toHaveBeenCalled()
+      expect(harness.interaction.handleSpeechFinal).toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
   it('continues an active order when the customer asks how to pay', async () => {
     const harness = await createHarness()
     harness.orderRepository.insert({

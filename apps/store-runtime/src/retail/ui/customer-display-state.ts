@@ -27,6 +27,7 @@ export interface CustomerDisplaySuggestion {
   price: number
   description: string
   stock?: number
+  stockStatus: 'available' | 'low' | 'out'
 }
 
 export interface CustomerDisplayState {
@@ -622,6 +623,7 @@ function readProductSuggestions(value: unknown): CustomerDisplaySuggestion[] {
     const id = readString(record.id)
     const name = readString(record.name)
     const price = readNumber(record.price)
+    const stock = readNumber(record.stock)
     if (!id || !name || price == null) {
       continue
     }
@@ -631,7 +633,8 @@ function readProductSuggestions(value: unknown): CustomerDisplaySuggestion[] {
       name,
       price,
       description: readString(record.description) ?? '',
-      stock: readNumber(record.stock) ?? undefined,
+      stock: stock ?? undefined,
+      stockStatus: readStockStatus(stock),
     })
   }
 
@@ -639,6 +642,18 @@ function readProductSuggestions(value: unknown): CustomerDisplaySuggestion[] {
     ...suggestion,
     visualId: `A${index + 1}`,
   }))
+}
+
+function readStockStatus(stock: number | null): CustomerDisplaySuggestion['stockStatus'] {
+  if (stock === 0) {
+    return 'out'
+  }
+
+  if (stock != null && stock > 0 && stock <= 5) {
+    return 'low'
+  }
+
+  return 'available'
 }
 
 function applyResultMessage(

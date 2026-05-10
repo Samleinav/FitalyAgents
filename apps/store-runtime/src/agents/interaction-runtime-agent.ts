@@ -158,6 +158,10 @@ export class InteractionRuntimeAgent extends StreamAgent {
       return
     }
 
+    if (await this.handleCorrectionIntent(speechEvent)) {
+      return
+    }
+
     if (await this.handleCancelIntent(speechEvent)) {
       return
     }
@@ -302,6 +306,44 @@ export class InteractionRuntimeAgent extends StreamAgent {
           break
       }
     }
+  }
+
+  private async handleCorrectionIntent(event: {
+    session_id: string
+    text: string
+  }): Promise<boolean> {
+    if (!isCorrectionIntent(event.text)) {
+      return false
+    }
+
+    const draft = await this.deps.draftStore.getBySession(event.session_id)
+    if (!draft) {
+      return false
+    }
+
+    await this.deps.draftStore.cancel(draft.id)
+    await this.deps.ttsStream.speakText(
+      event.session_id,
+      this.buildCorrectionPrompt(event.session_id, draft.items),
+      6,
+    )
+    return true
+  }
+
+  private buildCorrectionPrompt(sessionId: string, draftItems: Record<string, unknown>): string {
+    const products = this.lastProductList.get(sessionId) ?? []
+    if (products.length === 0) {
+      return 'Cual prefieres? Dime el codigo o describelo.'
+    }
+
+    const draftProductIds = extractDraftProductIds(draftItems)
+    const alternatives = products.filter((product) => !draftProductIds.has(product.id))
+    const visibleOptions = alternatives.length > 0 ? alternatives : products
+    const optionText = visibleOptions
+      .map((product) => `${product.visualId} ${product.name}`)
+      .join(', ')
+
+    return `Cual prefieres? ${optionText}.`
   }
 
   private async handleCancelIntent(event: { session_id: string; text: string }): Promise<boolean> {
@@ -575,6 +617,7 @@ function extractSuggestionsFromResult(result: unknown): CustomerDisplaySuggestio
     const id = readString(record.id)
     const name = readString(record.name)
     const price = readNumber(record.price)
+    const stock = readNumber(record.stock)
     if (!id || !name || price == null) {
       continue
     }
@@ -584,7 +627,8 @@ function extractSuggestionsFromResult(result: unknown): CustomerDisplaySuggestio
       name,
       price,
       description: readString(record.description) ?? '',
-      stock: readNumber(record.stock) ?? undefined,
+      stock: stock ?? undefined,
+      stockStatus: readStockStatus(stock),
     })
   }
 
@@ -638,6 +682,49 @@ function uniqueByPrice(
 ): CustomerDisplaySuggestion | null {
   const matches = products.filter((product) => product.price === price)
   return matches.length === 1 ? matches[0] : null
+}
+
+function extractDraftProductIds(items: Record<string, unknown>): Set<string> {
+  const ids = new Set<string>()
+  collectDraftProductIds(items, ids)
+  return ids
+}
+
+function collectDraftProductIds(value: unknown, ids: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectDraftProductIds(entry, ids)
+    }
+    return
+  }
+
+  const record = toRecord(value)
+  if (Object.keys(record).length === 0) {
+    return
+  }
+
+  const productId = readString(record.product_id) ?? readString(record.id)
+  if (productId) {
+    ids.add(productId)
+  }
+
+  for (const entry of Object.values(record)) {
+    if (entry && typeof entry === 'object') {
+      collectDraftProductIds(entry, ids)
+    }
+  }
+}
+
+function readStockStatus(stock: number | null): CustomerDisplaySuggestion['stockStatus'] {
+  if (stock === 0) {
+    return 'out'
+  }
+
+  if (stock != null && stock > 0 && stock <= 5) {
+    return 'low'
+  }
+
+  return 'available'
 }
 
 function extractAttributeTerms(normalized: string): string[] {
@@ -708,6 +795,13 @@ function isFreshBrowseIntent(text: string): boolean {
 function isCheckoutIntent(text: string): boolean {
   const normalized = normalizeIntentText(text)
   return /\b(pagar|pago|pagamos|cobrar|cobro|checkout|finalizar|cerrar|datafono|tarjeta|efectivo|cash)\b/.test(
+    normalized,
+  )
+}
+
+function isCorrectionIntent(text: string): boolean {
+  const normalized = normalizeIntentText(text)
+  return /\b(mejor el otro|cambia al|prefiero el otro|no ese|no esa|quiero el otro|ese no)\b/.test(
     normalized,
   )
 }

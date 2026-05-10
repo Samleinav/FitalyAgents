@@ -143,8 +143,18 @@ describe('customer-display-state', () => {
     })
 
     expect(state.suggestions).toHaveLength(2)
-    expect(state.suggestions[0]).toMatchObject({ id: 'sku-1', visualId: 'A1', stock: 4 })
-    expect(state.suggestions[1]).toMatchObject({ id: 'sku-2', visualId: 'A2', stock: 2 })
+    expect(state.suggestions[0]).toMatchObject({
+      id: 'sku-1',
+      visualId: 'A1',
+      stock: 4,
+      stockStatus: 'low',
+    })
+    expect(state.suggestions[1]).toMatchObject({
+      id: 'sku-2',
+      visualId: 'A2',
+      stock: 2,
+      stockStatus: 'low',
+    })
     expect(state.order.approvalStatus).toBe('approved')
     expect(state.order.refundStatus).toBe('idle')
     expect(state.message).toMatchObject({
@@ -222,5 +232,33 @@ describe('customer-display-state', () => {
       'A6',
     ])
     expect(state.suggestions.map((product) => product.id)).not.toContain('sku-7')
+  })
+
+  it('assigns stock statuses to product suggestions', () => {
+    const state = applyCustomerDisplayBusEvent(
+      createCustomerDisplayState('store-test', 'full'),
+      'bus:TOOL_RESULT',
+      {
+        event: 'TOOL_RESULT',
+        tool_name: 'product_search',
+        session_id: 'session-5',
+        result: {
+          products: [
+            { id: 'sku-out', name: 'Sin stock', price: 10, description: 'Agotado', stock: 0 },
+            { id: 'sku-low', name: 'Pocas unidades', price: 20, description: 'Ultimas', stock: 5 },
+            { id: 'sku-ok', name: 'Disponible', price: 30, description: 'Normal', stock: 6 },
+            { id: 'sku-unknown', name: 'Sin dato', price: 40, description: 'Sin inventario' },
+          ],
+        },
+        timestamp: 23,
+      },
+    )
+
+    expect(state.suggestions.map((product) => product.stockStatus)).toEqual([
+      'out',
+      'low',
+      'available',
+      'available',
+    ])
   })
 })
