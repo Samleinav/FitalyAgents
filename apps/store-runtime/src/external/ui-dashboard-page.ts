@@ -133,6 +133,57 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         backdrop-filter: blur(16px);
       }
 
+      .staff-action-panel {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 18px;
+        padding: 22px;
+        border-radius: var(--radius);
+        border: 1px solid rgba(176, 107, 27, 0.35);
+        background: linear-gradient(135deg, rgba(255, 205, 111, 0.96), rgba(255, 244, 214, 0.92));
+        box-shadow: 0 20px 50px rgba(176, 107, 27, 0.2);
+      }
+
+      .staff-action-panel.hidden {
+        display: none;
+      }
+
+      .staff-action-top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .staff-action-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(23, 50, 74, 0.12);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .staff-action-message {
+        margin: 0;
+        font-size: clamp(22px, 3vw, 34px);
+        line-height: 1.08;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+
+      .staff-action-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
       .stat {
         padding: 18px 20px;
       }
@@ -419,6 +470,15 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         </div>
       </section>
 
+      <section id="staff-action-panel" class="staff-action-panel hidden" aria-live="polite">
+        <div class="staff-action-top">
+          <span class="staff-action-badge">! Acción requerida - EMPLEADO</span>
+          <span id="staff-action-time" class="mono">-</span>
+        </div>
+        <p id="staff-action-message" class="staff-action-message"></p>
+        <div id="staff-action-meta" class="staff-action-meta"></div>
+      </section>
+
       <section class="layout">
         <div class="left-column">
           <article class="card panel">
@@ -489,6 +549,10 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         primarySlot: document.getElementById('primary-slot'),
         queuedSlot: document.getElementById('queued-slot'),
         ambientSlot: document.getElementById('ambient-slot'),
+        staffActionPanel: document.getElementById('staff-action-panel'),
+        staffActionTime: document.getElementById('staff-action-time'),
+        staffActionMessage: document.getElementById('staff-action-message'),
+        staffActionMeta: document.getElementById('staff-action-meta'),
         approvalList: document.getElementById('approval-list'),
         transcriptList: document.getElementById('transcript-list'),
         componentGrid: document.getElementById('component-grid'),
@@ -533,6 +597,7 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         renderConnection();
         renderStats();
         renderQueue();
+        renderStaffAction();
         renderApprovals();
         renderTranscript();
         renderComponents();
@@ -569,6 +634,32 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         elements.primarySlot.textContent = state.queue.primary || 'Sin cliente';
         elements.queuedSlot.innerHTML = renderChipList(state.queue.queued, 'Nadie en cola');
         elements.ambientSlot.innerHTML = renderChipList(state.queue.ambient, 'Sin ambiente');
+      }
+
+      function renderStaffAction() {
+        const state = app.state;
+        if (!state || !state.staffAction) {
+          elements.staffActionPanel.classList.add('hidden');
+          elements.staffActionMessage.textContent = '';
+          elements.staffActionMeta.innerHTML = '';
+          return;
+        }
+
+        const action = state.staffAction;
+        elements.staffActionPanel.classList.remove('hidden');
+        elements.staffActionMessage.textContent = action.message;
+        elements.staffActionTime.textContent = action.triggeredAt ? formatTime(action.triggeredAt) : '-';
+
+        const meta = [
+          ['metodo', labelPaymentMethod(action.paymentMethod)],
+          ['monto', action.amount == null ? 'Monto pendiente' : formatCurrency(action.amount)],
+          ['orden', action.orderId || 'sin orden'],
+          ['sesion', action.sessionId || 'sin sesion'],
+        ];
+
+        elements.staffActionMeta.innerHTML = meta
+          .map(([label, value]) => \`<span class="chip"><strong>\${escapeHtml(label)}</strong> <span class="mono">\${escapeHtml(value)}</span></span>\`)
+          .join('');
       }
 
       function renderApprovals() {
@@ -769,12 +860,34 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         }
       }
 
+      function labelPaymentMethod(method) {
+        switch (method) {
+          case 'cash':
+            return 'efectivo';
+          case 'card':
+            return 'tarjeta';
+          case null:
+          case undefined:
+          case '':
+            return 'sin metodo';
+          default:
+            return String(method);
+        }
+      }
+
       function formatTime(timestamp) {
         return new Date(timestamp).toLocaleTimeString('es-ES', {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
         });
+      }
+
+      function formatCurrency(value) {
+        return new Intl.NumberFormat('es', {
+          style: 'currency',
+          currency: 'USD',
+        }).format(Number(value));
       }
 
       function emptyState(message) {
