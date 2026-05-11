@@ -22,9 +22,12 @@ export interface CustomerDisplayMessage {
 
 export interface CustomerDisplaySuggestion {
   id: string
+  visualId: string
   name: string
   price: number
   description: string
+  stock?: number
+  stockStatus: 'available' | 'low' | 'out'
 }
 
 export interface CustomerDisplayState {
@@ -152,6 +155,10 @@ export function applyCustomerDisplayBusEvent(
 
     case 'bus:AVATAR_SPEAK':
       applyAvatarSpeak(next, event, timestamp)
+      break
+
+    case 'bus:SESSION_ENDED':
+      applySessionEnded(next)
       break
 
     default:
@@ -473,6 +480,15 @@ function applyAvatarSpeak(
   }
 }
 
+function applySessionEnded(state: CustomerDisplayState): void {
+  const clean = createCustomerDisplayState(state.storeId, state.mode)
+  state.sessionId = clean.sessionId
+  state.speakerId = clean.speakerId
+  state.order = clean.order
+  state.suggestions = clean.suggestions
+  state.message = clean.message
+}
+
 function applyOrderItems(
   state: CustomerDisplayState,
   nextItems: CustomerDisplayLineItem[],
@@ -610,28 +626,47 @@ function readProductSuggestions(value: unknown): CustomerDisplaySuggestion[] {
     return []
   }
 
-  return value.flatMap((entry) => {
-    if (!entry || typeof entry !== 'object') {
-      return []
-    }
+  const suggestions: Omit<CustomerDisplaySuggestion, 'visualId'>[] = []
 
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
     const record = entry as Record<string, unknown>
     const id = readString(record.id)
     const name = readString(record.name)
     const price = readNumber(record.price)
+    const stock = readNumber(record.stock)
     if (!id || !name || price == null) {
-      return []
+      continue
     }
 
-    return [
-      {
-        id,
-        name,
-        price,
-        description: readString(record.description) ?? '',
-      },
-    ]
-  })
+    suggestions.push({
+      id,
+      name,
+      price,
+      description: readString(record.description) ?? '',
+      stock: stock ?? undefined,
+      stockStatus: readStockStatus(stock),
+    })
+  }
+
+  return suggestions.slice(0, MAX_SUGGESTIONS).map((suggestion, index) => ({
+    ...suggestion,
+    visualId: `A${index + 1}`,
+  }))
+}
+
+function readStockStatus(stock: number | null): CustomerDisplaySuggestion['stockStatus'] {
+  if (stock === 0) {
+    return 'out'
+  }
+
+  if (stock != null && stock > 0 && stock <= 5) {
+    return 'low'
+  }
+
+  return 'available'
 }
 
 function applyResultMessage(

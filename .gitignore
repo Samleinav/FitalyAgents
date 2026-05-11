@@ -50,3 +50,9 @@ audio_bridge.py
 tools/
 .atom8n/
 .claude/
+
+# Store runtime source directories named "tools" are part of the app.
+!apps/store-runtime/src/tools/
+!apps/store-runtime/src/tools/**
+!apps/store-runtime/src/retail/tools/
+!apps/store-runtime/src/retail/tools/**

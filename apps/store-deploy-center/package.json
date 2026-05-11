@@ -12,7 +12,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.9.0",
     "dotenv": "^16.4.0",
     "fastify": "^5.0.0",
     "zod": "^3.24.2"

@@ -80,6 +80,8 @@ export function createBaseConfig(overrides: Record<string, unknown> = {}): Store
       barge_in_enabled: true,
       turn_detection: 'hybrid',
       sample_rate: 16000,
+      vad_silence_timeout_ms: 200,
+      vad_min_speech_ms: 300,
     },
     retail: {
       service_mode: 'assisted-retail',
@@ -183,6 +185,9 @@ export function createBaseConfig(overrides: Record<string, unknown> = {}): Store
       publish_transcripts: true,
       forward_tts_audio: true,
       debug_ingress_enabled: false,
+      room_idle_timeout_ms: 60_000,
+      delete_room_on_idle: true,
+      token_ttl: '30m',
     },
     avatar: {
       enabled: false,

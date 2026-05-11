@@ -314,6 +314,71 @@ export function renderCustomerDisplayHtml(deps: {
         border: 1px solid rgba(255, 255, 255, 0.05);
       }
 
+      .suggestion-item {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 14px;
+        align-items: center;
+        border-radius: 8px;
+      }
+
+      .suggestion-item.out {
+        opacity: 0.56;
+        border-color: rgba(251, 113, 133, 0.28);
+      }
+
+      .suggestion-code {
+        min-width: 74px;
+        max-width: 140px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: rgba(52, 211, 153, 0.14);
+        color: var(--success);
+        font-size: 12px;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+        text-align: center;
+      }
+
+      .suggestion-name {
+        display: block;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .suggestion-meta {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.35;
+      }
+
+      .suggestion-price {
+        text-align: right;
+      }
+
+      .suggestion-stock {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        margin-top: 8px;
+        padding: 5px 8px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .suggestion-stock.low {
+        background: rgba(251, 191, 36, 0.16);
+        color: var(--warning);
+      }
+
+      .suggestion-stock.out {
+        background: rgba(251, 113, 133, 0.16);
+        color: var(--danger);
+      }
+
       .suggestion-item strong,
       .change-item strong {
         display: block;
@@ -356,6 +421,14 @@ export function renderCustomerDisplayHtml(deps: {
 
         .line-item {
           grid-template-columns: 1fr;
+        }
+
+        .suggestion-item {
+          grid-template-columns: 1fr;
+        }
+
+        .suggestion-price {
+          text-align: left;
         }
 
         .right {
@@ -617,19 +690,34 @@ export function renderCustomerDisplayHtml(deps: {
       function renderSuggestions() {
         const state = app.state;
         if (!state || state.suggestions.length === 0) {
-          elements.suggestionsSlot.innerHTML = emptyState('Cuando haya sugerencias o bundles, se mostrarán aquí.');
+          elements.suggestionsSlot.innerHTML = emptyState('Cuando haya productos, se mostraran aqui con su codigo.');
           return;
         }
 
         elements.suggestionsSlot.innerHTML = state.suggestions
           .map((product) => {
+            const stockStatus = product.stockStatus || inferStockStatus(product.stock);
+            const stockLabel = typeof product.stock === 'number'
+              ? product.stock > 0
+                ? product.stock + ' disponibles'
+                : 'sin stock'
+              : 'stock por confirmar';
+            const detail = [product.description || 'Producto disponible', stockLabel].filter(Boolean).join(' - ');
+            const visualId = product.visualId || product.id;
+            const stockIndicator = stockStatus === 'low'
+              ? '<span class="suggestion-stock low">Últimas unidades</span>'
+              : stockStatus === 'out'
+                ? '<span class="suggestion-stock out">Agotado</span>'
+                : '';
             return \`
-              <article class="suggestion-item">
-                <strong>\${escapeHtml(product.name)}</strong>
-                <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
-                  <span>\${escapeHtml(product.description || 'Producto recomendado')}</span>
-                  <span class="mono">\${formatCurrency(product.price)}</span>
+              <article class="suggestion-item \${stockStatus === 'out' ? 'out' : ''}">
+                <div class="suggestion-code">[\${escapeHtml(visualId)}]</div>
+                <div class="suggestion-main">
+                  <span class="suggestion-name">\${escapeHtml(product.name)}</span>
+                  <span class="suggestion-meta">\${escapeHtml(detail)}</span>
+                  \${stockIndicator}
                 </div>
+                <div class="suggestion-price mono">\${formatCurrency(product.price)}</div>
               </article>
             \`;
           })
@@ -701,6 +789,16 @@ export function renderCustomerDisplayHtml(deps: {
           default:
             return 'actualizado';
         }
+      }
+
+      function inferStockStatus(stock) {
+        if (stock === 0) {
+          return 'out';
+        }
+        if (typeof stock === 'number' && stock > 0 && stock <= 5) {
+          return 'low';
+        }
+        return 'available';
       }
 
       function formatCurrency(value) {

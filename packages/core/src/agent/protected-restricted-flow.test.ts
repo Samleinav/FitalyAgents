@@ -111,7 +111,7 @@ describe('PROTECTED + RESTRICTED flows (Sprint 3.3)', () => {
         expect(confirmResult.result).toEqual({ success: true, new_price: 50 })
       }
       expect(executor.execute).toHaveBeenCalledWith('price_override', { amount: 50 })
-      expect(ttsLog).toContain('Acción ejecutada correctamente.')
+      expect(ttsLog).toContain('Listo, solicitud procesada.')
       expect(agent.hasPendingConfirmation('session-1')).toBe(false)
     })
   })
@@ -188,7 +188,7 @@ describe('PROTECTED + RESTRICTED flows (Sprint 3.3)', () => {
       const result = await agent.handleProtectedConfirm('session-1', '¿cuánto cuesta?')
 
       expect(result.type).toBe('no_pending')
-      expect(ttsLog.some((t) => t.includes('No entendí'))).toBe(true)
+      expect(ttsLog.some((t) => t.includes('No entendi'))).toBe(true)
       // Confirmation is still pending after an ambiguous response
     })
   })

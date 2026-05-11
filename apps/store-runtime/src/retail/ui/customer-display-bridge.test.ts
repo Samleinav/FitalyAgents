@@ -129,6 +129,27 @@ describe('customer-display-bridge', () => {
       expect(page.statusCode).toBe(200)
       expect(page.body).toContain('Pantalla Cliente')
       expect(page.body).toContain('customer_display_state')
+
+      await bus.publish('bus:SESSION_ENDED', {
+        event: 'SESSION_ENDED',
+        session_id: 'session-1',
+        store_id: 'store-test',
+        timestamp: 5,
+      })
+
+      expect(service.hub.getLastState()).toMatchObject({
+        storeId: 'store-test',
+        sessionId: null,
+        speakerId: null,
+        suggestions: [],
+        message: null,
+        order: {
+          status: 'idle',
+          items: [],
+          total: 0,
+          paymentStatus: 'idle',
+        },
+      })
     } finally {
       await service.shutdown()
       await cleanupTempDir(dir)

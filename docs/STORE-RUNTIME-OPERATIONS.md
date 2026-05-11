@@ -60,8 +60,11 @@ Servicios principales:
 
 ### `livekit-voice-bridge`
 
+- `GET /`
 - `GET /health`
 - `GET /state`
+- `GET /client-token`
+- `POST /room/close`
 - `POST /debug/transcript` si `debug_ingress_enabled=true`
 
 Con `livekit_voice_bridge.transport = "livekit-rtc"`, el bridge también se une
@@ -72,6 +75,13 @@ y `LIVEKIT_ROOM`.
 `fitaly-demo-store-001`. LiveKit puede crear el room automáticamente cuando entra
 el primer participante, o puedes crearlo antes con RoomService/CLI si necesitas
 configurar `emptyTimeout` o `maxParticipants`.
+
+El bridge LiveKit debe estar inactivo cuando nadie esta probando voz:
+`GET /health` debe devolver `room_connected:false`. La conexion al room se abre
+bajo demanda cuando la pagina de `:3050` pide `/client-token`. Al desconectar el
+ultimo navegador, el room se cierra despues de `room_idle_timeout_ms`; si
+`delete_room_on_idle=true`, tambien se borra en LiveKit Cloud/self-hosted para
+no acumular minutos activos.
 
 Puertos por defecto:
 
@@ -116,7 +126,7 @@ Resultado esperado:
 - `http://127.0.0.1:3020/health` devuelve `status: ok`
 - `http://127.0.0.1:3040/health` devuelve `status: ok`
 - `http://127.0.0.1:3050/health` devuelve `status: ok` si el bridge LiveKit
-  está habilitado
+  está habilitado; sin clientes conectados debe incluir `room_connected:false`
 - `http://127.0.0.1:3010/` muestra target group, transcripción y paneles
 - `http://127.0.0.1:3020/` muestra pedido, totales, cambios y sugerencias
 - `http://127.0.0.1:3040/` abre la prueba web de voz/transcript
@@ -163,6 +173,32 @@ El smoke crea un participante temporal, publica el transcript en
 conexión y publicación de transcript, o `--text-stream` para probar la ruta de
 LiveKit text streams.
 
+### LiveKit Session Cleanup
+
+Para cerrar una prueba manualmente desde la maquina local:
+
+```bash
+curl -X POST http://127.0.0.1:3050/room/close \
+  -H "content-type: application/json" \
+  -d "{}"
+```
+
+Resultado esperado:
+
+```json
+{ "ok": true, "room_name": "fitaly-demo-store-001" }
+```
+
+Despues del cierre:
+
+- `GET /health` debe reportar `room_connected:false`
+- `GET /state` debe mostrar `participant_count:0` y `active_sessions:0`
+- el dashboard de LiveKit no debe mostrar el room como `ACTIVE`
+
+Si el navegador en `:3050` muestra `Desconectado`, eso es normal cuando no hay
+room abierto. Pulsa `Conectar LiveKit` para iniciar una nueva prueba, y
+`Cerrar Sala` al terminar si quieres forzar limpieza inmediata.
+
 ## Validation Checklist
 
 1. Confirma que Redis está accesible.
@@ -179,18 +215,21 @@ LiveKit text streams.
    - respuesta del asistente
    - al menos `product_grid`, `order_panel` y `approval_bar`
 10. Verifica que el customer display muestre:
-   - productos o sugerencias
-   - orden actual
-   - total visible
-   - estado de pago o aprobación
+
+- productos o sugerencias
+- orden actual
+- total visible
+- estado de pago o aprobación
+
 11. Si usas `web-voice-bridge`, verifica que `/ws/voice` emita:
-   - `partial_transcript`
-   - `final_transcript`
-   - `turn_state`
-   - `assistant_text`
-   - `assistant_audio_start`
-   - `assistant_audio_chunk`
-   - `assistant_audio_end`
+
+- `partial_transcript`
+- `final_transcript`
+- `turn_state`
+- `assistant_text`
+- `assistant_audio_start`
+- `assistant_audio_chunk`
+- `assistant_audio_end`
 
 ## Bus Events That Matter
 

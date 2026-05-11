@@ -22,12 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `store-runtime` ahora documenta el despliegue Redis-first con `store-ui-bridge`, `customer-display`, `store-deploy-center` y `livekit-voice-bridge` en puertos locales `3000`, `3010`, `3020`, `3030` y `3050`.
+- `livekit-voice-bridge` abre rooms LiveKit bajo demanda al emitir `/client-token`, reporta `room_connected` en health/state y usa TTL configurable para tokens de cliente.
 - `HumanRole` y `HumanProfile` ahora aceptan aliases genÃ©ricos (`user`, `agent`, `operator`, `supervisor`) ademÃ¡s del modelo retail legacy (`customer`, `staff`, `cashier`, `manager`), y soportan `org_id` junto con `store_id`
 - `StaffAgent` amplÃ­a sus roles por defecto para cubrir aliases genÃ©ricos y puede ejecutar un comando inline en la misma frase de activaciÃ³n cuando la intervenciÃ³n sÃ­ parece una orden operativa
 - DocumentaciÃ³n de governance, human roles y hardening alineada con el runtime actual, incluyendo `bus:AGENT_ERROR` y el comportamiento real de `HALF_OPEN`
 
 ### Fixed
 
+- Las sesiones LiveKit ya no quedan activas cuando el navegador se desconecta: el bridge borra el room tras inactividad configurable o con `POST /room/close`.
 - `CircuitBreaker` en `@fitalyagents/asynctools` ahora deja pasar un solo probe concurrente en `HALF_OPEN`
 - `InMemoryBus.publish()` ya no bloquea el resto de handlers cuando uno falla, sigue esperando handlers async y vuelve a despachar handlers sync en el mismo tick
 - `StreamAgent` deja de tragar errores silenciosamente y publica `bus:AGENT_ERROR` cuando `onEvent()` falla
@@ -36,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Runbook de `Store Deploy Center` para operar el portal local de despliegue, presets, compose, logs y pantallas embebidas.
+- Controles de ciclo de vida LiveKit en config: `room_idle_timeout_ms`, `delete_room_on_idle` y `token_ttl`.
 - New runnable framework examples under `examples/openai-agent`, `examples/langchain-agent`, and `examples/vercel-ai-sdk-agent`
 - Integration docs refreshed to match the current `InteractionAgent` / `IStreamingLLM` runtime and point to those examples
 

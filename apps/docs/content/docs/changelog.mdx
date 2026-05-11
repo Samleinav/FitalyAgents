@@ -8,6 +8,8 @@ full: true
 
 ### Changed
 
+- Store runtime docs now cover the Redis-first local stack across ports `3000`, `3010`, `3020`, `3030`, and `3050`.
+- `livekit-voice-bridge` now opens LiveKit rooms on demand through `/client-token`, reports `room_connected`, and uses configurable client token TTL.
 - Human role compatibility now accepts generic aliases (`user`, `agent`, `operator`, `supervisor`) alongside the original retail names, and `HumanProfile` accepts `org_id` in addition to `store_id`.
 - `StaffAgent` default roles now cover both alias families, and activation utterances such as `Fitaly, aplica...` can execute an inline operational command when the phrase clearly looks actionable.
 - Governance, human-role, and hardening docs were aligned with current runtime behavior, including `bus:AGENT_ERROR` and the real `HALF_OPEN` semantics.
@@ -15,6 +17,7 @@ full: true
 
 ### Fixed
 
+- LiveKit rooms are no longer kept alive by the bridge after browser disconnect; idle rooms can be deleted automatically or through `POST /room/close`.
 - `CircuitBreaker` now allows only one concurrent probe in `HALF_OPEN`.
 - `InMemoryBus.publish()` now keeps dispatching after a handler failure, still awaits async handlers, and no longer defers synchronous subscribers to a later microtask.
 - `StreamAgent` now emits `bus:AGENT_ERROR` when `onEvent()` fails instead of swallowing the failure silently.
@@ -23,6 +26,8 @@ full: true
 
 ### Added
 
+- Store Deploy Center operations guide for local deploys, compose profiles, health checks, logs, and embedded store screens.
+- LiveKit lifecycle config fields: `room_idle_timeout_ms`, `delete_room_on_idle`, and `token_ttl`.
 - New runnable examples in `examples/openai-agent`, `examples/langchain-agent`, and `examples/vercel-ai-sdk-agent`.
 
 ## v1.2.0 — 2026-03-06

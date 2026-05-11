@@ -189,6 +189,8 @@ export const StoreConfigSchema = z.object({
       barge_in_enabled: z.boolean().default(true),
       turn_detection: VoiceTurnDetectionSchema.default('hybrid'),
       sample_rate: z.number().int().positive().default(16000),
+      vad_silence_timeout_ms: z.number().int().min(100).max(1000).default(200),
+      vad_min_speech_ms: z.number().int().min(50).max(1000).default(300),
     })
     .default({}),
 
@@ -243,6 +245,9 @@ export const StoreConfigSchema = z.object({
       publish_transcripts: z.boolean().default(true),
       forward_tts_audio: z.boolean().default(true),
       debug_ingress_enabled: z.boolean().default(false),
+      room_idle_timeout_ms: z.number().int().positive().default(60_000),
+      delete_room_on_idle: z.boolean().default(true),
+      token_ttl: z.string().min(1).default('30m'),
     })
     .default({}),
 

@@ -53,11 +53,12 @@
       "enabled": false
     },
     {
-      "id": "fitaly-voice",
+      "id": "livekit-voice-bridge",
       "label": "Voice Service",
-      "service_name": "fitaly-voice",
+      "service_name": "livekit-voice-bridge",
       "kind": "voice",
-      "enabled": false
+      "health_url": "http://127.0.0.1:3050/health",
+      "enabled": true
     }
   ],
   "screens": [

@@ -98,7 +98,10 @@
   },
   "livekit_voice_bridge": {
     "enabled": true,
-    "transport": "livekit-rtc"
+    "transport": "livekit-rtc",
+    "room_idle_timeout_ms": 60000,
+    "delete_room_on_idle": true,
+    "token_ttl": "30m"
   },
   "http": {
     "host": "127.0.0.1",

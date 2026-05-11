@@ -72,7 +72,10 @@
         "room_name": { "type": "string" },
         "room_name_env": { "type": "string" },
         "input_topic": { "type": "string" },
-        "output_topic": { "type": "string" }
+        "output_topic": { "type": "string" },
+        "room_idle_timeout_ms": { "type": "integer", "minimum": 1 },
+        "delete_room_on_idle": { "type": "boolean" },
+        "token_ttl": { "type": "string", "minLength": 1 }
       }
     },
     "avatar": {

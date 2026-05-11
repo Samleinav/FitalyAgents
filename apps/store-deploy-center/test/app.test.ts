@@ -169,6 +169,7 @@ describe('deploy-center HTTP server', () => {
         stderr: '',
         ok: true,
       }),
+      getContainerStates: vi.fn().mockResolvedValue(null),
     }
 
     const server = buildDeployCenterServer({
