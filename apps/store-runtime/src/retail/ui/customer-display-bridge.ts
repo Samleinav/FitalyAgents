@@ -16,6 +16,7 @@ const CUSTOMER_DISPLAY_CHANNELS = [
   'bus:APPROVAL_RESOLVED',
   'bus:ORDER_APPROVAL_TIMEOUT',
   'bus:AVATAR_SPEAK',
+  'bus:SESSION_ENDED',
 ] as const
 
 interface CustomerDisplayClient {

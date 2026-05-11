@@ -15,7 +15,7 @@ class PipelineConfig:
     # VAD
     vad_threshold: float = 0.5
     vad_min_speech_ms: int = 300
-    vad_max_silence_ms: int = 500
+    vad_max_silence_ms: int = 200
 
     # Denoiser
     denoiser_backend: Literal["rnnoise", "spectral"] = "rnnoise"
@@ -70,7 +70,7 @@ class PipelineConfig:
             bus_mode=os.getenv("BUS_MODE", "redis"),  # type: ignore[arg-type]
             vad_threshold=float(os.getenv("VAD_THRESHOLD", "0.5")),
             vad_min_speech_ms=int(os.getenv("VAD_MIN_SPEECH_MS", "300")),
-            vad_max_silence_ms=int(os.getenv("VAD_MAX_SILENCE_MS", "500")),
+            vad_max_silence_ms=int(os.getenv("VAD_MAX_SILENCE_MS", "200")),
             denoiser_backend=os.getenv("DENOISER_BACKEND", "rnnoise"),  # type: ignore[arg-type]
             diarizer_model=os.getenv("DIARIZER_MODEL", "diar_streaming_sortformer_4spk-v2.1"),
             diarizer_device=os.getenv("DIARIZER_DEVICE", "cuda"),

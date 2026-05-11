@@ -2,1778 +2,775 @@ export function renderDeployCenterHtml(args: { projectName: string }): string {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtml(args.projectName)}</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet"/>
-  <style>
-    :root {
-      --cream: #f7f2ea;
-      --cream-deep: #ede6d9;
-      --cream-border: #d9cfbe;
-      --ink: #2a2118;
-      --ink-soft: #8a7a66;
-      --amber: #c97d2a;
-      --amber-soft: rgba(201,125,42,.12);
-      --sage: #5a7a5e;
-      --sage-soft: #c8dec9;
-      --rust: #c25a3a;
-      --rust-soft: #f5d8ce;
-      --sky: #3a6a8a;
-      --sky-soft: #c8def0;
-      --panel: #fffdf7;
-      --radius: 14px;
-      --shadow: 0 12px 40px rgba(42,33,24,.08);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: 'Syne', sans-serif;
-      background:
-        radial-gradient(circle at top right, rgba(201,125,42,.12), transparent 28%),
-        linear-gradient(180deg, #fbf7ef 0%, var(--cream) 100%);
-      color: var(--ink);
-      min-height: 100vh;
-    }
-    .shell {
-      display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
-      min-height: 100vh;
-    }
-    .sidebar {
-      background: rgba(255,253,247,.9);
-      border-right: 1px solid var(--cream-border);
-      padding: 24px 18px;
-      backdrop-filter: blur(10px);
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-    .brand-mark {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-      background: var(--ink);
-      color: var(--cream);
-      display: grid;
-      place-items: center;
-      font-family: 'DM Serif Display', serif;
-      font-size: 20px;
-    }
-    .brand-copy h1 {
-      margin: 0;
-      font-family: 'DM Serif Display', serif;
-      font-size: 22px;
-      line-height: 1;
-    }
-    .brand-copy p {
-      margin: 5px 0 0;
-      color: var(--ink-soft);
-      font-size: 12px;
-      font-family: 'DM Mono', monospace;
-    }
-    .section-label {
-      margin: 20px 0 10px;
-      color: var(--ink-soft);
-      font-size: 11px;
-      letter-spacing: .16em;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
-    .service-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .service-item {
-      border: 1px solid var(--cream-border);
-      border-radius: 12px;
-      background: var(--panel);
-      padding: 12px;
-      box-shadow: 0 4px 18px rgba(42,33,24,.05);
-    }
-    .service-title {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 6px;
-    }
-    .service-title strong {
-      font-size: 13px;
-    }
-    .status-pill {
-      border-radius: 999px;
-      padding: 3px 9px;
-      font-size: 10px;
-      font-family: 'DM Mono', monospace;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-    }
-    .status-running { background: var(--sage-soft); color: var(--sage); }
-    .status-down { background: var(--rust-soft); color: var(--rust); }
-    .status-unverified { background: var(--sky-soft); color: var(--sky); }
-    .status-disabled { background: var(--cream-deep); color: var(--ink-soft); }
-    .service-meta {
-      font-size: 11px;
-      color: var(--ink-soft);
-      font-family: 'DM Mono', monospace;
-    }
-    .main {
-      padding: 26px 28px 28px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      align-items: center;
-      background: rgba(255,253,247,.82);
-      border: 1px solid var(--cream-border);
-      border-radius: 18px;
-      padding: 18px 20px;
-      box-shadow: var(--shadow);
-    }
-    .topbar h2 {
-      margin: 0;
-      font-family: 'DM Serif Display', serif;
-      font-size: 30px;
-      line-height: 1;
-    }
-    .topbar p {
-      margin: 8px 0 0;
-      color: var(--ink-soft);
-      font-size: 13px;
-    }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: flex-end;
-    }
-    button, select, input {
-      font: inherit;
-    }
-    .btn {
-      border: none;
-      border-radius: 12px;
-      padding: 11px 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
-    }
-    .btn:hover {
-      transform: translateY(-1px);
-    }
-    .btn-amber {
-      background: var(--amber);
-      color: white;
-      box-shadow: 0 10px 22px rgba(201,125,42,.22);
-    }
-    .btn-ghost {
-      background: transparent;
-      color: var(--ink);
-      border: 1px solid var(--cream-border);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(12, minmax(0, 1fr));
-      gap: 18px;
-    }
-    .card {
-      grid-column: span 12;
-      background: rgba(255,253,247,.88);
-      border: 1px solid var(--cream-border);
-      border-radius: 18px;
-      padding: 18px;
-      box-shadow: var(--shadow);
-    }
-    .card h3 {
-      margin: 0 0 14px;
-      font-size: 12px;
-      letter-spacing: .18em;
-      text-transform: uppercase;
-      color: var(--ink-soft);
-    }
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .metric {
-      border: 1px solid var(--cream-border);
-      border-radius: 14px;
-      background: white;
-      padding: 14px;
-    }
-    .metric span {
-      display: block;
-      color: var(--ink-soft);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .12em;
-      margin-bottom: 8px;
-    }
-    .metric strong {
-      font-size: 28px;
-      font-family: 'DM Serif Display', serif;
-      font-weight: 400;
-    }
-    .wizard-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.5fr) minmax(280px, .9fr);
-      gap: 16px;
-      align-items: start;
-    }
-    .wizard-steps {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .wizard-step {
-      border: 1px solid var(--cream-border);
-      border-radius: 16px;
-      background: white;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-height: 184px;
-    }
-    .wizard-step.step-done {
-      border-color: rgba(90,122,94,.32);
-      box-shadow: 0 8px 24px rgba(90,122,94,.08);
-    }
-    .wizard-step.step-active {
-      border-color: rgba(201,125,42,.35);
-      box-shadow: 0 8px 24px rgba(201,125,42,.08);
-    }
-    .wizard-step.step-pending {
-      border-style: dashed;
-    }
-    .wizard-step-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      gap: 12px;
-    }
-    .wizard-step-index {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      background: var(--cream-deep);
-      color: var(--ink);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: .08em;
-      font-family: 'DM Mono', monospace;
-    }
-    .wizard-step-title {
-      margin: 0;
-      font-size: 18px;
-      font-family: 'DM Serif Display', serif;
-      font-weight: 400;
-    }
-    .wizard-step-copy {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .wizard-step-detail {
-      color: var(--ink-soft);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .wizard-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 10px;
-      font-family: 'DM Mono', monospace;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .wizard-status-done {
-      background: var(--sage-soft);
-      color: var(--sage);
-    }
-    .wizard-status-active {
-      background: var(--amber-soft);
-      color: var(--amber);
-    }
-    .wizard-status-pending {
-      background: var(--cream-deep);
-      color: var(--ink-soft);
-    }
-    .wizard-panel {
-      border: 1px solid var(--cream-border);
-      border-radius: 16px;
-      background: white;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-height: 100%;
-    }
-    .wizard-panel p {
-      margin: 0;
-      color: var(--ink-soft);
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    .preset-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .preset-card {
-      border: 1px solid var(--cream-border);
-      border-radius: 16px;
-      background: white;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-height: 220px;
-    }
-    .preset-card h4 {
-      margin: 0;
-      font-size: 18px;
-      font-family: 'DM Serif Display', serif;
-      font-weight: 400;
-    }
-    .preset-card p {
-      margin: 0;
-      color: var(--ink-soft);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .preset-summary {
-      color: var(--ink);
-      font-size: 13px;
-      font-weight: 600;
-      line-height: 1.5;
-    }
-    .preset-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .preset-badge {
-      border-radius: 999px;
-      padding: 4px 9px;
-      background: var(--cream-deep);
-      border: 1px solid var(--cream-border);
-      color: var(--ink-soft);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      font-family: 'DM Mono', monospace;
-    }
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .field label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--ink-soft);
-    }
-    .field input, .field select, .field textarea {
-      width: 100%;
-      border: 1px solid var(--cream-border);
-      border-radius: 12px;
-      padding: 11px 12px;
-      background: white;
-      color: var(--ink);
-    }
-    .field textarea {
-      min-height: 170px;
-      resize: vertical;
-      font-family: 'DM Mono', monospace;
-      line-height: 1.5;
-    }
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 16px;
-    }
-    .result {
-      margin-top: 14px;
-      border-radius: 14px;
-      border: 1px solid var(--cream-border);
-      background: #fff;
-      padding: 14px;
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
-      min-height: 72px;
-      color: var(--ink-soft);
-    }
-    .env-list {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .env-item {
-      border: 1px solid var(--cream-border);
-      border-radius: 14px;
-      background: white;
-      padding: 12px;
-    }
-    .env-item label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--ink-soft);
-      font-family: 'DM Mono', monospace;
-    }
-    .env-item input {
-      width: 100%;
-      border: 1px solid var(--cream-border);
-      border-radius: 10px;
-      padding: 10px 11px;
-      background: var(--panel);
-      color: var(--ink);
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-    }
-    .log-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    .log-toolbar select, .log-toolbar input {
-      min-width: 180px;
-    }
-    .log-output {
-      min-height: 260px;
-      max-height: 420px;
-      overflow: auto;
-    }
-    .button-row {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .screens {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-      min-height: 480px;
-    }
-    .screen {
-      border: 1px solid var(--cream-border);
-      border-radius: 16px;
-      overflow: hidden;
-      background: white;
-      display: flex;
-      flex-direction: column;
-    }
-    .screen-bar {
-      padding: 10px 12px;
-      background: var(--cream-deep);
-      border-bottom: 1px solid var(--cream-border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      font-size: 12px;
-      color: var(--ink-soft);
-      font-family: 'DM Mono', monospace;
-    }
-    iframe {
-      width: 100%;
-      min-height: 400px;
-      border: none;
-      background: linear-gradient(180deg, #f9f5ee, #f1eadf);
-    }
-    .screen-empty {
-      display: grid;
-      place-items: center;
-      min-height: 400px;
-      padding: 30px;
-      text-align: center;
-      color: var(--ink-soft);
-      font-family: 'DM Mono', monospace;
-      background: linear-gradient(180deg, #fbf7ef, #f1eadf);
-    }
-    .toast {
-      position: fixed;
-      right: 18px;
-      bottom: 18px;
-      background: var(--ink);
-      color: white;
-      padding: 12px 14px;
-      border-radius: 12px;
-      box-shadow: var(--shadow);
-      opacity: 0;
-      transform: translateY(10px);
-      transition: opacity .18s ease, transform .18s ease;
-      pointer-events: none;
-      max-width: 340px;
-      font-size: 13px;
-    }
-    .toast.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    .banner {
-      display: none;
-      align-items: center;
-      gap: 14px;
-      background: rgba(201,125,42,.10);
-      border: 1px solid rgba(201,125,42,.35);
-      border-radius: 14px;
-      padding: 14px 18px;
-      font-size: 13px;
-      color: var(--amber);
-    }
-    .banner.visible { display: flex; }
-    .banner strong { color: var(--ink); }
-    .banner-actions { display: flex; gap: 8px; margin-left: auto; }
-    .btn-sm {
-      border: none;
-      border-radius: 10px;
-      padding: 7px 12px;
-      font-weight: 700;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .btn-amber-sm { background: var(--amber); color: white; }
-    .btn-ghost-sm { background: transparent; color: var(--ink); border: 1px solid var(--cream-border); }
-    .btn-rust { background: var(--rust); color: white; box-shadow: 0 8px 18px rgba(194,90,58,.20); }
-    .btn[disabled] { opacity: .55; cursor: not-allowed; transform: none !important; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner {
-      display: inline-block;
-      width: 12px; height: 12px;
-      border: 2px solid rgba(255,255,255,.4);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-      vertical-align: middle;
-      margin-right: 6px;
-    }
-    @media (max-width: 1100px) {
-      .shell { grid-template-columns: 1fr; }
-      .sidebar { border-right: none; border-bottom: 1px solid var(--cream-border); }
-      .wizard-grid, .metrics, .wizard-steps, .preset-grid, .form-grid, .screens, .env-list, .button-row { grid-template-columns: 1fr; }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(args.projectName)}</title>
+<style>
+:root{--bg:#0d1117;--s1:#161b27;--s2:#1e2535;--b:#2a3347;--text:#cdd6f4;--dim:#6b7a99;--g:#a6e3a1;--gbg:rgba(166,227,161,.12);--r:#f38ba8;--rbg:rgba(243,139,168,.12);--y:#f9e2af;--ybg:rgba(249,226,175,.12);--bl:#89b4fa;--blbg:rgba(137,180,250,.1);--mono:'JetBrains Mono','Fira Code',ui-monospace,monospace;--sans:'Inter',system-ui,-apple-system,sans-serif;--r8:8px;--r6:6px;--r4:4px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.hdr{display:flex;align-items:center;gap:12px;padding:0 16px;height:46px;background:var(--s1);border-bottom:1px solid var(--b);flex-shrink:0}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;white-space:nowrap}
+.logo{width:26px;height:26px;background:var(--bl);color:#0d1117;border-radius:var(--r6);display:grid;place-items:center;font-weight:700;font-size:13px}
+.svc-pills{display:flex;gap:5px;flex:1;overflow:hidden}
+.svc-pill{display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;font-size:11px;font-family:var(--mono);background:var(--s2);border:1px solid var(--b);white-space:nowrap}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot-running{background:var(--g)}.dot-down{background:var(--r)}.dot-unverified{background:var(--y)}.dot-disabled{background:var(--dim)}
+.hdr-actions{display:flex;gap:5px;margin-left:auto}
+.btn{border:none;cursor:pointer;border-radius:var(--r6);padding:5px 11px;font-size:12px;font-family:var(--sans);font-weight:500;transition:background .15s,opacity .15s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.primary{background:var(--bl);color:#0d1117}.primary:hover:not(:disabled){background:#a6c8ff}
+.ghost{background:var(--s2);color:var(--text);border:1px solid var(--b)}.ghost:hover:not(:disabled){background:var(--b)}
+.danger{background:var(--rbg);color:var(--r);border:1px solid rgba(243,139,168,.3)}
+.xs{padding:3px 8px;font-size:11px}
+.banner{display:none;align-items:center;gap:10px;padding:7px 16px;background:var(--ybg);border-bottom:1px solid rgba(249,226,175,.2);font-size:12px;color:var(--y);flex-shrink:0}
+.banner.on{display:flex}.banner-btns{display:flex;gap:5px;margin-left:auto}
+.tab-nav{display:flex;gap:2px;padding:8px 16px 0;background:var(--s1);border-bottom:1px solid var(--b);flex-shrink:0}
+.tab{background:none;border:none;cursor:pointer;padding:5px 13px;font-size:12px;font-family:var(--sans);color:var(--dim);border-radius:var(--r6) var(--r6) 0 0;border-bottom:2px solid transparent;transition:color .15s}
+.tab:hover{color:var(--text)}.tab.active{color:var(--bl);border-bottom-color:var(--bl)}
+.tab-panel{display:none;flex:1;overflow-y:auto;padding:12px 16px}
+.tab-panel.active{display:block}
+.metrics-row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.metric-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--s1);border:1px solid var(--b);border-radius:var(--r6);font-size:12px}
+.metric-chip .lbl{color:var(--dim)}.metric-chip .val{font-family:var(--mono);font-weight:600}
+.ov-grid{display:grid;grid-template-columns:1fr 360px;gap:12px;align-items:start}
+.panel{background:var(--s1);border:1px solid var(--b);border-radius:var(--r8);overflow:hidden}
+.ph{padding:8px 12px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--b)}
+.svc-grid{padding:6px;display:flex;flex-direction:column;gap:3px}
+.svc-row{display:grid;grid-template-columns:8px 1fr auto auto;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r6);background:var(--s2);border:1px solid transparent}
+.svc-row:hover{border-color:var(--b)}
+.svc-name{font-size:12px;font-family:var(--mono)}
+.svc-meta{font-size:10px;color:var(--dim);margin-top:1px}
+.svc-btns{display:flex;gap:3px}
+.svc-btn{background:var(--s1);border:1px solid var(--b);border-radius:var(--r4);padding:3px 7px;font-size:10px;color:var(--dim);cursor:pointer}
+.svc-btn:hover{color:var(--text);background:var(--b)}
+.wiz-steps{padding:8px;display:flex;flex-direction:column;gap:5px}
+.wiz-step{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--r6);background:var(--s2);border:1px solid var(--b)}
+.step-n{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-family:var(--mono);font-weight:700;flex-shrink:0}
+.step-done .step-n{background:var(--gbg);color:var(--g)}.step-active .step-n{background:var(--ybg);color:var(--y)}.step-pending .step-n{background:var(--s1);color:var(--dim)}
+.step-info{flex:1;min-width:0}
+.step-title{font-size:12px;font-weight:500}
+.step-detail{font-size:10px;color:var(--dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.step-badge{font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:999px}
+.step-done .step-badge{background:var(--gbg);color:var(--g)}.step-active .step-badge{background:var(--ybg);color:var(--y)}.step-pending .step-badge{background:var(--s1);color:var(--dim)}
+.wiz-summary{padding:7px 12px;font-size:11px;color:var(--dim);min-height:28px}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--b)}
+.btn-row.bare{border:none;padding:0;margin-top:10px}
+.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cfg-grid .span2{grid-column:span 2}
+.fg{padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field span,.field>label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.field input,.field select,.field textarea{background:var(--s2);border:1px solid var(--b);border-radius:var(--r6);padding:6px 9px;color:var(--text);font-family:var(--mono);font-size:12px;width:100%}
+.field textarea{resize:vertical;min-height:100px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:1px solid var(--bl);border-color:var(--bl)}
+.conn-table{width:100%;border-collapse:collapse}
+.conn-table th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:7px 10px;border-bottom:1px solid var(--b)}
+.conn-table td{padding:5px 10px;border-bottom:1px solid var(--b);vertical-align:middle;font-size:12px}
+.conn-table td:first-child{color:var(--dim);font-size:11px;font-family:var(--mono);width:90px}
+.conn-table tr:last-child td{border-bottom:none}
+.conn-table select,.conn-table input{background:var(--s2);border:1px solid var(--b);border-radius:var(--r4);padding:4px 7px;color:var(--text);font-family:var(--mono);font-size:11px;width:100%}
+.conn-table select{width:auto}
+.env-grid{padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:7px}
+.env-item label{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:3px;font-family:var(--mono)}
+.env-item input{width:100%;background:var(--s2);border:1px solid var(--b);border-radius:var(--r6);padding:5px 8px;color:var(--text);font-family:var(--mono);font-size:11px}
+.preset-row{padding:8px;display:flex;flex-wrap:wrap;gap:8px}
+.preset-card{flex:1;min-width:160px;background:var(--s2);border:1px solid var(--b);border-radius:var(--r8);padding:10px}
+.preset-card h4{font-size:12px;margin-bottom:4px}
+.preset-card p{font-size:11px;color:var(--dim);margin-bottom:8px;line-height:1.4}
+.test-tabs{display:flex;gap:3px;margin-bottom:12px;background:var(--s1);border:1px solid var(--b);border-radius:var(--r8);padding:3px;width:fit-content}
+.sub-tab{background:none;border:none;cursor:pointer;padding:4px 12px;font-size:12px;color:var(--dim);border-radius:var(--r6);transition:color .15s,background .15s}
+.sub-tab.active{background:var(--s2);color:var(--text)}
+.sub-panel{display:none}.sub-panel.active{display:block}
+.logs-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.svc-seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg-btn{display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--s2);border:1px solid var(--b);border-radius:var(--r6);font-size:11px;font-family:var(--mono);color:var(--dim);cursor:pointer;transition:color .15s,background .15s}
+.seg-btn:hover,.seg-btn.active{background:var(--b);color:var(--text)}
+.log-out{background:var(--s1);border:1px solid var(--b);border-radius:var(--r8);padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--dim);white-space:pre-wrap;overflow:auto;min-height:60px}
+.logs-full{height:calc(100vh - 178px);min-height:200px}
+.screens-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:calc(100vh - 128px)}
+.screen-panel{background:var(--s1);border:1px solid var(--b);border-radius:var(--r8);overflow:hidden;display:flex;flex-direction:column}
+.screen-bar{padding:6px 12px;font-size:11px;color:var(--dim);border-bottom:1px solid var(--b);display:flex;justify-content:space-between;background:var(--s2)}
+.screen-bar a{color:var(--bl);text-decoration:none;font-size:11px}
+iframe{flex:1;border:none;background:#fff;width:100%;height:100%}
+.screen-empty{flex:1;display:grid;place-items:center;font-size:11px;color:var(--dim);font-family:var(--mono)}
+.toast-el{position:fixed;bottom:14px;right:14px;background:var(--s2);border:1px solid var(--b);color:var(--text);padding:7px 12px;border-radius:var(--r8);font-size:12px;opacity:0;transform:translateY(6px);transition:opacity .18s,transform .18s;pointer-events:none;max-width:300px;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.toast-el.on{opacity:1;transform:translateY(0)}
+.dim{color:var(--dim)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(13,17,23,.3);border-top-color:#0d1117;border-radius:50%;animation:spin .6s linear infinite}
+.ti{background:var(--s2);border:1px solid var(--b);border-radius:var(--r6);padding:4px 8px;color:var(--text);font-family:var(--mono);font-size:12px;width:70px}
+</style>
 </head>
 <body>
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">F</div>
-        <div class="brand-copy">
-          <h1>Fitaly</h1>
-          <p>Deploy Center</p>
-        </div>
-      </div>
-      <div class="section-label">Servicios</div>
-      <div id="serviceList" class="service-list"></div>
-    </aside>
-    <main class="main">
-      <section class="topbar">
-        <div>
-          <h2>${escapeHtml(args.projectName)}</h2>
-          <p>Configura el store, prueba el catálogo y levanta el stack retail desde una sola pantalla.</p>
-        </div>
-        <div class="actions">
-          <button class="btn btn-ghost" id="reloadButton">Actualizar</button>
-          <button class="btn btn-ghost" id="restartRuntimeButton">Restart Runtime</button>
-          <button class="btn btn-ghost" id="stopButton">Stop All</button>
-          <button class="btn btn-amber" id="deployButton">Deploy All</button>
-        </div>
-      </section>
 
-      <div id="configBanner" class="banner">
-        <span>⚠ <strong>Config actualizada.</strong> El runtime sigue usando la config anterior hasta que lo reinicies.</span>
-        <div class="banner-actions">
-          <button class="btn-sm btn-amber-sm" id="bannerRestartButton">Reiniciar Runtime</button>
-          <button class="btn-sm btn-ghost-sm" id="bannerDismissButton">Ignorar</button>
-        </div>
-      </div>
-
-      <section class="card">
-        <h3>Resumen</h3>
-        <div class="metrics" id="metrics"></div>
-      </section>
-
-      <section class="card" id="wizardSection">
-        <h3>Wizard De Deploy</h3>
-        <div class="wizard-grid">
-          <div>
-            <div id="wizardSteps" class="wizard-steps"></div>
-            <div class="toolbar">
-              <button class="btn btn-amber" id="wizardDeployButton">Guardar Todo y Deploy</button>
-              <button class="btn btn-ghost" id="wizardSaveAllButton">Guardar Todo</button>
-              <button class="btn btn-ghost" id="wizardLogsButton">Ver Logs Runtime</button>
-            </div>
-          </div>
-          <div class="wizard-panel">
-            <div class="service-meta">Recomendación actual</div>
-            <p>Este flujo prepara preset, archivo .env, config y deploy en el orden más corto para una tienda nueva o una demo rápida.</p>
-            <div id="wizardSummary" class="result" style="margin-top:0;">Cargando estado del wizard...</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card" id="presetSection">
-        <h3>Presets Guiados</h3>
-        <div id="presetList" class="preset-grid"></div>
-        <div id="presetResult" class="result">Aún no se ha aplicado ningún preset guiado.</div>
-      </section>
-
-      <section class="grid" id="configSection">
-        <div class="card" style="grid-column: span 6;">
-          <h3>Store Config</h3>
-          <div class="form-grid">
-            <div class="field">
-              <label for="storeId">Store ID</label>
-              <input id="storeId" />
-            </div>
-            <div class="field">
-              <label for="storeName">Nombre</label>
-              <input id="storeName" />
-            </div>
-            <div class="field">
-              <label for="storeLocale">Locale</label>
-              <input id="storeLocale" />
-            </div>
-            <div class="field">
-              <label for="storeTimezone">Timezone</label>
-              <input id="storeTimezone" />
-            </div>
-            <div class="field">
-              <label for="serviceMode">Service Mode</label>
-              <select id="serviceMode">
-                <option value="express-checkout">express-checkout</option>
-                <option value="assisted-retail">assisted-retail</option>
-                <option value="premium-concierge">premium-concierge</option>
-                <option value="customer-support-desk">customer-support-desk</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="customerDisplayEnabled">Customer Display</label>
-              <select id="customerDisplayEnabled">
-                <option value="true">enabled</option>
-                <option value="false">disabled</option>
-              </select>
-            </div>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-amber" id="saveConfigButton">Guardar Config</button>
-          </div>
-        </div>
-
-        <div class="card" style="grid-column: span 6;">
-          <h3>Productos e Inventario</h3>
-          <div class="form-grid">
-            <div class="field">
-              <label for="productsDriver">Products Driver</label>
-              <select id="productsDriver">
-                <option value="mock">mock</option>
-                <option value="rest">rest</option>
-                <option value="sqlite">sqlite</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="inventoryDriver">Inventory Driver</label>
-              <select id="inventoryDriver">
-                <option value="mock">mock</option>
-                <option value="rest">rest</option>
-                <option value="sqlite">sqlite</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="productsUrl">Products URL</label>
-              <input id="productsUrl" placeholder="https://api.tienda.local/products" />
-            </div>
-            <div class="field">
-              <label for="inventoryUrl">Inventory URL</label>
-              <input id="inventoryUrl" placeholder="https://api.tienda.local/inventory" />
-            </div>
-            <div class="field">
-              <label for="productsDb">Products DB</label>
-              <input id="productsDb" placeholder="./catalog/products.db" />
-            </div>
-            <div class="field">
-              <label for="inventoryDb">Inventory DB</label>
-              <input id="inventoryDb" placeholder="./catalog/products.db" />
-            </div>
-            <div class="field" style="grid-column: span 2;">
-              <label for="testQuery">Consulta de prueba</label>
-              <input id="testQuery" placeholder="ej: zapatillas" />
-            </div>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-ghost" id="testProductsButton">Probar Conector</button>
-          </div>
-          <div id="connectorResult" class="result">Aún no se ha probado el conector.</div>
-        </div>
-
-        <div class="card" style="grid-column: span 6;">
-          <h3>Clientes, Órdenes y Pagos</h3>
-          <div class="form-grid">
-            <div class="field">
-              <label for="customersDriver">Customers Driver</label>
-              <select id="customersDriver">
-                <option value="mock">mock</option>
-                <option value="rest">rest</option>
-                <option value="sqlite">sqlite</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="ordersDriver">Orders Driver</label>
-              <select id="ordersDriver">
-                <option value="mock">mock</option>
-                <option value="rest">rest</option>
-                <option value="sqlite">sqlite</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="customersUrl">Customers URL</label>
-              <input id="customersUrl" placeholder="https://api.tienda.local/customers" />
-            </div>
-            <div class="field">
-              <label for="ordersUrl">Orders URL</label>
-              <input id="ordersUrl" placeholder="https://api.tienda.local/orders" />
-            </div>
-            <div class="field">
-              <label for="customersDb">Customers DB</label>
-              <input id="customersDb" placeholder="./retail/customers.db" />
-            </div>
-            <div class="field">
-              <label for="ordersDb">Orders DB</label>
-              <input id="ordersDb" placeholder="./retail/orders.db" />
-            </div>
-            <div class="field">
-              <label for="paymentsDriver">Payments Driver</label>
-              <select id="paymentsDriver">
-                <option value="mock">mock</option>
-              </select>
-            </div>
-            <div class="field" style="grid-column: span 1;">
-              <label>Payments Status</label>
-              <input value="mock only por ahora" disabled />
-            </div>
-          </div>
-          <div class="result">El runtime actual soporta <code>customers</code> y <code>orders</code> por <code>mock/rest/sqlite</code>. <code>payments</code> sigue en <code>mock</code>, pero ya se puede validar desde este playground con una orden preview local.</div>
-        </div>
-      </section>
-
-      <section class="grid" id="envSection">
-        <div class="card" style="grid-column: span 6;">
-          <h3>Variables De Entorno</h3>
-          <div id="envSummary" class="service-meta" style="margin-bottom:12px;"></div>
-          <div id="envList" class="env-list"></div>
-          <div class="toolbar">
-            <button class="btn btn-amber" id="saveEnvButton">Guardar .env</button>
-          </div>
-        </div>
-
-        <div class="card" style="grid-column: span 6;">
-          <h3>Logs</h3>
-          <div class="log-toolbar">
-            <select id="logsServiceSelect"></select>
-            <input id="logsTailInput" type="number" min="20" max="500" value="120" />
-            <button class="btn btn-ghost" id="loadLogsButton">Cargar Logs</button>
-          </div>
-          <div id="logsResult" class="result log-output">Aún no se han cargado logs.</div>
-        </div>
-      </section>
-
-      <section class="grid">
-        <div class="card" style="grid-column: span 6;">
-          <h3>Test Customers</h3>
-          <div class="form-grid">
-            <div class="field">
-              <label for="customerAction">Action</label>
-              <select id="customerAction">
-                <option value="lookup">lookup</option>
-                <option value="register">register</option>
-              </select>
-            </div>
-            <div class="field" style="grid-column: span 2;">
-              <label for="customerPayload">Payload JSON</label>
-              <textarea id="customerPayload"></textarea>
-            </div>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-ghost" id="testCustomersButton">Probar Customers</button>
-          </div>
-          <div id="customerConnectorResult" class="result">Aún no se ha probado el conector de customers.</div>
-        </div>
-
-        <div class="card" style="grid-column: span 6;">
-          <h3>Test Orders</h3>
-          <div class="form-grid">
-            <div class="field">
-              <label for="orderAction">Action</label>
-              <select id="orderAction">
-                <option value="create">create</option>
-                <option value="update">update</option>
-                <option value="confirm">confirm</option>
-              </select>
-            </div>
-            <div class="field" style="grid-column: span 2;">
-              <label for="orderPayload">Payload JSON</label>
-              <textarea id="orderPayload"></textarea>
-            </div>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-ghost" id="testOrdersButton">Probar Orders</button>
-          </div>
-          <div id="orderConnectorResult" class="result">Aún no se ha probado el conector de orders.</div>
-        </div>
-      </section>
-
-      <section class="grid">
-        <div class="card" style="grid-column: span 12;">
-          <h3>Test Payments</h3>
-          <div class="result" style="margin-bottom:12px;">La prueba actual usa <code>create_intent</code> sobre el driver <code>mock</code>. Si la orden indicada no existe, el deploy center crea una orden preview local para ejecutar el cobro de prueba.</div>
-          <div class="form-grid">
-            <div class="field" style="grid-column: span 2;">
-              <label for="paymentPayload">Payload JSON</label>
-              <textarea id="paymentPayload"></textarea>
-            </div>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-ghost" id="testPaymentsButton">Probar Payments</button>
-          </div>
-          <div id="paymentConnectorResult" class="result">Aún no se ha probado el conector de payments.</div>
-        </div>
-      </section>
-
-      <section class="card" id="screensSection">
-        <h3>Pantallas</h3>
-        <div class="screens" id="screens"></div>
-      </section>
-    </main>
+<header class="hdr">
+  <div class="brand"><span class="logo">F</span><span>${escapeHtml(args.projectName)}</span></div>
+  <div id="headerServices" class="svc-pills"></div>
+  <div class="hdr-actions">
+    <button class="btn ghost" id="reloadButton">⟳ Sync</button>
+    <button class="btn ghost" id="restartRuntimeButton">↺ Runtime</button>
+    <button class="btn ghost" id="stopButton">■ Stop</button>
+    <button class="btn primary" id="deployButton">▶ Deploy</button>
   </div>
-  <div id="toast" class="toast"></div>
+</header>
 
-  <script>
-    const state = {
-      dashboard: null,
-      rawConfig: null,
-      envState: null,
-      formDirty: false,
-      envDirty: false,
-      deployInProgress: false,
-      configNeedsRestart: false,
-      pollingTimer: null,
-    }
+<div id="configBanner" class="banner">
+  <span>&#9888; Config guardada — el runtime usa la version anterior hasta que lo reinicies.</span>
+  <div class="banner-btns">
+    <button class="btn xs primary" id="bannerRestartButton">Reiniciar</button>
+    <button class="btn xs ghost" id="bannerDismissButton">x</button>
+  </div>
+</div>
 
-    const serviceList = document.getElementById('serviceList')
-    const metrics = document.getElementById('metrics')
-    const wizardSteps = document.getElementById('wizardSteps')
-    const wizardSummary = document.getElementById('wizardSummary')
-    const presetList = document.getElementById('presetList')
-    const presetResult = document.getElementById('presetResult')
-    const screens = document.getElementById('screens')
-    const toast = document.getElementById('toast')
-    const connectorResult = document.getElementById('connectorResult')
-    const customerConnectorResult = document.getElementById('customerConnectorResult')
-    const orderConnectorResult = document.getElementById('orderConnectorResult')
-    const paymentConnectorResult = document.getElementById('paymentConnectorResult')
-    const envSummary = document.getElementById('envSummary')
-    const envList = document.getElementById('envList')
-    const logsResult = document.getElementById('logsResult')
-    const logsServiceSelect = document.getElementById('logsServiceSelect')
-    const customerSamples = {
-      lookup: {
-        query: 'Ana',
-        limit: 5,
-      },
-      register: {
-        name: 'María López',
-        locale: 'es-CR',
-        metadata: {
-          loyalty_tier: 'bronze',
-          visits: 1,
-        },
-      },
-    }
-    const orderSamples = {
-      create: {
-        customer_id: 'cust_demo_001',
-        items: [
-          {
-            product_id: 'sku_nike_air_42',
-            quantity: 1,
-            price: 129.99,
-          },
-        ],
-      },
-      update: {
-        order_id: 'ord_demo_replace_me',
-        add_items: [
-          {
-            product_id: 'sku_adidas_daily',
-            quantity: 1,
-            price: 89.5,
-          },
-        ],
-      },
-      confirm: {
-        order_id: 'ord_demo_replace_me',
-      },
-    }
-    const paymentSample = {
-      order_id: 'ord_demo_payment',
-      amount: 219.49,
-      payment_method: 'card',
-    }
+<nav class="tab-nav">
+  <button class="tab active" data-tab="overview">Overview</button>
+  <button class="tab" data-tab="config">Config</button>
+  <button class="tab" data-tab="test">Test Connectors</button>
+  <button class="tab" data-tab="logs">Logs</button>
+  <button class="tab" data-tab="screens">Screens</button>
+</nav>
 
-    async function fetchJson(url, options = {}) {
-      const response = await fetch(url, {
-        headers: { 'content-type': 'application/json' },
-        ...options,
-      })
-      if (!response.ok) {
-        const text = await response.text()
-        throw new Error(text || 'Request failed')
-      }
-      return response.json()
-    }
+<div id="toast" class="toast-el"></div>
 
-    function showToast(message) {
-      toast.textContent = message
-      toast.classList.add('visible')
-      window.clearTimeout(showToast._timeout)
-      showToast._timeout = window.setTimeout(() => {
-        toast.classList.remove('visible')
-      }, 2800)
-    }
+<section class="tab-panel active" id="tab-overview">
+  <div class="metrics-row" id="metricsRow"></div>
+  <div class="ov-grid">
+    <div class="panel">
+      <div class="ph">Servicios</div>
+      <div id="serviceGrid" class="svc-grid"></div>
+    </div>
+    <div class="panel">
+      <div class="ph">Wizard</div>
+      <div id="wizardSteps" class="wiz-steps"></div>
+      <div id="wizardSummary" class="wiz-summary"></div>
+      <div class="btn-row">
+        <button class="btn primary" id="wizardDeployButton">Guardar y Deploy</button>
+        <button class="btn ghost" id="wizardSaveAllButton">Guardar Todo</button>
+        <button class="btn ghost" id="wizardLogsButton">Logs Runtime</button>
+      </div>
+    </div>
+  </div>
+</section>
 
-    function renderServices(services) {
-      serviceList.innerHTML = services.map((service) => \`
-        <div class="service-item">
-          <div class="service-title">
-            <strong>\${escapeHtml(service.label)}</strong>
-            <span class="status-pill status-\${service.status}">\${escapeHtml(service.status)}</span>
-          </div>
-          <div class="service-meta">\${escapeHtml(service.service_name)}</div>
-          \${service.error ? \`<div class="service-meta" style="margin-top:6px;color:var(--rust)">\${escapeHtml(service.error)}</div>\` : ''}
-          <div class="button-row">
-            <button class="btn btn-ghost" onclick="startService('\${service.id}')">Start</button>
-            <button class="btn btn-ghost" onclick="stopService('\${service.id}')">Stop</button>
-            <button class="btn btn-ghost" onclick="restartService('\${service.id}')">Restart</button>
-            <button class="btn btn-ghost" onclick="openLogs('\${service.id}')">Logs</button>
-          </div>
+<section class="tab-panel" id="tab-config">
+  <div class="cfg-grid">
+    <div class="panel">
+      <div class="ph">Store</div>
+      <div class="fg">
+        <div class="field"><span>Store ID</span><input id="storeId"></div>
+        <div class="field"><span>Nombre</span><input id="storeName"></div>
+        <div class="field"><span>Locale</span><input id="storeLocale"></div>
+        <div class="field"><span>Timezone</span><input id="storeTimezone"></div>
+        <div class="field"><span>Service Mode</span>
+          <select id="serviceMode">
+            <option value="express-checkout">express-checkout</option>
+            <option value="assisted-retail">assisted-retail</option>
+            <option value="premium-concierge">premium-concierge</option>
+            <option value="customer-support-desk">customer-support-desk</option>
+          </select>
         </div>
-      \`).join('')
-    }
-
-    function renderMetrics(dashboard) {
-      const running = dashboard.services.filter((service) => service.status === 'running').length
-      const enabled = dashboard.services.filter((service) => service.enabled).length
-      metrics.innerHTML = [
-        ['Servicios vivos', String(running)],
-        ['Servicios activos', String(enabled)],
-        ['Driver productos', dashboard.connectors.products.driver],
-        ['Driver órdenes', dashboard.connectors.orders.driver],
-        ['Pagos', dashboard.connectors.payments.driver],
-        ['Env configuradas', String(dashboard.env_summary.configured) + '/' + String(dashboard.env_summary.total)],
-      ].map(([label, value]) => \`
-        <div class="metric">
-          <span>\${escapeHtml(label)}</span>
-          <strong>\${escapeHtml(value)}</strong>
+        <div class="field"><span>Customer Display</span>
+          <select id="customerDisplayEnabled">
+            <option value="true">enabled</option>
+            <option value="false">disabled</option>
+          </select>
         </div>
-      \`).join('')
-    }
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="saveConfigButton">Guardar Store</button>
+      </div>
+    </div>
 
-    function renderDeployWizard(dashboard, envState) {
-      const steps = buildWizardSteps(dashboard, envState)
-      wizardSteps.innerHTML = steps.map((step) => \`
-        <div class="wizard-step step-\${escapeHtml(step.status)}">
-          <div class="wizard-step-head">
-            <div class="wizard-step-index">\${escapeHtml(step.index)}</div>
-            <span class="wizard-status wizard-status-\${escapeHtml(step.status)}">\${escapeHtml(step.statusLabel)}</span>
-          </div>
-          <div class="wizard-step-copy">
-            <h4 class="wizard-step-title">\${escapeHtml(step.title)}</h4>
-            <div class="wizard-step-detail">\${escapeHtml(step.detail)}</div>
-          </div>
-          <div class="toolbar" style="margin-top:auto;">
-            <button class="btn btn-ghost" onclick="runWizardAction('\${escapeHtml(step.action)}')">\${escapeHtml(step.actionLabel)}</button>
-          </div>
-        </div>
-      \`).join('')
-      wizardSummary.textContent = buildWizardSummary(steps, dashboard, envState)
-    }
+    <div class="panel">
+      <div class="ph">Conectores</div>
+      <table class="conn-table">
+        <thead><tr><th>Conector</th><th>Driver</th><th>URL / Ruta DB</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Products</td>
+            <td><select id="productsDriver"><option value="mock">mock</option><option value="rest">rest</option><option value="sqlite">sqlite</option></select></td>
+            <td><input id="productsUrl" placeholder="URL o ruta .db"></td>
+          </tr>
+          <tr>
+            <td>Inventory</td>
+            <td><select id="inventoryDriver"><option value="mock">mock</option><option value="rest">rest</option><option value="sqlite">sqlite</option></select></td>
+            <td><input id="inventoryUrl" placeholder="URL o ruta .db"></td>
+          </tr>
+          <tr>
+            <td>Customers</td>
+            <td><select id="customersDriver"><option value="mock">mock</option><option value="rest">rest</option><option value="sqlite">sqlite</option></select></td>
+            <td><input id="customersUrl" placeholder="URL o ruta .db"></td>
+          </tr>
+          <tr>
+            <td>Orders</td>
+            <td><select id="ordersDriver"><option value="mock">mock</option><option value="rest">rest</option><option value="sqlite">sqlite</option></select></td>
+            <td><input id="ordersUrl" placeholder="URL o ruta .db"></td>
+          </tr>
+          <tr>
+            <td>Payments</td>
+            <td><select id="paymentsDriver"><option value="mock">mock</option></select></td>
+            <td><span class="dim">mock only</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="btn-row">
+        <button class="btn primary" id="saveConnectorsButton">Guardar Conectores</button>
+      </div>
+    </div>
 
-    function renderConnectorPresets(presets) {
-      presetList.innerHTML = presets.map((preset) => \`
-        <div class="preset-card">
-          <div>
-            <h4>\${escapeHtml(preset.label)}</h4>
-          </div>
-          <div class="preset-summary">\${escapeHtml(preset.summary)}</div>
-          <p>\${escapeHtml(preset.description)}</p>
-          <div class="preset-badges">
-            \${preset.badges.map((badge) => \`<span class="preset-badge">\${escapeHtml(badge)}</span>\`).join('')}
-          </div>
-          <div class="toolbar" style="margin-top:auto;">
-            <button class="btn btn-ghost" onclick="applyConnectorPreset('\${escapeHtml(preset.id)}')">Aplicar Preset</button>
-          </div>
-        </div>
-      \`).join('')
-    }
+    <div class="panel span2">
+      <div class="ph">Variables de Entorno &nbsp;<span id="envSummary" class="dim" style="font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+      <div id="envList" class="env-grid"></div>
+      <div class="btn-row">
+        <button class="btn primary" id="saveEnvButton">Guardar .env</button>
+      </div>
+    </div>
 
-    function renderScreens(screenList) {
-      screens.innerHTML = screenList.filter((screen) => screen.enabled).slice(0, 2).map((screen) => {
-        if (!screen.url) {
-          return \`
-            <div class="screen">
-              <div class="screen-bar">
-                <span>\${escapeHtml(screen.label)}</span>
-                <span>sin URL</span>
-              </div>
-              <div class="screen-empty">Define la URL de esta pantalla en el deploy center config para embederla aquí.</div>
-            </div>
-          \`
-        }
+    <div class="panel span2">
+      <div class="ph">Presets Rapidos</div>
+      <div id="presetList" class="preset-row"></div>
+      <div id="presetResult" class="log-out" style="min-height:32px;margin:8px;"></div>
+    </div>
+  </div>
+</section>
 
-        return \`
-          <div class="screen">
-            <div class="screen-bar">
-              <span>\${escapeHtml(screen.label)}</span>
-              <a href="\${escapeHtml(screen.url)}" target="_blank" rel="noreferrer">abrir</a>
-            </div>
-            <iframe src="\${escapeHtml(screen.url)}" loading="lazy"></iframe>
-          </div>
-        \`
-      }).join('')
-    }
+<section class="tab-panel" id="tab-test">
+  <div class="test-tabs">
+    <button class="sub-tab active" data-subtab="products">Products</button>
+    <button class="sub-tab" data-subtab="customers">Customers</button>
+    <button class="sub-tab" data-subtab="orders">Orders</button>
+    <button class="sub-tab" data-subtab="payments">Payments</button>
+  </div>
+  <div class="sub-panel active" id="sub-products">
+    <div style="max-width:460px">
+      <div class="field"><span>Search Query</span><input id="testQuery" placeholder="ej: zapatillas Nike"></div>
+      <div class="btn-row bare"><button class="btn primary" id="testProductsButton">Probar Products</button></div>
+    </div>
+    <pre id="connectorResult" class="log-out" style="margin-top:10px">-</pre>
+  </div>
+  <div class="sub-panel" id="sub-customers">
+    <div style="max-width:460px">
+      <div class="field" style="margin-bottom:8px"><span>Action</span>
+        <select id="customerAction"><option value="lookup">lookup</option><option value="register">register</option></select>
+      </div>
+      <div class="field"><span>Payload JSON</span><textarea id="customerPayload" rows="7"></textarea></div>
+      <div class="btn-row bare"><button class="btn primary" id="testCustomersButton">Probar Customers</button></div>
+    </div>
+    <pre id="customerConnectorResult" class="log-out" style="margin-top:10px">-</pre>
+  </div>
+  <div class="sub-panel" id="sub-orders">
+    <div style="max-width:460px">
+      <div class="field" style="margin-bottom:8px"><span>Action</span>
+        <select id="orderAction"><option value="create">create</option><option value="update">update</option><option value="confirm">confirm</option></select>
+      </div>
+      <div class="field"><span>Payload JSON</span><textarea id="orderPayload" rows="7"></textarea></div>
+      <div class="btn-row bare"><button class="btn primary" id="testOrdersButton">Probar Orders</button></div>
+    </div>
+    <pre id="orderConnectorResult" class="log-out" style="margin-top:10px">-</pre>
+  </div>
+  <div class="sub-panel" id="sub-payments">
+    <div style="max-width:460px">
+      <div class="field"><span>Payload JSON</span><textarea id="paymentPayload" rows="7"></textarea></div>
+      <div class="btn-row bare"><button class="btn primary" id="testPaymentsButton">Probar Payments</button></div>
+    </div>
+    <pre id="paymentConnectorResult" class="log-out" style="margin-top:10px">-</pre>
+  </div>
+</section>
 
-    function renderEnvEditor(envState) {
-      envSummary.textContent = 'Archivo: ' + envState.path + ' · Fuente: ' + envState.source
-      envList.innerHTML = envState.entries.map((entry) => \`
-        <div class="env-item">
-          <label for="env-\${escapeHtml(entry.key)}">\${escapeHtml(entry.key)}</label>
-          <input
-            id="env-\${escapeHtml(entry.key)}"
-            data-env-key="\${escapeHtml(entry.key)}"
-            type="\${entry.secret ? 'password' : 'text'}"
-            value="\${escapeHtml(entry.value)}"
-            placeholder="\${entry.secret ? '••••••••' : ''}"
-          />
-        </div>
-      \`).join('')
-    }
+<section class="tab-panel" id="tab-logs">
+  <div class="logs-toolbar">
+    <div id="logsServiceSelect" class="svc-seg"></div>
+    <input id="logsTailInput" type="number" value="120" min="20" max="500" class="ti">
+    <button class="btn ghost" id="loadLogsButton">Cargar</button>
+    <button class="btn ghost" id="autoRefreshButton">Auto &#9675;</button>
+  </div>
+  <pre id="logsResult" class="log-out logs-full">Selecciona un servicio y carga logs.</pre>
+</section>
 
-    function renderLogsToolbar(services, preferredServiceId) {
-      const enabledServices = services.filter((service) => service.enabled)
-      logsServiceSelect.innerHTML = enabledServices.map((service) => \`
-        <option value="\${escapeHtml(service.id)}">\${escapeHtml(service.label)}</option>
-      \`).join('')
+<section class="tab-panel" id="tab-screens">
+  <div id="screens" class="screens-grid"></div>
+</section>
 
-      if (preferredServiceId && enabledServices.some((service) => service.id === preferredServiceId)) {
-        logsServiceSelect.value = preferredServiceId
-      } else if (enabledServices[0]) {
-        logsServiceSelect.value = enabledServices[0].id
-      }
-    }
+<script>
+(function() {
+  var S = {
+    dashboard: null, rawConfig: null, envState: null,
+    formDirty: false, envDirty: false,
+    deployInProgress: false, configNeedsRestart: false,
+    pollingTimer: null, logsAutoTimer: null, logsAutoRefresh: false,
+  }
 
-    function populateForm(dashboard) {
-      document.getElementById('storeId').value = dashboard.store.store_id
-      document.getElementById('storeName').value = dashboard.store.name
-      document.getElementById('storeLocale').value = dashboard.store.locale
-      document.getElementById('storeTimezone').value = dashboard.store.timezone
-      document.getElementById('serviceMode').value = dashboard.retail.service_mode
-      document.getElementById('customerDisplayEnabled').value = String(dashboard.retail.customer_display_enabled)
-      document.getElementById('productsDriver').value = dashboard.connectors.products.driver
-      document.getElementById('inventoryDriver').value = dashboard.connectors.inventory.driver
-      document.getElementById('customersDriver').value = dashboard.connectors.customers.driver
-      document.getElementById('ordersDriver').value = dashboard.connectors.orders.driver
-      document.getElementById('paymentsDriver').value = dashboard.connectors.payments.driver
-      document.getElementById('productsUrl').value = dashboard.connectors.products.url || ''
-      document.getElementById('inventoryUrl').value = dashboard.connectors.inventory.url || ''
-      document.getElementById('customersUrl').value = dashboard.connectors.customers.url || ''
-      document.getElementById('ordersUrl').value = dashboard.connectors.orders.url || ''
-      document.getElementById('productsDb').value = dashboard.connectors.products.database || dashboard.connectors.products.connection_string || ''
-      document.getElementById('inventoryDb').value = dashboard.connectors.inventory.database || dashboard.connectors.inventory.connection_string || ''
-      document.getElementById('customersDb').value = dashboard.connectors.customers.database || dashboard.connectors.customers.connection_string || ''
-      document.getElementById('ordersDb').value = dashboard.connectors.orders.database || dashboard.connectors.orders.connection_string || ''
-    }
+  function q(id) { return document.getElementById(id) }
+  function qs(sel) { return document.querySelector(sel) }
+  function qsa(sel) { return document.querySelectorAll(sel) }
 
-    async function loadDashboard() {
-      const [dashboard, rawConfig, envState] = await Promise.all([
-        fetchJson('/api/state'),
-        fetchJson('/api/store-config'),
-        fetchJson('/api/env'),
-      ])
+  var customerSamples = {
+    lookup: { query: 'Ana', limit: 5 },
+    register: { name: 'Maria Lopez', locale: 'es-CR', metadata: { loyalty_tier: 'bronze', visits: 1 } },
+  }
+  var orderSamples = {
+    create: { customer_id: 'cust_demo_001', items: [{ product_id: 'sku_nike_air_42', quantity: 1, price: 129.99 }] },
+    update: { order_id: 'ord_demo_replace_me', add_items: [{ product_id: 'sku_adidas_daily', quantity: 1, price: 89.5 }] },
+    confirm: { order_id: 'ord_demo_replace_me' },
+  }
+  var paymentSample = { order_id: 'ord_demo_payment', amount: 219.49, payment_method: 'card' }
 
-      state.dashboard = dashboard
-      state.rawConfig = rawConfig
-      state.envState = envState
-      state.formDirty = false
-      state.envDirty = false
-      renderServices(dashboard.services)
-      renderMetrics(dashboard)
-      renderDeployWizard(dashboard, envState)
-      renderConnectorPresets(dashboard.connector_presets)
-      renderEnvEditor(envState)
-      renderLogsToolbar(dashboard.services, logsServiceSelect.value)
-      renderScreens(dashboard.screens)
-      populateForm(dashboard)
-      startPolling()
-    }
+  function esc(v) {
+    return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+  }
 
-    async function refreshStatusOnly() {
-      try {
-        const dashboard = await fetchJson('/api/state')
-        state.dashboard = dashboard
-        renderServices(dashboard.services)
-        renderMetrics(dashboard)
-        if (state.envState) {
-          renderDeployWizard(dashboard, state.envState)
-        }
-      } catch {
-        // silently ignore polling errors to avoid toast spam
-      }
-    }
-
-    function startPolling() {
-      if (state.pollingTimer) return
-      state.pollingTimer = window.setInterval(() => refreshStatusOnly(), 5000)
-    }
-
-    function stopPolling() {
-      if (state.pollingTimer) {
-        window.clearInterval(state.pollingTimer)
-        state.pollingTimer = null
-      }
-    }
-
-    function showConfigBanner() {
-      const runtimeRunning = state.dashboard?.services?.some(
-        (s) => (s.kind === 'runtime' || s.id === 'store-runtime') && s.status === 'running',
-      )
-      if (!runtimeRunning) return
-      state.configNeedsRestart = true
-      document.getElementById('configBanner').classList.add('visible')
-    }
-
-    function hideConfigBanner() {
-      state.configNeedsRestart = false
-      document.getElementById('configBanner').classList.remove('visible')
-    }
-
-    function updateDeployButton() {
-      const btn = document.getElementById('deployButton')
-      if (state.deployInProgress) {
-        btn.disabled = true
-        btn.innerHTML = '<span class="spinner"></span>Desplegando...'
-      } else {
-        btn.disabled = false
-        btn.textContent = 'Deploy All'
-      }
-    }
-
-    async function restartRuntime() {
-      const btn = document.getElementById('restartRuntimeButton')
-      const originalText = btn.textContent
-      btn.disabled = true
-      btn.innerHTML = '<span class="spinner"></span>Reiniciando...'
-      try {
-        const result = await fetchJson('/api/deploy/restart-runtime', { method: 'POST' })
-        showToast(result.ok ? 'Runtime reiniciado.' : 'No se pudo reiniciar el runtime.')
-        hideConfigBanner()
-        await refreshStatusOnly()
-      } catch (error) {
-        handleError(error)
-      } finally {
-        btn.disabled = false
-        btn.textContent = originalText
-      }
-    }
-
-    async function applyConnectorPreset(presetId) {
-      const preset = state.dashboard?.connector_presets?.find((entry) => entry.id === presetId)
-      if (!preset) {
-        throw new Error('No encontré el preset solicitado.')
-      }
-
-      presetResult.textContent = 'Aplicando preset ' + preset.label + '...'
-      await fetchJson('/api/store-config', {
-        method: 'PATCH',
-        body: JSON.stringify(preset.patch),
+  function api(url, opts) {
+    return fetch(url, Object.assign({ headers: { 'content-type': 'application/json' } }, opts || {}))
+      .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error(t || 'Request failed') })
+        return r.json()
       })
-      await loadDashboard()
-      presetResult.textContent = 'Preset aplicado: ' + preset.label + '. Revisa los campos y ajusta URLs o rutas si hace falta antes del deploy.'
-      showToast('Preset aplicado: ' + preset.label)
-    }
+  }
 
-    async function saveConfig(options = {}) {
-      const { reload = true, toast = true } = options
-      const patch = {
-        store: {
-          store_id: document.getElementById('storeId').value.trim(),
-          name: document.getElementById('storeName').value.trim(),
-          locale: document.getElementById('storeLocale').value.trim(),
-          timezone: document.getElementById('storeTimezone').value.trim(),
-        },
-        retail: {
-          service_mode: document.getElementById('serviceMode').value,
-          customer_display_enabled: document.getElementById('customerDisplayEnabled').value === 'true',
-        },
-        connectors: {
-          products: buildConnectorPatch('products'),
-          inventory: buildConnectorPatch('inventory'),
-          customers: buildConnectorPatch('customers'),
-          orders: buildConnectorPatch('orders'),
-          payments: buildMockConnectorPatch('payments'),
-        },
-      }
+  var toastTimer
+  function toast(msg) {
+    var el = q('toast')
+    el.textContent = msg
+    el.classList.add('on')
+    clearTimeout(toastTimer)
+    toastTimer = setTimeout(function() { el.classList.remove('on') }, 2800)
+  }
 
-      await fetchJson('/api/store-config', {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
+  function errShow(error, target) {
+    var msg = error instanceof Error ? error.message : String(error)
+    if (target) target.textContent = msg
+    toast(msg)
+  }
+
+  function parseJson(id, label) {
+    var raw = q(id).value.trim()
+    if (!raw) return {}
+    var p
+    try { p = JSON.parse(raw) } catch(e) { throw new Error(label + ': JSON invalido. ' + e.message) }
+    if (p && typeof p === 'object' && !Array.isArray(p)) return p
+    throw new Error(label + ': debe ser un objeto JSON.')
+  }
+
+  // ── tabs ──
+  function switchTab(id) {
+    qsa('.tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === id) })
+    qsa('.tab-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'tab-' + id) })
+  }
+
+  function switchSubTab(id) {
+    qsa('.sub-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.subtab === id) })
+    qsa('.sub-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'sub-' + id) })
+  }
+
+  // ── render ──
+  function renderHeader(services) {
+    q('headerServices').innerHTML = services.filter(function(s) { return s.enabled }).map(function(s) {
+      return '<div class="svc-pill"><span class="dot dot-' + esc(s.status) + '"></span>' + esc(s.label) + '</div>'
+    }).join('')
+  }
+
+  function renderServiceGrid(services) {
+    q('serviceGrid').innerHTML = services.map(function(s) {
+      return '<div class="svc-row" data-svc="' + esc(s.id) + '">' +
+        '<span class="dot dot-' + esc(s.status) + '"></span>' +
+        '<div><div class="svc-name">' + esc(s.label) + '</div>' +
+        '<div class="svc-meta">' + esc(s.service_name) + ' &middot; ' + esc(s.status) + (s.error ? ' &middot; ' + esc(s.error) : '') + '</div></div>' +
+        '<div class="svc-btns">' +
+          '<button class="svc-btn" data-action="start">&#9654;</button>' +
+          '<button class="svc-btn" data-action="stop">&#9646;&#9646;</button>' +
+          '<button class="svc-btn" data-action="restart">&#8634;</button>' +
+        '</div>' +
+        '<button class="svc-btn" data-action="logs">logs</button>' +
+      '</div>'
+    }).join('')
+  }
+
+  function renderMetrics(d) {
+    var running = d.services.filter(function(s) { return s.status === 'running' }).length
+    var total = d.services.filter(function(s) { return s.enabled }).length
+    var chips = [
+      ['Servicios', running + '/' + total + ' running'],
+      ['Products', d.connectors.products.driver],
+      ['Orders', d.connectors.orders.driver],
+      ['Payments', d.connectors.payments.driver],
+      ['Env', d.env_summary.configured + '/' + d.env_summary.total],
+    ]
+    q('metricsRow').innerHTML = chips.map(function(c) {
+      return '<div class="metric-chip"><span class="lbl">' + esc(c[0]) + '</span><span class="val">' + esc(c[1]) + '</span></div>'
+    }).join('')
+  }
+
+  function buildWizardSteps(d, envState) {
+    var drivers = [d.connectors.products.driver, d.connectors.inventory.driver, d.connectors.customers.driver, d.connectors.orders.driver, d.connectors.payments.driver]
+    var presetId = drivers.every(function(dr) { return dr === 'mock' }) ? 'demo-local-mock'
+      : (d.connectors.products.driver === 'sqlite' && d.connectors.customers.driver === 'sqlite') ? 'sqlite-local-retail'
+      : (d.connectors.products.driver === 'rest' && d.connectors.customers.driver === 'rest') ? 'rest-backoffice' : null
+    var preset = d.connector_presets.find(function(p) { return p.id === presetId })
+    var envTotal = envState.entries.length
+    var envOk = envState.entries.filter(function(e) { return e.value.trim().length > 0 }).length
+    var enabled = d.services.filter(function(s) { return s.enabled })
+    var running = enabled.filter(function(s) { return s.status === 'running' })
+    return [
+      { n:'01', title:'Preset', status: preset ? 'done' : 'active', badge: preset ? preset.label : 'pendiente', detail: preset ? 'Preset activo: ' + preset.label : 'Sin preset — config manual.' },
+      { n:'02', title:'.env', status: envTotal === 0 || envOk === envTotal ? 'done' : envOk > 0 ? 'active' : 'pending', badge: envTotal === 0 ? 'n/a' : envOk + '/' + envTotal, detail: envTotal === 0 ? 'Sin variables.' : envOk + '/' + envTotal + ' configuradas.' },
+      { n:'03', title:'Cambios', status: S.formDirty || S.envDirty ? 'active' : 'done', badge: S.formDirty || S.envDirty ? 'sin guardar' : 'guardado', detail: S.formDirty && S.envDirty ? 'Config y .env sin guardar.' : S.formDirty ? 'Store config sin guardar.' : S.envDirty ? '.env sin guardar.' : 'Sin cambios pendientes.' },
+      { n:'04', title:'Stack', status: enabled.length > 0 && running.length === enabled.length ? 'done' : running.length > 0 ? 'active' : 'pending', badge: running.length + '/' + enabled.length + ' up', detail: running.length + '/' + enabled.length + ' servicios corriendo.' },
+    ]
+  }
+
+  function renderWizard(d, envState) {
+    var steps = buildWizardSteps(d, envState)
+    q('wizardSteps').innerHTML = steps.map(function(s) {
+      return '<div class="wiz-step step-' + esc(s.status) + '">' +
+        '<span class="step-n">' + esc(s.n) + '</span>' +
+        '<div class="step-info"><div class="step-title">' + esc(s.title) + '</div><div class="step-detail">' + esc(s.detail) + '</div></div>' +
+        '<span class="step-badge">' + esc(s.badge) + '</span>' +
+      '</div>'
+    }).join('')
+    var first = steps.find(function(s) { return s.status !== 'done' })
+    q('wizardSummary').textContent = !first ? 'Stack completo.' :
+      first.n === '02' ? 'Completa las variables de .env.' :
+      first.n === '03' ? 'Guarda los cambios pendientes.' :
+      first.n === '04' ? 'Usa Guardar y Deploy para levantar el stack.' :
+      'Revisa el paso ' + first.n + ': ' + first.title
+  }
+
+  function renderPresets(presets) {
+    q('presetList').innerHTML = presets.map(function(p) {
+      return '<div class="preset-card"><h4>' + esc(p.label) + '</h4><p>' + esc(p.description) + '</p>' +
+        '<button class="btn ghost xs" data-preset="' + esc(p.id) + '">Aplicar</button></div>'
+    }).join('')
+    q('presetList').querySelectorAll('[data-preset]').forEach(function(btn) {
+      btn.addEventListener('click', function() { applyPreset(btn.dataset.preset) })
+    })
+  }
+
+  function renderEnv(envState) {
+    var configured = envState.entries.filter(function(e) { return e.value.trim().length > 0 }).length
+    q('envSummary').textContent = configured + '/' + envState.entries.length + ' vars · ' + envState.source
+    q('envList').innerHTML = envState.entries.map(function(e) {
+      return '<div class="env-item"><label for="env-' + esc(e.key) + '">' + esc(e.key) + '</label>' +
+        '<input id="env-' + esc(e.key) + '" data-env-key="' + esc(e.key) + '" type="' + (e.secret ? 'password' : 'text') + '" value="' + esc(e.value) + '"></div>'
+    }).join('')
+  }
+
+  function renderLogsSvcSelect(services, activeSvcId) {
+    q('logsServiceSelect').innerHTML = services.filter(function(s) { return s.enabled }).map(function(s) {
+      return '<button class="seg-btn' + (s.id === activeSvcId ? ' active' : '') + '" data-svc="' + esc(s.id) + '">' +
+        '<span class="dot dot-' + esc(s.status) + '"></span>' + esc(s.label) + '</button>'
+    }).join('')
+    q('logsServiceSelect').querySelectorAll('.seg-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        q('logsServiceSelect').querySelectorAll('.seg-btn').forEach(function(b) { b.classList.remove('active') })
+        btn.classList.add('active')
       })
+    })
+  }
 
-      state.formDirty = false
-      if (reload) {
-        await loadDashboard()
-      } else if (state.dashboard && state.envState) {
-        renderDeployWizard(state.dashboard, state.envState)
-      }
-      if (toast) {
-        showToast('Config guardada y validada.')
-      }
-      showConfigBanner()
-    }
+  function renderScreens(screenList) {
+    q('screens').innerHTML = screenList.filter(function(s) { return s.enabled }).slice(0, 2).map(function(s) {
+      return '<div class="screen-panel"><div class="screen-bar"><span>' + esc(s.label) + '</span>' +
+        (s.url ? '<a href="' + esc(s.url) + '" target="_blank">abrir &#8599;</a>' : '<span>sin URL</span>') + '</div>' +
+        (s.url ? '<iframe src="' + esc(s.url) + '" loading="lazy"></iframe>' : '<div class="screen-empty">URL no configurada</div>') +
+      '</div>'
+    }).join('')
+  }
 
-    async function saveEnv(options = {}) {
-      const { reload = true, toast = true } = options
-      const values = {}
-      document.querySelectorAll('[data-env-key]').forEach((input) => {
-        values[input.getAttribute('data-env-key')] = input.value
-      })
+  function populateForm(d) {
+    q('storeId').value = d.store.store_id
+    q('storeName').value = d.store.name
+    q('storeLocale').value = d.store.locale
+    q('storeTimezone').value = d.store.timezone
+    q('serviceMode').value = d.retail.service_mode
+    q('customerDisplayEnabled').value = String(d.retail.customer_display_enabled)
+    q('productsDriver').value = d.connectors.products.driver
+    q('inventoryDriver').value = d.connectors.inventory.driver
+    q('customersDriver').value = d.connectors.customers.driver
+    q('ordersDriver').value = d.connectors.orders.driver
+    q('paymentsDriver').value = d.connectors.payments.driver
+    q('productsUrl').value = d.connectors.products.url || d.connectors.products.database || d.connectors.products.connection_string || ''
+    q('inventoryUrl').value = d.connectors.inventory.url || d.connectors.inventory.database || d.connectors.inventory.connection_string || ''
+    q('customersUrl').value = d.connectors.customers.url || d.connectors.customers.database || d.connectors.customers.connection_string || ''
+    q('ordersUrl').value = d.connectors.orders.url || d.connectors.orders.database || d.connectors.orders.connection_string || ''
+  }
 
-      await fetchJson('/api/env', {
-        method: 'PATCH',
-        body: JSON.stringify({ values }),
-      })
-
-      state.envDirty = false
-      if (reload) {
-        await loadDashboard()
-      } else if (state.dashboard && state.envState) {
-        renderDeployWizard(state.dashboard, state.envState)
-      }
-      if (toast) {
-        showToast('.env guardado.')
-      }
-    }
-
-    function buildConnectorPatch(prefix) {
-      const driver = document.getElementById(prefix + 'Driver').value
-      const url = document.getElementById(prefix + 'Url').value.trim()
-      const database = document.getElementById(prefix + 'Db').value.trim()
-      const patch = {
-        driver,
-        url: url || null,
-        database: database || null,
-        connection_string: database || null,
-        headers: {},
-        health_timeout_ms: 3000,
-        retry_policy: { max_attempts: 3, backoff_ms: 250 },
-        options: {},
-      }
-      return patch
-    }
-
-    function buildMockConnectorPatch(prefix) {
-      return {
-        driver: document.getElementById(prefix + 'Driver').value,
-        url: null,
-        database: null,
-        connection_string: null,
-        headers: {},
-        health_timeout_ms: 3000,
-        retry_policy: { max_attempts: 3, backoff_ms: 250 },
-        options: {},
-      }
-    }
-
-    async function testProductsConnector() {
-      const query = document.getElementById('testQuery').value.trim() || 'Nike'
-      connectorResult.textContent = 'Probando conector...'
-      const result = await fetchJson('/api/connectors/products/test', {
-        method: 'POST',
-        body: JSON.stringify({ query }),
-      })
-      connectorResult.textContent = JSON.stringify(result, null, 2)
-      showToast('Conector de productos probado.')
-    }
-
-    async function testCustomersConnector() {
-      const action = document.getElementById('customerAction').value
-      const input = parseJsonObjectField('customerPayload', 'Payload de customers')
-      customerConnectorResult.textContent = 'Probando conector de customers...'
-      const result = await fetchJson('/api/connectors/customers/test', {
-        method: 'POST',
-        body: JSON.stringify({ action, input }),
-      })
-      customerConnectorResult.textContent = JSON.stringify(result, null, 2)
-      showToast('Conector de customers probado.')
-    }
-
-    async function testOrdersConnector() {
-      const action = document.getElementById('orderAction').value
-      const input = parseJsonObjectField('orderPayload', 'Payload de orders')
-      orderConnectorResult.textContent = 'Probando conector de orders...'
-      const result = await fetchJson('/api/connectors/orders/test', {
-        method: 'POST',
-        body: JSON.stringify({ action, input }),
-      })
-      orderConnectorResult.textContent = JSON.stringify(result, null, 2)
-      showToast('Conector de orders probado.')
-    }
-
-    async function testPaymentsConnector() {
-      const input = parseJsonObjectField('paymentPayload', 'Payload de payments')
-      paymentConnectorResult.textContent = 'Probando conector de payments...'
-      const result = await fetchJson('/api/connectors/payments/test', {
-        method: 'POST',
-        body: JSON.stringify({ input }),
-      })
-      paymentConnectorResult.textContent = JSON.stringify(result, null, 2)
-      showToast('Conector de payments probado.')
-    }
-
-    async function deployAll(options = {}) {
-      const { reload = true, toast: showToastMsg = true } = options
-      state.deployInProgress = true
-      updateDeployButton()
-      stopPolling()
-
-      // fast-poll during build so sidebar updates while docker compose is building
-      const fastPoll = window.setInterval(() => refreshStatusOnly(), 3000)
-
-      try {
-        const result = await fetchJson('/api/deploy/up', { method: 'POST' })
-        if (showToastMsg) {
-          showToast(result.ok ? 'Stack lanzado.' : 'Docker compose respondió con error.')
-        }
-        if (reload) {
-          await loadDashboard()
-        }
-      } finally {
-        window.clearInterval(fastPoll)
-        state.deployInProgress = false
-        updateDeployButton()
+  // ── load ──
+  function load() {
+    return Promise.all([api('/api/state'), api('/api/store-config'), api('/api/env')])
+      .then(function(results) {
+        var d = results[0], raw = results[1], env = results[2]
+        S.dashboard = d; S.rawConfig = raw; S.envState = env
+        S.formDirty = false; S.envDirty = false
+        renderHeader(d.services)
+        renderServiceGrid(d.services)
+        renderMetrics(d)
+        renderWizard(d, env)
+        renderPresets(d.connector_presets)
+        renderEnv(env)
+        var activeSegBtn = q('logsServiceSelect').querySelector('.seg-btn.active')
+        renderLogsSvcSelect(d.services, activeSegBtn ? activeSegBtn.dataset.svc : null)
+        renderScreens(d.screens)
+        populateForm(d)
         startPolling()
-      }
-    }
-
-    async function stopAll() {
-      const result = await fetchJson('/api/deploy/down', { method: 'POST' })
-      showToast(result.ok ? 'Stack detenido.' : 'Docker compose respondió con error.')
-      await loadDashboard()
-    }
-
-    async function saveAll() {
-      wizardSummary.textContent = 'Guardando store config y .env...'
-      await saveConfig({ reload: false, toast: false })
-      await saveEnv({ reload: false, toast: false })
-      await loadDashboard()
-      wizardSummary.textContent = 'Config y .env guardados. Si el preset y las variables ya están listos, puedes desplegar el stack.'
-      showToast('Config y .env guardados.')
-    }
-
-    async function saveAllAndDeploy() {
-      wizardSummary.textContent = 'Guardando config, escribiendo .env y lanzando el stack...'
-      await saveConfig({ reload: false, toast: false })
-      await saveEnv({ reload: false, toast: false })
-      hideConfigBanner()
-      await deployAll({ reload: true, toast: false })
-      wizardSummary.textContent = 'Wizard completado. El stack fue lanzado y el panel ya refleja el estado actualizado de los servicios.'
-      showToast('Config, .env y deploy ejecutados.')
-    }
-
-    async function restartService(serviceId) {
-      const result = await fetchJson('/api/services/' + serviceId + '/restart', { method: 'POST' })
-      showToast(result.ok ? 'Servicio reiniciado.' : 'No se pudo reiniciar el servicio.')
-      await loadDashboard()
-    }
-
-    async function startService(serviceId) {
-      const result = await fetchJson('/api/services/' + serviceId + '/start', { method: 'POST' })
-      showToast(result.ok ? 'Servicio iniciado.' : 'No se pudo iniciar el servicio.')
-      await loadDashboard()
-    }
-
-    async function stopService(serviceId) {
-      const result = await fetchJson('/api/services/' + serviceId + '/stop', { method: 'POST' })
-      showToast(result.ok ? 'Servicio detenido.' : 'No se pudo detener el servicio.')
-      await loadDashboard()
-    }
-
-    async function loadLogs(serviceId = logsServiceSelect.value) {
-      const tail = document.getElementById('logsTailInput').value.trim() || '120'
-      logsResult.textContent = 'Cargando logs...'
-      const result = await fetchJson('/api/services/' + serviceId + '/logs?tail=' + encodeURIComponent(tail))
-      logsServiceSelect.value = serviceId
-      logsResult.textContent = [result.stdout || '', result.stderr || ''].filter(Boolean).join('\n') || 'No hubo salida para este servicio.'
-    }
-
-    function openLogs(serviceId) {
-      renderLogsToolbar(state.dashboard.services, serviceId)
-      loadLogs(serviceId).catch((error) => handleError(error, logsResult))
-    }
-
-    function buildWizardSteps(dashboard, envState) {
-      const currentPresetId = detectPresetId(dashboard.connectors)
-      const currentPreset = dashboard.connector_presets.find((preset) => preset.id === currentPresetId)
-      const envTotal = envState.entries.length
-      const envConfigured = envState.entries.filter((entry) => entry.value.trim().length > 0).length
-      const enabledServices = dashboard.services.filter((service) => service.enabled)
-      const runningServices = enabledServices.filter((service) => service.status === 'running')
-
-      return [
-        {
-          index: '01',
-          title: 'Elegir preset',
-          status: currentPreset ? 'done' : 'active',
-          statusLabel: currentPreset ? 'listo' : 'revisar',
-          detail: currentPreset
-            ? 'Preset actual: ' + currentPreset.label
-            : 'Modo actual: configuración manual o mezcla custom de conectores.',
-          action: 'presets',
-          actionLabel: 'Abrir presets',
-        },
-        {
-          index: '02',
-          title: 'Completar .env',
-          status:
-            envTotal === 0 || envConfigured === envTotal
-              ? 'done'
-              : envConfigured > 0
-                ? 'active'
-                : 'pending',
-          statusLabel:
-            envTotal === 0 || envConfigured === envTotal
-              ? 'listo'
-              : envConfigured > 0
-                ? 'revisar'
-                : 'pendiente',
-          detail:
-            envTotal === 0
-              ? 'No hay variables cargadas desde .env o .env.example.'
-              : String(envConfigured) + '/' + String(envTotal) + ' variables con valor.',
-          action: 'env',
-          actionLabel: 'Editar .env',
-        },
-        {
-          index: '03',
-          title: 'Guardar cambios',
-          status: state.formDirty || state.envDirty ? 'active' : 'done',
-          statusLabel: state.formDirty || state.envDirty ? 'revisar' : 'listo',
-          detail:
-            state.formDirty || state.envDirty
-              ? describeUnsavedChanges()
-              : 'No hay cambios locales pendientes en config ni .env.',
-          action: state.formDirty || state.envDirty ? 'save-all' : 'config',
-          actionLabel: state.formDirty || state.envDirty ? 'Guardar todo' : 'Revisar config',
-        },
-        {
-          index: '04',
-          title: 'Desplegar stack',
-          status:
-            enabledServices.length > 0 && runningServices.length === enabledServices.length
-              ? 'done'
-              : runningServices.length > 0
-                ? 'active'
-                : 'pending',
-          statusLabel:
-            enabledServices.length > 0 && runningServices.length === enabledServices.length
-              ? 'arriba'
-              : runningServices.length > 0
-                ? 'parcial'
-                : 'pendiente',
-          detail:
-            enabledServices.length === 0
-              ? 'No hay servicios habilitados en este deploy center.'
-              : String(runningServices.length) + '/' + String(enabledServices.length) + ' servicios en running.',
-          action:
-            enabledServices.length > 0 && runningServices.length === enabledServices.length
-              ? 'logs'
-              : 'deploy',
-          actionLabel:
-            enabledServices.length > 0 && runningServices.length === enabledServices.length
-              ? 'Ver logs runtime'
-              : 'Guardar y deploy',
-        },
-      ]
-    }
-
-    function buildWizardSummary(steps, dashboard, envState) {
-      const firstActionable = steps.find((step) => step.status !== 'done')
-      if (!firstActionable) {
-        return 'Todo el flujo del wizard está en buen estado. El stack ya parece levantado o listo para usarse.'
-      }
-
-      if (firstActionable.action === 'env') {
-        return 'Siguiente recomendado: completa las variables faltantes de .env y guárdalas antes de desplegar.'
-      }
-
-      if (firstActionable.action === 'save-all') {
-        return 'Siguiente recomendado: guarda config y .env para que el deploy use exactamente lo que ves en pantalla.'
-      }
-
-      if (firstActionable.action === 'deploy') {
-        return 'Siguiente recomendado: usa "Guardar Todo y Deploy" para levantar el stack con el preset y la configuración actual.'
-      }
-
-      return 'Siguiente recomendado: revisa el paso "' + firstActionable.title + '" para completar el flujo de deploy.'
-    }
-
-    function detectPresetId(connectors) {
-      const drivers = [
-        connectors.products.driver,
-        connectors.inventory.driver,
-        connectors.customers.driver,
-        connectors.orders.driver,
-        connectors.payments.driver,
-      ]
-
-      if (drivers.every((driver) => driver === 'mock')) {
-        return 'demo-local-mock'
-      }
-
-      if (
-        connectors.products.driver === 'sqlite' &&
-        connectors.inventory.driver === 'sqlite' &&
-        connectors.customers.driver === 'sqlite' &&
-        connectors.orders.driver === 'sqlite' &&
-        connectors.payments.driver === 'mock'
-      ) {
-        return 'sqlite-local-retail'
-      }
-
-      if (
-        connectors.products.driver === 'rest' &&
-        connectors.inventory.driver === 'rest' &&
-        connectors.customers.driver === 'rest' &&
-        connectors.orders.driver === 'rest' &&
-        connectors.payments.driver === 'mock'
-      ) {
-        return 'rest-backoffice'
-      }
-
-      return null
-    }
-
-    function describeUnsavedChanges() {
-      if (state.formDirty && state.envDirty) {
-        return 'Hay cambios pendientes tanto en store config como en .env.'
-      }
-
-      if (state.formDirty) {
-        return 'Hay cambios pendientes en store config.'
-      }
-
-      if (state.envDirty) {
-        return 'Hay cambios pendientes en .env.'
-      }
-
-      return 'No hay cambios pendientes.'
-    }
-
-    function scrollToSection(sectionId) {
-      const element = document.getElementById(sectionId)
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
-    }
-
-    async function runWizardAction(action) {
-      switch (action) {
-        case 'presets':
-          scrollToSection('presetSection')
-          break
-        case 'env':
-          scrollToSection('envSection')
-          break
-        case 'config':
-          scrollToSection('configSection')
-          break
-        case 'save-all':
-          await saveAll()
-          break
-        case 'deploy':
-          await saveAllAndDeploy()
-          break
-        case 'logs':
-          openRuntimeLogs()
-          break
-        default:
-          throw new Error('Acción de wizard no soportada: ' + action)
-      }
-    }
-
-    function openRuntimeLogs() {
-      const runtimeService = state.dashboard?.services?.find((service) =>
-        service.kind === 'runtime' || service.id === 'store-runtime' || service.service_name === 'store-runtime'
-      )
-
-      if (!runtimeService) {
-        throw new Error('No encontré un servicio runtime para mostrar logs.')
-      }
-
-      scrollToSection('envSection')
-      openLogs(runtimeService.id)
-    }
-
-    function parseJsonObjectField(id, label) {
-      const raw = document.getElementById(id).value.trim()
-      if (!raw) {
-        return {}
-      }
-
-      let parsed
-      try {
-        parsed = JSON.parse(raw)
-      } catch (error) {
-        throw new Error(label + ': JSON inválido. ' + (error instanceof Error ? error.message : String(error)))
-      }
-
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error(label + ': debe ser un objeto JSON.')
-      }
-
-      return parsed
-    }
-
-    function applyPayloadSample(selectId, textareaId, samples, force = false) {
-      const select = document.getElementById(selectId)
-      const textarea = document.getElementById(textareaId)
-      if (!force && textarea.value.trim()) {
-        return
-      }
-
-      textarea.value = JSON.stringify(samples[select.value], null, 2)
-    }
-
-    function applyJsonSample(textareaId, sample, force = false) {
-      const textarea = document.getElementById(textareaId)
-      if (!force && textarea.value.trim()) {
-        return
-      }
-
-      textarea.value = JSON.stringify(sample, null, 2)
-    }
-
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;')
-    }
-
-    window.startService = startService
-    window.stopService = stopService
-    window.restartService = restartService
-    window.restartRuntime = restartRuntime
-    window.openLogs = openLogs
-    window.applyConnectorPreset = applyConnectorPreset
-    window.runWizardAction = (action) => runWizardAction(action).catch((error) => handleError(error, wizardSummary))
-    document.querySelectorAll('#configSection input, #configSection select').forEach((element) => {
-      element.addEventListener('input', () => {
-        state.formDirty = true
-        if (state.dashboard && state.envState) {
-          renderDeployWizard(state.dashboard, state.envState)
-        }
       })
-      element.addEventListener('change', () => {
-        state.formDirty = true
-        if (state.dashboard && state.envState) {
-          renderDeployWizard(state.dashboard, state.envState)
-        }
+  }
+
+  function refreshStatus() {
+    return api('/api/state').then(function(d) {
+      S.dashboard = d
+      renderHeader(d.services)
+      renderServiceGrid(d.services)
+      renderMetrics(d)
+      if (S.envState) renderWizard(d, S.envState)
+      var activeSegBtn = q('logsServiceSelect').querySelector('.seg-btn.active')
+      renderLogsSvcSelect(d.services, activeSegBtn ? activeSegBtn.dataset.svc : null)
+    }).catch(function() {})
+  }
+
+  function startPolling() {
+    if (S.pollingTimer) return
+    S.pollingTimer = setInterval(refreshStatus, 5000)
+  }
+
+  function stopPolling() { clearInterval(S.pollingTimer); S.pollingTimer = null }
+
+  // ── banner ──
+  function showBanner() {
+    var runtimeUp = S.dashboard && S.dashboard.services.some(function(s) {
+      return (s.kind === 'runtime' || s.id === 'store-runtime') && s.status === 'running'
+    })
+    if (!runtimeUp) return
+    S.configNeedsRestart = true
+    q('configBanner').classList.add('on')
+  }
+
+  function hideBanner() { S.configNeedsRestart = false; q('configBanner').classList.remove('on') }
+
+  function setDeployBtn(loading) {
+    var btn = q('deployButton')
+    btn.disabled = loading
+    btn.innerHTML = loading ? '<span class="spin"></span> Desplegando...' : '&#9654; Deploy'
+  }
+
+  // ── actions ──
+  function deploy(opts) {
+    var reload = !opts || opts.reload !== false
+    var silent = opts && opts.silent
+    S.deployInProgress = true; setDeployBtn(true); stopPolling()
+    var fastPoll = setInterval(refreshStatus, 3000)
+    return api('/api/deploy/up', { method: 'POST' })
+      .then(function(r) {
+        if (!silent) toast(r.ok ? 'Stack lanzado.' : 'Docker respondio con error.')
+        if (reload) return load()
       })
-    })
-    envList.addEventListener('input', () => {
-      state.envDirty = true
-      if (state.dashboard && state.envState) {
-        renderDeployWizard(state.dashboard, state.envState)
-      }
-    })
-    document.getElementById('reloadButton').addEventListener('click', () => loadDashboard().catch((error) => handleError(error)))
-    document.getElementById('restartRuntimeButton').addEventListener('click', () => restartRuntime().catch((error) => handleError(error)))
-    document.getElementById('bannerRestartButton').addEventListener('click', () => restartRuntime().catch((error) => handleError(error)))
-    document.getElementById('bannerDismissButton').addEventListener('click', () => hideConfigBanner())
-    document.getElementById('wizardSaveAllButton').addEventListener('click', () => saveAll().catch((error) => handleError(error, wizardSummary)))
-    document.getElementById('wizardDeployButton').addEventListener('click', () => saveAllAndDeploy().catch((error) => handleError(error, wizardSummary)))
-    document.getElementById('wizardLogsButton').addEventListener('click', () => {
-      try {
-        openRuntimeLogs()
-      } catch (error) {
-        handleError(error, wizardSummary)
-      }
-    })
-    document.getElementById('saveConfigButton').addEventListener('click', () => saveConfig().catch((error) => handleError(error)))
-    document.getElementById('saveEnvButton').addEventListener('click', () => saveEnv().catch((error) => handleError(error)))
-    document.getElementById('testProductsButton').addEventListener('click', () => testProductsConnector().catch((error) => handleError(error, connectorResult)))
-    document.getElementById('testCustomersButton').addEventListener('click', () => testCustomersConnector().catch((error) => handleError(error, customerConnectorResult)))
-    document.getElementById('testOrdersButton').addEventListener('click', () => testOrdersConnector().catch((error) => handleError(error, orderConnectorResult)))
-    document.getElementById('testPaymentsButton').addEventListener('click', () => testPaymentsConnector().catch((error) => handleError(error, paymentConnectorResult)))
-    document.getElementById('deployButton').addEventListener('click', () => deployAll().catch((error) => handleError(error)))
-    document.getElementById('stopButton').addEventListener('click', () => stopAll().catch((error) => handleError(error)))
-    document.getElementById('loadLogsButton').addEventListener('click', () => loadLogs().catch((error) => handleError(error, logsResult)))
-    document.getElementById('customerAction').addEventListener('change', () => applyPayloadSample('customerAction', 'customerPayload', customerSamples, true))
-    document.getElementById('orderAction').addEventListener('change', () => applyPayloadSample('orderAction', 'orderPayload', orderSamples, true))
+      .finally(function() {
+        clearInterval(fastPoll); S.deployInProgress = false; setDeployBtn(false); startPolling()
+      })
+  }
 
-    function handleError(error, target) {
-      const message = error instanceof Error ? error.message : String(error)
-      if (target) {
-        target.textContent = message
-      }
-      showToast(error instanceof Error ? error.message : String(error))
+  function stopAll() {
+    return api('/api/deploy/down', { method: 'POST' }).then(function(r) {
+      toast(r.ok ? 'Stack detenido.' : 'Error al detener.')
+      return load()
+    })
+  }
+
+  function buildConnPatch(prefix) {
+    var driver = q(prefix + 'Driver').value
+    var urlOrDb = (q(prefix + 'Url') ? q(prefix + 'Url').value.trim() : '')
+    return { driver: driver, url: urlOrDb || null, database: urlOrDb || null, connection_string: urlOrDb || null, headers: {}, health_timeout_ms: 3000, retry_policy: { max_attempts: 3, backoff_ms: 250 }, options: {} }
+  }
+
+  function saveConfig(opts) {
+    var reload = !opts || opts.reload !== false
+    var silent = opts && opts.silent
+    var patch = {
+      store: { store_id: q('storeId').value.trim(), name: q('storeName').value.trim(), locale: q('storeLocale').value.trim(), timezone: q('storeTimezone').value.trim() },
+      retail: { service_mode: q('serviceMode').value, customer_display_enabled: q('customerDisplayEnabled').value === 'true' },
+      connectors: {
+        products: buildConnPatch('products'), inventory: buildConnPatch('inventory'),
+        customers: buildConnPatch('customers'), orders: buildConnPatch('orders'),
+        payments: { driver: q('paymentsDriver').value, url: null, database: null, connection_string: null, headers: {}, health_timeout_ms: 3000, retry_policy: { max_attempts: 3, backoff_ms: 250 }, options: {} },
+      },
     }
+    return api('/api/store-config', { method: 'PATCH', body: JSON.stringify(patch) })
+      .then(function() {
+        S.formDirty = false
+        if (!silent) toast('Config guardada.')
+        if (reload) return load()
+        else if (S.dashboard && S.envState) renderWizard(S.dashboard, S.envState)
+      })
+      .then(function() { showBanner() })
+  }
 
-    applyPayloadSample('customerAction', 'customerPayload', customerSamples, true)
-    applyPayloadSample('orderAction', 'orderPayload', orderSamples, true)
-    applyJsonSample('paymentPayload', paymentSample, true)
-    loadDashboard().catch((error) => handleError(error))
-  </script>
+  function saveEnv(opts) {
+    var reload = !opts || opts.reload !== false
+    var silent = opts && opts.silent
+    var values = {}
+    document.querySelectorAll('[data-env-key]').forEach(function(inp) { values[inp.dataset.envKey] = inp.value })
+    return api('/api/env', { method: 'PATCH', body: JSON.stringify({ values: values }) })
+      .then(function() {
+        S.envDirty = false
+        if (!silent) toast('.env guardado.')
+        if (reload) return load()
+        else if (S.dashboard && S.envState) renderWizard(S.dashboard, S.envState)
+      })
+  }
+
+  function saveAll() {
+    return saveConfig({ reload: false, silent: true })
+      .then(function() { return saveEnv({ reload: false, silent: true }) })
+      .then(function() { return load() })
+      .then(function() { toast('Config y .env guardados.') })
+  }
+
+  function saveAllAndDeploy() {
+    return saveConfig({ reload: false, silent: true })
+      .then(function() { return saveEnv({ reload: false, silent: true }) })
+      .then(function() { hideBanner(); return deploy({ reload: true }) })
+  }
+
+  function restartRuntime() {
+    var btn = q('restartRuntimeButton')
+    var orig = btn.textContent
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'
+    return api('/api/deploy/restart-runtime', { method: 'POST' })
+      .then(function(r) { toast(r.ok ? 'Runtime reiniciado.' : 'No se pudo reiniciar.'); hideBanner(); return refreshStatus() })
+      .catch(function(e) { errShow(e) })
+      .finally(function() { btn.disabled = false; btn.textContent = orig })
+  }
+
+  function startSvc(id) { return api('/api/services/' + id + '/start', { method: 'POST' }).then(function(r) { toast(r.ok ? 'Iniciado.' : 'Error.'); return refreshStatus() }) }
+  function stopSvc(id) { return api('/api/services/' + id + '/stop', { method: 'POST' }).then(function(r) { toast(r.ok ? 'Detenido.' : 'Error.'); return refreshStatus() }) }
+  function restartSvc(id) { return api('/api/services/' + id + '/restart', { method: 'POST' }).then(function(r) { toast(r.ok ? 'Reiniciado.' : 'Error.'); return refreshStatus() }) }
+
+  function loadLogs() {
+    var activeBtn = q('logsServiceSelect').querySelector('.seg-btn.active')
+    var svcId = activeBtn ? activeBtn.dataset.svc : null
+    if (!svcId) { q('logsResult').textContent = 'Selecciona un servicio.'; return Promise.resolve() }
+    var tail = q('logsTailInput').value || '120'
+    q('logsResult').textContent = 'Cargando...'
+    return api('/api/services/' + svcId + '/logs?tail=' + encodeURIComponent(tail))
+      .then(function(r) {
+        q('logsResult').textContent = [r.stdout, r.stderr].filter(Boolean).join('\\n') || 'Sin salida.'
+        q('logsResult').scrollTop = q('logsResult').scrollHeight
+      })
+  }
+
+  function openLogs(svcId) {
+    switchTab('logs')
+    q('logsServiceSelect').querySelectorAll('.seg-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.svc === svcId) })
+    loadLogs().catch(function(e) { errShow(e, q('logsResult')) })
+  }
+
+  function toggleAutoRefresh() {
+    S.logsAutoRefresh = !S.logsAutoRefresh
+    q('autoRefreshButton').textContent = S.logsAutoRefresh ? 'Auto ●' : 'Auto ○'
+    if (S.logsAutoRefresh) { S.logsAutoTimer = setInterval(function() { loadLogs().catch(function() {}) }, 4000) }
+    else { clearInterval(S.logsAutoTimer) }
+  }
+
+  function applyPreset(id) {
+    var preset = S.dashboard && S.dashboard.connector_presets.find(function(p) { return p.id === id })
+    if (!preset) return
+    q('presetResult').textContent = 'Aplicando ' + preset.label + '...'
+    api('/api/store-config', { method: 'PATCH', body: JSON.stringify(preset.patch) })
+      .then(function() { return load() })
+      .then(function() { q('presetResult').textContent = 'Preset aplicado: ' + preset.label; toast('Preset: ' + preset.label) })
+      .catch(function(e) { errShow(e, q('presetResult')) })
+  }
+
+  function testProducts() {
+    var el = q('connectorResult')
+    el.textContent = 'Probando...'
+    return api('/api/connectors/products/test', { method: 'POST', body: JSON.stringify({ query: q('testQuery').value.trim() || 'Nike' }) })
+      .then(function(r) { el.textContent = JSON.stringify(r, null, 2); toast('Products OK.') })
+  }
+
+  function testCustomers() {
+    var el = q('customerConnectorResult'); el.textContent = 'Probando...'
+    var input = parseJson('customerPayload', 'Customers payload')
+    return api('/api/connectors/customers/test', { method: 'POST', body: JSON.stringify({ action: q('customerAction').value, input: input }) })
+      .then(function(r) { el.textContent = JSON.stringify(r, null, 2); toast('Customers OK.') })
+  }
+
+  function testOrders() {
+    var el = q('orderConnectorResult'); el.textContent = 'Probando...'
+    var input = parseJson('orderPayload', 'Orders payload')
+    return api('/api/connectors/orders/test', { method: 'POST', body: JSON.stringify({ action: q('orderAction').value, input: input }) })
+      .then(function(r) { el.textContent = JSON.stringify(r, null, 2); toast('Orders OK.') })
+  }
+
+  function testPayments() {
+    var el = q('paymentConnectorResult'); el.textContent = 'Probando...'
+    var input = parseJson('paymentPayload', 'Payments payload')
+    return api('/api/connectors/payments/test', { method: 'POST', body: JSON.stringify({ input: input }) })
+      .then(function(r) { el.textContent = JSON.stringify(r, null, 2); toast('Payments OK.') })
+  }
+
+  // ── event wiring ──
+  qsa('.tab').forEach(function(t) { t.addEventListener('click', function() { switchTab(t.dataset.tab) }) })
+  qsa('.sub-tab').forEach(function(t) { t.addEventListener('click', function() { switchSubTab(t.dataset.subtab) }) })
+
+  q('reloadButton').addEventListener('click', function() { load().catch(function(e) { errShow(e) }) })
+  q('restartRuntimeButton').addEventListener('click', function() { restartRuntime() })
+  q('stopButton').addEventListener('click', function() { stopAll().catch(function(e) { errShow(e) }) })
+  q('deployButton').addEventListener('click', function() { deploy().catch(function(e) { errShow(e) }) })
+  q('bannerRestartButton').addEventListener('click', function() { restartRuntime() })
+  q('bannerDismissButton').addEventListener('click', hideBanner)
+  q('saveConfigButton').addEventListener('click', function() { saveConfig().catch(function(e) { errShow(e) }) })
+  q('saveConnectorsButton').addEventListener('click', function() { saveConfig().catch(function(e) { errShow(e) }) })
+  q('saveEnvButton').addEventListener('click', function() { saveEnv().catch(function(e) { errShow(e) }) })
+  q('wizardDeployButton').addEventListener('click', function() { saveAllAndDeploy().catch(function(e) { errShow(e) }) })
+  q('wizardSaveAllButton').addEventListener('click', function() { saveAll().catch(function(e) { errShow(e) }) })
+  q('wizardLogsButton').addEventListener('click', function() {
+    var rt = S.dashboard && S.dashboard.services.find(function(s) { return s.kind === 'runtime' || s.id === 'store-runtime' })
+    if (rt) openLogs(rt.id)
+  })
+  q('testProductsButton').addEventListener('click', function() { testProducts().catch(function(e) { errShow(e, q('connectorResult')) }) })
+  q('testCustomersButton').addEventListener('click', function() { testCustomers().catch(function(e) { errShow(e, q('customerConnectorResult')) }) })
+  q('testOrdersButton').addEventListener('click', function() { testOrders().catch(function(e) { errShow(e, q('orderConnectorResult')) }) })
+  q('testPaymentsButton').addEventListener('click', function() { testPayments().catch(function(e) { errShow(e, q('paymentConnectorResult')) }) })
+  q('loadLogsButton').addEventListener('click', function() { loadLogs().catch(function(e) { errShow(e, q('logsResult')) }) })
+  q('autoRefreshButton').addEventListener('click', toggleAutoRefresh)
+
+  q('customerAction').addEventListener('change', function() {
+    q('customerPayload').value = JSON.stringify(customerSamples[q('customerAction').value], null, 2)
+  })
+  q('orderAction').addEventListener('change', function() {
+    q('orderPayload').value = JSON.stringify(orderSamples[q('orderAction').value], null, 2)
+  })
+
+  var dirtyIds = ['storeId','storeName','storeLocale','storeTimezone','serviceMode','customerDisplayEnabled','productsDriver','inventoryDriver','customersDriver','ordersDriver','paymentsDriver','productsUrl','inventoryUrl','customersUrl','ordersUrl']
+  dirtyIds.forEach(function(id) {
+    var el = q(id); if (!el) return
+    var mark = function() { S.formDirty = true; if (S.dashboard && S.envState) renderWizard(S.dashboard, S.envState) }
+    el.addEventListener('input', mark); el.addEventListener('change', mark)
+  })
+  q('envList').addEventListener('input', function() { S.envDirty = true; if (S.dashboard && S.envState) renderWizard(S.dashboard, S.envState) })
+
+  q('serviceGrid').addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-action]')
+    if (!btn) return
+    var row = btn.closest('[data-svc]')
+    if (!row) return
+    var svcId = row.dataset.svc
+    var action = btn.dataset.action
+    if (action === 'start') startSvc(svcId)
+    else if (action === 'stop') stopSvc(svcId)
+    else if (action === 'restart') restartSvc(svcId)
+    else if (action === 'logs') openLogs(svcId)
+  })
+
+  // init
+  q('customerPayload').value = JSON.stringify(customerSamples.lookup, null, 2)
+  q('orderPayload').value = JSON.stringify(orderSamples.create, null, 2)
+  q('paymentPayload').value = JSON.stringify(paymentSample, null, 2)
+  load().catch(function(e) { errShow(e) })
+})()
+</script>
 </body>
 </html>`
 }

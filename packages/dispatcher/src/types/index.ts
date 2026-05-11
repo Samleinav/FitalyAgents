@@ -89,6 +89,7 @@ export const SpeechPartialEventSchema = z.object({
   event: z.literal('SPEECH_PARTIAL'),
   session_id: z.string(),
   text: z.string(),
+  confidence: z.number().min(0).max(1).optional(),
   locale: z.string().optional(),
   speaker_id: z.string().optional(),
   role: z.string().nullable().optional(),
@@ -98,6 +99,20 @@ export const SpeechPartialEventSchema = z.object({
   timestamp: z.number(),
 })
 export type SpeechPartialEvent = z.infer<typeof SpeechPartialEventSchema>
+
+export const SpeechProbableEventSchema = z.object({
+  event: z.literal('SPEECH_PROBABLE'),
+  session_id: z.string(),
+  text: z.string(),
+  intent_id: z.string(),
+  confidence: z.number(),
+  margin: z.number(),
+  speaker_id: z.string().optional(),
+  role: z.string().nullable().optional(),
+  store_id: z.string().optional(),
+  timestamp: z.number(),
+})
+export type SpeechProbableEvent = z.infer<typeof SpeechProbableEventSchema>
 
 // ── Classifier interface ────────────────────────────────────────────────────
 

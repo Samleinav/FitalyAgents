@@ -60,6 +60,23 @@ export interface DashboardResolvedApproval {
   resolvedAt: number
 }
 
+export interface DashboardStaffAction {
+  type: 'collect_cash' | 'card_terminal' | 'deliver_product' | 'generic'
+  message: string
+  sessionId: string | null
+  orderId: string | null
+  amount: number | null
+  paymentMethod: string | null
+  triggeredAt: number
+}
+
+export interface DashboardSessionStats {
+  activeSessionId: string | null
+  lastSpeechFinalAt: number | null
+  lastResponseStartAt: number | null
+  lastLatencyMs: number | null
+}
+
 export interface StoreDashboardState {
   storeId: string
   updatedAt: number | null
@@ -74,6 +91,8 @@ export interface StoreDashboardState {
     activeTurnId: string | null
     turns: DashboardTranscriptTurn[]
   }
+  sessionStats: DashboardSessionStats
+  staffAction: DashboardStaffAction | null
   components: Record<string, DashboardComponentState>
   recentEvents: DashboardEventLogEntry[]
 }
@@ -118,6 +137,8 @@ export function createStoreDashboardState(storeId: string): StoreDashboardState 
       activeTurnId: null,
       turns: [],
     },
+    sessionStats: createEmptySessionStats(),
+    staffAction: null,
     components: {},
     recentEvents: [],
   }
@@ -165,6 +186,10 @@ export function applyDashboardBusEvent(
       applyUiUpdate(next, event, timestamp)
       break
 
+    case 'bus:TOOL_RESULT':
+      applyToolResult(next, event, timestamp)
+      break
+
     case 'bus:ORDER_QUEUED_NO_APPROVER':
       applyApprovalQueued(next, event, timestamp)
       break
@@ -175,6 +200,11 @@ export function applyDashboardBusEvent(
 
     case 'bus:ORDER_APPROVAL_TIMEOUT':
       applyApprovalTimeout(next, event)
+      break
+
+    case 'bus:SESSION_ENDED':
+      next.staffAction = null
+      next.sessionStats = createEmptySessionStats()
       break
 
     default:
@@ -214,6 +244,7 @@ function applySpeechFinal(
   })
   trimTranscript(state)
   state.transcript.activeSessionId = sessionId
+  state.sessionStats.lastSpeechFinalAt = timestamp
 }
 
 function applyResponseStart(
@@ -229,6 +260,12 @@ function applyResponseStart(
   turn.updatedAt = timestamp
   state.transcript.activeSessionId = sessionId
   state.transcript.activeTurnId = turnId
+  state.sessionStats.activeSessionId = sessionId
+  state.sessionStats.lastResponseStartAt = timestamp
+  state.sessionStats.lastLatencyMs =
+    state.sessionStats.lastSpeechFinalAt == null
+      ? null
+      : timestamp - state.sessionStats.lastSpeechFinalAt
 }
 
 function applyAvatarSpeak(
@@ -393,6 +430,76 @@ function applyApprovalTimeout(state: StoreDashboardState, event: Record<string, 
   removePendingApproval(state, readString(event.request_id), readString(event.draft_id))
 }
 
+function applyToolResult(
+  state: StoreDashboardState,
+  event: Record<string, unknown>,
+  timestamp: number,
+): void {
+  const toolName = readString(event.tool_name) ?? readString(event.tool_id)
+  const result = toRecord(event.result)
+  const sessionId = readString(event.session_id)
+  const orderId = readString(result.order_id)
+  const amount = readNumber(result.amount)
+  const paymentMethod = readString(result.payment_method)
+  const amountText = amount == null ? 'monto pendiente' : formatCurrency(amount)
+
+  if (toolName === 'payment_intent_create') {
+    if (paymentMethod === 'cash') {
+      state.staffAction = {
+        type: 'collect_cash',
+        message: `Recibe el efectivo del cliente: ${amountText}`,
+        sessionId,
+        orderId,
+        amount,
+        paymentMethod,
+        triggeredAt: timestamp,
+      }
+      return
+    }
+
+    if (paymentMethod === 'card') {
+      state.staffAction = {
+        type: 'card_terminal',
+        message: `El datafono está esperando la tarjeta: ${amountText}`,
+        sessionId,
+        orderId,
+        amount,
+        paymentMethod,
+        triggeredAt: timestamp,
+      }
+      return
+    }
+
+    state.staffAction = {
+      type: 'generic',
+      message: `Cobro pendiente: ${amountText}`,
+      sessionId,
+      orderId,
+      amount,
+      paymentMethod,
+      triggeredAt: timestamp,
+    }
+    return
+  }
+
+  if (toolName === 'order_confirm') {
+    state.staffAction = {
+      type: 'deliver_product',
+      message: 'Orden confirmada. Entrega el producto al cliente.',
+      sessionId,
+      orderId,
+      amount: null,
+      paymentMethod: null,
+      triggeredAt: timestamp,
+    }
+    return
+  }
+
+  if (toolName === 'receipt_print') {
+    state.staffAction = null
+  }
+}
+
 function upsertPendingApproval(
   state: StoreDashboardState,
   approval: DashboardPendingApproval,
@@ -528,6 +635,8 @@ function summarizeEvent(channel: string, event: Record<string, unknown>): string
       return `Aprobación ${event.approved === true ? 'aprobada' : 'rechazada'} · ${readString(event.approver_id) ?? 'sin aprobador'}`
     case 'bus:ORDER_APPROVAL_TIMEOUT':
       return `Aprobación expirada · ${readString(event.request_id) ?? 'sin request'}`
+    case 'bus:TOOL_RESULT':
+      return `Tool ${readString(event.tool_name) ?? '?'} completado en sesión ${readString(event.session_id) ?? '?'}`
     case 'bus:UI_UPDATE':
       return `UI ${readString(event.component) ?? 'component'} · ${readString(event.action) ?? 'update'}`
     default:
@@ -562,6 +671,8 @@ function cloneState(state: StoreDashboardState): StoreDashboardState {
       activeTurnId: state.transcript.activeTurnId,
       turns: state.transcript.turns.map((turn) => ({ ...turn })),
     },
+    sessionStats: { ...state.sessionStats },
+    staffAction: state.staffAction ? { ...state.staffAction } : null,
     components: Object.fromEntries(
       Object.entries(state.components).map(([key, value]) => [key, { ...value }]),
     ),
@@ -571,6 +682,15 @@ function cloneState(state: StoreDashboardState): StoreDashboardState {
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+}
+
+function createEmptySessionStats(): DashboardSessionStats {
+  return {
+    activeSessionId: null,
+    lastSpeechFinalAt: null,
+    lastResponseStartAt: null,
+    lastLatencyMs: null,
+  }
 }
 
 function readTimestamp(event: Record<string, unknown>): number {
@@ -591,6 +711,13 @@ function readStringArray(value: unknown): string[] {
 
 function readNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('es', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
 }
 
 function readSpeakerStates(value: unknown): DashboardSpeakerState[] {

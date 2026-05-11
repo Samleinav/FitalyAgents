@@ -173,6 +173,193 @@ describe('InteractionRuntimeAgent', () => {
     }
   })
 
+  it('cancels an active draft when the customer says cancela', async () => {
+    const harness = await createHarness()
+    harness.draftStore.getBySession.mockResolvedValue({ id: 'draft-2' })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'cancela',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).toHaveBeenCalledWith('draft-2')
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'Listo, cancelo el pedido.',
+        6,
+      )
+      expect(harness.interaction.handleDraftFlow).not.toHaveBeenCalled()
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('answers with an alternative when cancelling without an active draft', async () => {
+    const harness = await createHarness()
+    harness.orderRepository.insert({
+      id: 'ord-cancel-1',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-1', quantity: 1, price: 25 }],
+      },
+      result: {
+        order_id: 'ord-cancel-1',
+        total: 25,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'cancela',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).not.toHaveBeenCalled()
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'No tengo nada pendiente que cancelar. Quieres buscar otro producto?',
+        6,
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('cancels an active draft and asks for a corrected visible product choice', async () => {
+    const harness = await createHarness()
+    harness.draftStore.getBySession.mockResolvedValue({
+      id: 'draft-correction-1',
+      items: {
+        items: [{ product_id: 'sku-red', quantity: 1, price: 90 }],
+      },
+    })
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'no, mejor el otro',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).toHaveBeenCalledWith('draft-correction-1')
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'Cual prefieres? A2 Cloud Runner Azul.',
+        6,
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('continues through the LLM for correction intent without an active draft', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'no, mejor el otro',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.draftStore.cancel).not.toHaveBeenCalled()
+      expect(harness.interaction.handleSpeechFinal).toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('ends the runtime session and publishes SESSION_ENDED on farewell', async () => {
+    const harness = await createHarness()
+    const sessionEndedEvents: unknown[] = []
+    const unsubscribe = harness.bus.subscribe('bus:SESSION_ENDED', (payload) => {
+      sessionEndedEvents.push(payload)
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'gracias, eso es todo',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'Con gusto. Hasta luego.',
+        6,
+      )
+      expect(harness.sessionRepository.list()).toEqual([
+        expect.objectContaining({
+          session_id: 'session-1',
+          ended_at: expect.any(Number),
+          summary: {
+            closed_by: 'farewell',
+            last_user_text: 'gracias, eso es todo',
+          },
+        }),
+      ])
+      expect(sessionEndedEvents).toEqual([
+        expect.objectContaining({
+          event: 'SESSION_ENDED',
+          session_id: 'session-1',
+          store_id: 'store-test',
+        }),
+      ])
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
   it('continues an active order when the customer asks how to pay', async () => {
     const harness = await createHarness()
     harness.orderRepository.insert({
@@ -211,6 +398,8 @@ describe('InteractionRuntimeAgent', () => {
         expect.stringContaining('Puedes pagar con tarjeta o efectivo'),
         7,
       )
+      expect(harness.interaction.handleToolCall).not.toHaveBeenCalled()
+      expect(harness.interaction.handleProtectedConfirm).not.toHaveBeenCalled()
       expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
     } finally {
       await harness.agent.stop()
@@ -218,8 +407,14 @@ describe('InteractionRuntimeAgent', () => {
     }
   })
 
-  it('prepares a protected payment intent when the customer chooses card', async () => {
+  it('auto-confirms a protected card payment when the customer chooses card', async () => {
     const harness = await createHarness()
+    harness.interaction.handleToolCall.mockResolvedValueOnce({
+      type: 'draft_ready',
+      toolId: 'payment_intent_create',
+      draftId: 'draft-payment-card',
+      needs_confirmation: true,
+    })
     harness.orderRepository.insert({
       id: 'ord-2',
       session_id: 'session-1',
@@ -262,13 +457,305 @@ describe('InteractionRuntimeAgent', () => {
         'customer-1',
         'customer',
       )
+      expect(harness.interaction.handleProtectedConfirm).toHaveBeenCalledWith('session-1', 'si')
       expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
     } finally {
       await harness.agent.stop()
       await cleanupHarness(harness)
     }
   })
+
+  it('auto-confirms a protected cash payment when the customer chooses cash', async () => {
+    const harness = await createHarness()
+    harness.interaction.handleToolCall.mockResolvedValueOnce({
+      type: 'needs_confirmation',
+      toolId: 'payment_intent_create',
+      prompt: 'Tengo listo el cobro. Preparo el pago?',
+    })
+    harness.orderRepository.insert({
+      id: 'ord-cash-1',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-cash', quantity: 1, price: 15 }],
+      },
+      result: {
+        order_id: 'ord-cash-1',
+        total: 15,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'quiero pagar en efectivo',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'payment_intent_create',
+        {
+          order_id: 'ord-cash-1',
+          amount: 15,
+          payment_method: 'cash',
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleProtectedConfirm).toHaveBeenCalledWith('session-1', 'si')
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('speaks the payment result when the customer chooses card', async () => {
+    const harness = await createHarness()
+    harness.interaction.handleToolCall.mockResolvedValueOnce({
+      type: 'executed',
+      toolId: 'payment_intent_create',
+      result: {
+        text: 'El datafono queda esperando la tarjeta.',
+      },
+    })
+    harness.orderRepository.insert({
+      id: 'ord-3',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-3', quantity: 1, price: 35 }],
+      },
+      result: {
+        order_id: 'ord-3',
+        total: 35,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'pago con tarjeta',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'payment_intent_create',
+        {
+          order_id: 'ord-3',
+          amount: 35,
+          payment_method: 'card',
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.ttsStream.speakText).toHaveBeenCalledWith(
+        'session-1',
+        'El datafono queda esperando la tarjeta.',
+        6,
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('selects the A2 product from the latest visible product list', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'quiero el A2',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'order_create',
+        {
+          items: [
+            {
+              product_id: 'sku-blue',
+              name: 'Cloud Runner Azul',
+              quantity: 1,
+              price: 95,
+            },
+          ],
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('selects the first product when the customer says el primero', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'el primero por favor',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'order_create',
+        {
+          items: [
+            {
+              product_id: 'sku-red',
+              name: 'Cloud Runner Rojo',
+              quantity: 1,
+              price: 90,
+            },
+          ],
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('selects a product by a unique visible attribute', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+      await publishProductList(harness)
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'me llevo el azul',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'order_create',
+        {
+          items: [
+            {
+              product_id: 'sku-blue',
+              name: 'Cloud Runner Azul',
+              quantity: 1,
+              price: 95,
+            },
+          ],
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('continues through the LLM when visual selection has no active product list', async () => {
+    const harness = await createHarness()
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'quiero el A2',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).not.toHaveBeenCalled()
+      expect(harness.interaction.handleSpeechFinal).toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
 })
+
+async function publishProductList(harness: Awaited<ReturnType<typeof createHarness>>) {
+  await harness.bus.publish('bus:TOOL_RESULT', {
+    event: 'TOOL_RESULT',
+    tool_name: 'product_search',
+    session_id: 'session-1',
+    result: {
+      products: [
+        {
+          id: 'sku-red',
+          name: 'Cloud Runner Rojo',
+          price: 90,
+          description: 'Tenis talla 42 color rojo',
+          stock: 3,
+        },
+        {
+          id: 'sku-blue',
+          name: 'Cloud Runner Azul',
+          price: 95,
+          description: 'Tenis talla 42 color azul',
+          stock: 2,
+        },
+      ],
+    },
+    timestamp: Date.now(),
+  })
+}
 
 async function createHarness(overrides?: {
   runWithSession?: ReturnType<typeof vi.fn>
@@ -321,6 +808,7 @@ async function createHarness(overrides?: {
     speakText: vi.fn().mockResolvedValue(undefined),
   }
   const orderRepository = new OrderRepository(db)
+  const sessionRepository = new SessionRepository(db)
 
   const agent = new InteractionRuntimeAgent({
     bus,
@@ -329,7 +817,7 @@ async function createHarness(overrides?: {
     toolRegistry: toolRegistry as never,
     contextStore,
     sessionManager,
-    sessionRepository: new SessionRepository(db),
+    sessionRepository,
     draftStore: draftStore as never,
     draftRepository: new DraftRepository(db),
     orderRepository,
@@ -348,6 +836,7 @@ async function createHarness(overrides?: {
     interaction,
     draftStore,
     orderRepository,
+    sessionRepository,
     ttsStream,
     memoryStore,
     sessionManager,

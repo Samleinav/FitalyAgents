@@ -16,9 +16,11 @@ const UI_BRIDGE_CHANNELS = [
   'bus:RESPONSE_START',
   'bus:AVATAR_SPEAK',
   'bus:RESPONSE_END',
+  'bus:TOOL_RESULT',
   'bus:ORDER_QUEUED_NO_APPROVER',
   'bus:APPROVAL_RESOLVED',
   'bus:ORDER_APPROVAL_TIMEOUT',
+  'bus:SESSION_ENDED',
 ] as const
 
 interface UIEventClient {

@@ -31,6 +31,14 @@ declare function clearInterval(id: number): void
  */
 export const SPECULATIVE_CONFIDENCE_MIN = 0.9
 export const SPECULATIVE_MARGIN_MIN = 0.15
+
+/**
+ * Stricter thresholds for emitting bus:SPEECH_PROBABLE — used to start LLM inference
+ * speculatively before SPEECH_FINAL arrives, converting the VAD silence window into
+ * useful inference time (THETEN/TEN-framework pattern).
+ */
+export const SPEECH_PROBABLE_CONFIDENCE_MIN = 0.92
+export const SPEECH_PROBABLE_MARGIN_MIN = 0.2
 const PENDING_FALLBACK_TTL_MS = 60_000
 const MAX_PENDING_FALLBACKS_PER_SESSION = 32
 
@@ -380,6 +388,25 @@ export class NodeDispatcher {
     // Already cached? Skip.
     const existing = this.speculativeCache.get(event.session_id, result.intent_id)
     if (existing) return
+
+    // Signal high-confidence intent so LLM inference can start speculatively
+    if (
+      result.confidence >= SPEECH_PROBABLE_CONFIDENCE_MIN &&
+      margin >= SPEECH_PROBABLE_MARGIN_MIN
+    ) {
+      await this.bus.publish('bus:SPEECH_PROBABLE', {
+        event: 'SPEECH_PROBABLE',
+        session_id: event.session_id,
+        text: event.text,
+        intent_id: result.intent_id,
+        confidence: result.confidence,
+        margin,
+        speaker_id: event.speaker_id,
+        role: event.role,
+        store_id: event.store_id,
+        timestamp: Date.now(),
+      })
+    }
 
     // Resolve tool safety level
     const toolMeta = this.intentToolResolver?.(result.intent_id)

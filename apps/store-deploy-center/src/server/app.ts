@@ -11,6 +11,18 @@ export function buildDeployCenterServer(deps: {
 }): FastifyInstance {
   const server = Fastify({ logger: false })
 
+  server.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    if (!body) {
+      done(null, {})
+      return
+    }
+    try {
+      done(null, JSON.parse(body as string))
+    } catch (e) {
+      done(e as Error)
+    }
+  })
+
   server.get('/', async (_request, reply) => {
     return reply.type('text/html; charset=utf-8').send(
       renderDeployCenterHtml({

@@ -167,4 +167,224 @@ describe('ui-dashboard-state', () => {
     expect(state.approvals.pending).toHaveLength(0)
     expect(state.approvals.timeoutCount).toBe(1)
   })
+
+  it('stores the latest speech final timestamp in session stats', () => {
+    const state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:SPEECH_FINAL',
+      {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-latency',
+        speaker_id: 'speaker-a',
+        text: 'Quiero pagar con tarjeta.',
+        timestamp: 100,
+      },
+    )
+
+    expect(state.sessionStats).toMatchObject({
+      activeSessionId: null,
+      lastSpeechFinalAt: 100,
+      lastResponseStartAt: null,
+      lastLatencyMs: null,
+    })
+  })
+
+  it('calculates speech-to-response latency when response starts after speech final', () => {
+    let state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:SPEECH_FINAL',
+      {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-latency',
+        speaker_id: 'speaker-a',
+        text: 'Quiero pagar con tarjeta.',
+        timestamp: 200,
+      },
+    )
+
+    state = applyDashboardBusEvent(state, 'bus:RESPONSE_START', {
+      event: 'RESPONSE_START',
+      session_id: 'session-latency',
+      speaker_id: 'speaker-a',
+      turn_id: 'turn-latency',
+      timestamp: 775,
+    })
+
+    expect(state.sessionStats).toMatchObject({
+      activeSessionId: 'session-latency',
+      lastSpeechFinalAt: 200,
+      lastResponseStartAt: 775,
+      lastLatencyMs: 575,
+    })
+  })
+
+  it('resets session stats when the session ends', () => {
+    let state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:SPEECH_FINAL',
+      {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-latency',
+        speaker_id: 'speaker-a',
+        text: 'Hasta luego.',
+        timestamp: 300,
+      },
+    )
+    state = applyDashboardBusEvent(state, 'bus:RESPONSE_START', {
+      event: 'RESPONSE_START',
+      session_id: 'session-latency',
+      speaker_id: 'speaker-a',
+      turn_id: 'turn-latency',
+      timestamp: 450,
+    })
+
+    state = applyDashboardBusEvent(state, 'bus:SESSION_ENDED', {
+      event: 'SESSION_ENDED',
+      session_id: 'session-latency',
+      timestamp: 500,
+    })
+
+    expect(state.sessionStats).toEqual({
+      activeSessionId: null,
+      lastSpeechFinalAt: null,
+      lastResponseStartAt: null,
+      lastLatencyMs: null,
+    })
+  })
+
+  it('keeps latency null when response starts without a previous speech final', () => {
+    const state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:RESPONSE_START',
+      {
+        event: 'RESPONSE_START',
+        session_id: 'session-no-speech',
+        speaker_id: 'speaker-a',
+        turn_id: 'turn-no-speech',
+        timestamp: 600,
+      },
+    )
+
+    expect(state.sessionStats).toMatchObject({
+      activeSessionId: 'session-no-speech',
+      lastSpeechFinalAt: null,
+      lastResponseStartAt: 600,
+      lastLatencyMs: null,
+    })
+  })
+
+  it('tracks cash payment tool results as staff cash collection actions', () => {
+    const state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:TOOL_RESULT',
+      {
+        event: 'TOOL_RESULT',
+        tool_name: 'payment_intent_create',
+        session_id: 'session-pay',
+        result: {
+          order_id: 'ord-1',
+          amount: 89900,
+          payment_method: 'cash',
+        },
+        timestamp: 30,
+      },
+    )
+
+    expect(state.staffAction).toMatchObject({
+      type: 'collect_cash',
+      sessionId: 'session-pay',
+      orderId: 'ord-1',
+      amount: 89900,
+      paymentMethod: 'cash',
+      triggeredAt: 30,
+    })
+    expect(state.staffAction?.message).toBe(
+      `Recibe el efectivo del cliente: ${formatCurrency(89900)}`,
+    )
+  })
+
+  it('tracks card payment tool results as staff terminal actions', () => {
+    const state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:TOOL_RESULT',
+      {
+        event: 'TOOL_RESULT',
+        tool_name: 'payment_intent_create',
+        session_id: 'session-pay',
+        result: {
+          order_id: 'ord-2',
+          amount: 49900,
+          payment_method: 'card',
+        },
+        timestamp: 31,
+      },
+    )
+
+    expect(state.staffAction).toMatchObject({
+      type: 'card_terminal',
+      sessionId: 'session-pay',
+      orderId: 'ord-2',
+      amount: 49900,
+      paymentMethod: 'card',
+      triggeredAt: 31,
+    })
+    expect(state.staffAction?.message).toBe(
+      `El datafono está esperando la tarjeta: ${formatCurrency(49900)}`,
+    )
+  })
+
+  it('clears staff actions after receipt print tool results', () => {
+    let state = applyDashboardBusEvent(createStoreDashboardState('store-test'), 'bus:TOOL_RESULT', {
+      event: 'TOOL_RESULT',
+      tool_name: 'payment_intent_create',
+      session_id: 'session-pay',
+      result: {
+        order_id: 'ord-3',
+        amount: 12900,
+        payment_method: 'cash',
+      },
+      timestamp: 32,
+    })
+
+    state = applyDashboardBusEvent(state, 'bus:TOOL_RESULT', {
+      event: 'TOOL_RESULT',
+      tool_name: 'receipt_print',
+      session_id: 'session-pay',
+      result: {
+        order_id: 'ord-3',
+      },
+      timestamp: 33,
+    })
+
+    expect(state.staffAction).toBeNull()
+  })
+
+  it('clears staff actions when the session ends', () => {
+    let state = applyDashboardBusEvent(createStoreDashboardState('store-test'), 'bus:TOOL_RESULT', {
+      event: 'TOOL_RESULT',
+      tool_name: 'payment_intent_create',
+      session_id: 'session-pay',
+      result: {
+        order_id: 'ord-4',
+        amount: 32900,
+        payment_method: 'card',
+      },
+      timestamp: 34,
+    })
+
+    state = applyDashboardBusEvent(state, 'bus:SESSION_ENDED', {
+      event: 'SESSION_ENDED',
+      session_id: 'session-pay',
+      timestamp: 35,
+    })
+
+    expect(state.staffAction).toBeNull()
+  })
 })
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('es', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
+}

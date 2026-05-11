@@ -113,6 +113,17 @@ describe('ui-bridge', () => {
         channel_used: 'webhook',
         timestamp: 8,
       })
+      await bus.publish('bus:TOOL_RESULT', {
+        event: 'TOOL_RESULT',
+        tool_name: 'payment_intent_create',
+        session_id: 'session-a',
+        result: {
+          order_id: 'ord-1',
+          amount: 49900,
+          payment_method: 'card',
+        },
+        timestamp: 9,
+      })
 
       expect(service.hub.getLastUpdate()).toEqual({
         event: 'UI_UPDATE',
@@ -126,6 +137,13 @@ describe('ui-bridge', () => {
         requestId: 'approval-1',
         approved: true,
         approverId: 'mgr-1',
+      })
+      expect(service.hub.getLastState()?.staffAction).toMatchObject({
+        type: 'card_terminal',
+        sessionId: 'session-a',
+        orderId: 'ord-1',
+        amount: 49900,
+        paymentMethod: 'card',
       })
       expect(service.stateStore.getState().transcript.turns[0]).toMatchObject({
         sessionId: 'session-a',
@@ -173,6 +191,10 @@ describe('ui-bridge', () => {
       expect(pageResponse.headers['content-type']).toContain('text/html')
       expect(pageResponse.body).toContain('Store Runtime Console')
       expect(pageResponse.body).toContain('Aprobaciones')
+      expect(pageResponse.body).toContain('Acción requerida')
+      expect(pageResponse.body).toContain('Sin sesión activa')
+      expect(pageResponse.body).toContain('Exportar replay')
+      expect(pageResponse.body).toContain('window.__dashboardState')
     } finally {
       await service.shutdown()
       await cleanupTempDir(dir)
