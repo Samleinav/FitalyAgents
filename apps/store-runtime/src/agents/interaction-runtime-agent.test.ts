@@ -398,6 +398,8 @@ describe('InteractionRuntimeAgent', () => {
         expect.stringContaining('Puedes pagar con tarjeta o efectivo'),
         7,
       )
+      expect(harness.interaction.handleToolCall).not.toHaveBeenCalled()
+      expect(harness.interaction.handleProtectedConfirm).not.toHaveBeenCalled()
       expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
     } finally {
       await harness.agent.stop()
@@ -405,8 +407,14 @@ describe('InteractionRuntimeAgent', () => {
     }
   })
 
-  it('prepares a protected payment intent when the customer chooses card', async () => {
+  it('auto-confirms a protected card payment when the customer chooses card', async () => {
     const harness = await createHarness()
+    harness.interaction.handleToolCall.mockResolvedValueOnce({
+      type: 'draft_ready',
+      toolId: 'payment_intent_create',
+      draftId: 'draft-payment-card',
+      needs_confirmation: true,
+    })
     harness.orderRepository.insert({
       id: 'ord-2',
       session_id: 'session-1',
@@ -449,6 +457,64 @@ describe('InteractionRuntimeAgent', () => {
         'customer-1',
         'customer',
       )
+      expect(harness.interaction.handleProtectedConfirm).toHaveBeenCalledWith('session-1', 'si')
+      expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
+    } finally {
+      await harness.agent.stop()
+      await cleanupHarness(harness)
+    }
+  })
+
+  it('auto-confirms a protected cash payment when the customer chooses cash', async () => {
+    const harness = await createHarness()
+    harness.interaction.handleToolCall.mockResolvedValueOnce({
+      type: 'needs_confirmation',
+      toolId: 'payment_intent_create',
+      prompt: 'Tengo listo el cobro. Preparo el pago?',
+    })
+    harness.orderRepository.insert({
+      id: 'ord-cash-1',
+      session_id: 'session-1',
+      draft_id: null,
+      tool_id: 'order_create',
+      params: {
+        items: [{ product_id: 'sku-cash', quantity: 1, price: 15 }],
+      },
+      result: {
+        order_id: 'ord-cash-1',
+        total: 15,
+        order_state: 'open',
+      },
+      status: 'completed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    })
+
+    try {
+      await harness.agent.start()
+
+      await harness.bus.publish('bus:SPEECH_FINAL', {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-1',
+        text: 'quiero pagar en efectivo',
+        speaker_id: 'customer-1',
+        role: 'customer',
+        store_id: 'store-test',
+        timestamp: Date.now(),
+      })
+
+      expect(harness.interaction.handleToolCall).toHaveBeenCalledWith(
+        'payment_intent_create',
+        {
+          order_id: 'ord-cash-1',
+          amount: 15,
+          payment_method: 'cash',
+        },
+        'session-1',
+        'customer-1',
+        'customer',
+      )
+      expect(harness.interaction.handleProtectedConfirm).toHaveBeenCalledWith('session-1', 'si')
       expect(harness.interaction.handleSpeechFinal).not.toHaveBeenCalled()
     } finally {
       await harness.agent.stop()

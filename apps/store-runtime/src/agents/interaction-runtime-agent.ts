@@ -557,6 +557,13 @@ export class InteractionRuntimeAgent extends StreamAgent {
       ),
     )
 
+    if (result.type === 'draft_ready' || result.type === 'needs_confirmation') {
+      await this.deps.toolRegistry.runWithContext(executionContext, async () => {
+        await this.deps.interaction.handleProtectedConfirm(event.session_id, 'si')
+      })
+      return true
+    }
+
     await this.handleToolResults(event.session_id, [result])
     return true
   }
