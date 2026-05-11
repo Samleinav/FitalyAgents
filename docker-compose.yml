@@ -104,7 +104,7 @@ services:
       # VAD
       VAD_THRESHOLD: "0.5"
       VAD_MIN_SPEECH_MS: "300"
-      VAD_MAX_SILENCE_MS: "500"
+      VAD_MAX_SILENCE_MS: "200"
 
       # AOSC speaker cache (mounted below)
       AOSC_CACHE_PATH: /data/aosc_cache.npz

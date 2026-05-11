@@ -22,7 +22,10 @@ import {
   WebhookRepository,
 } from '../storage/repositories/index.js'
 import { ToolRegistry } from '../tools/registry.js'
+import { NodeDispatcher } from '@fitalyagents/dispatcher'
 import { buildAgents } from '../agents/build-agents.js'
+import { RetailKeywordClassifier } from '../agents/keyword-classifier.js'
+import { NoopFallbackAgent } from '../agents/noop-fallback-agent.js'
 import { buildApprovalChannels } from './build-approval-channels.js'
 import { buildMemoryScopeResolver } from './build-scope-resolver.js'
 import { PersistentApprovalOrchestrator } from './persistent-approval-orchestrator.js'
@@ -150,6 +153,15 @@ export async function bootstrap(configPath: string): Promise<() => Promise<void>
 
   await bundle.start()
 
+  const dispatcher = new NodeDispatcher({
+    bus,
+    classifier: new RetailKeywordClassifier(),
+    fallbackAgent: new NoopFallbackAgent(),
+    memoryStore,
+    memoryScopeResolver,
+  })
+  await dispatcher.start()
+
   const httpServer = await startHttpServer({
     config,
     bus,
@@ -174,6 +186,7 @@ export async function bootstrap(configPath: string): Promise<() => Promise<void>
     httpClose: () => httpServer.close(),
     sttClose: () => sttBridge.close(),
     servicesDispose: [
+      () => dispatcher.dispose(),
       () => draftStore.dispose(),
       () => ttsStream.dispose(),
       () => stt?.dispose(),

@@ -237,9 +237,19 @@ class FitalyVoicePipeline:
         # Start streaming STT if configured
         if self._stt is not None and self._stt_is_streaming:
             # Wire Deepgram callbacks to bus adapter
-            self._stt.on_partial(
-                lambda text, conf: None  # partials logged but not published
-            )
+            _bus, _sid = self._bus, session_id
+
+            def _on_partial(text: str, confidence: float) -> None:
+                import asyncio as _aio
+                try:
+                    loop = _aio.get_running_loop()
+                    loop.create_task(
+                        _bus.publish_speech_partial(_sid, text, speaker_id=None, confidence=confidence)
+                    )
+                except RuntimeError:
+                    pass
+
+            self._stt.on_partial(_on_partial)
             bus = self._bus
             sid = session_id
 

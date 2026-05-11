@@ -33,6 +33,7 @@ const STAFF_ROLES = new Set<HumanRole>([
 export class InteractionRuntimeAgent extends StreamAgent {
   private currentPrimarySpeakerId: string | null = null
   private lastProductList = new Map<string, CustomerDisplaySuggestion[]>()
+  private speculativeSessions = new Map<string, { text: string }>()
 
   constructor(
     private readonly deps: {
@@ -58,7 +59,14 @@ export class InteractionRuntimeAgent extends StreamAgent {
   }
 
   protected get channels(): string[] {
-    return ['bus:SPEECH_FINAL', 'bus:BARGE_IN', 'bus:TARGET_GROUP_CHANGED', 'bus:TOOL_RESULT']
+    return [
+      'bus:SPEECH_FINAL',
+      'bus:SPEECH_PARTIAL',
+      'bus:SPEECH_PROBABLE',
+      'bus:BARGE_IN',
+      'bus:TARGET_GROUP_CHANGED',
+      'bus:TOOL_RESULT',
+    ]
   }
 
   async onEvent(channel: string, payload: unknown): Promise<void> {
@@ -67,10 +75,45 @@ export class InteractionRuntimeAgent extends StreamAgent {
       return
     }
 
+    if (channel === 'bus:SPEECH_PARTIAL') {
+      const ev = payload as { session_id?: string; speaker_id?: string }
+      if (ev.session_id) {
+        const sid = resolveIngressSessionId({
+          storeId: this.deps.storeId,
+          captureDriver: this.deps.captureDriver,
+          incomingSessionId: ev.session_id,
+          speakerId: ev.speaker_id,
+        })
+        if (sid) void this.ensureSession(sid, ev.speaker_id)
+      }
+      return
+    }
+
+    if (channel === 'bus:SPEECH_PROBABLE') {
+      const ev = payload as {
+        session_id?: string
+        text?: string
+        speaker_id?: string
+        role?: HumanRole | null
+        store_id?: string
+      }
+      if (ev.session_id && ev.text && !(ev.role && STAFF_ROLES.has(ev.role))) {
+        void this.startSpeculativeLLM({
+          session_id: ev.session_id,
+          text: ev.text,
+          speaker_id: ev.speaker_id,
+          role: ev.role,
+          store_id: ev.store_id,
+        })
+      }
+      return
+    }
+
     if (channel === 'bus:BARGE_IN') {
       const event = payload as { session_id?: string }
       if (event.session_id) {
         this.deps.llm.abortSession(event.session_id)
+        this.speculativeSessions.delete(event.session_id)
       }
       return
     }
@@ -193,6 +236,16 @@ export class InteractionRuntimeAgent extends StreamAgent {
       return
     }
 
+    // If speculative LLM was started with same text it's already running — skip duplicate
+    const speculative = this.speculativeSessions.get(speechEvent.session_id)
+    if (speculative && speculative.text === speechEvent.text) {
+      return
+    }
+    if (speculative) {
+      this.deps.llm.abortSession(speechEvent.session_id)
+      this.speculativeSessions.delete(speechEvent.session_id)
+    }
+
     try {
       const result = await this.deps.llm.runWithSession(speechEvent.session_id, () =>
         this.deps.toolRegistry.runWithContext(executionContext, () =>
@@ -212,6 +265,61 @@ export class InteractionRuntimeAgent extends StreamAgent {
       }
 
       throw error
+    }
+  }
+
+  private async startSpeculativeLLM(event: {
+    session_id: string
+    text: string
+    speaker_id?: string
+    role?: HumanRole | null
+    store_id?: string
+  }): Promise<void> {
+    const sid = resolveIngressSessionId({
+      storeId: this.deps.storeId,
+      captureDriver: this.deps.captureDriver,
+      incomingSessionId: event.session_id,
+      speakerId: event.speaker_id,
+    })
+    if (!sid) return
+
+    // Cancel any previous speculative inference for this session
+    this.deps.llm.abortSession(sid)
+    this.speculativeSessions.delete(sid)
+
+    await this.ensureSession(sid, event.speaker_id)
+    await this.deps.contextStore.patch(sid, {
+      store_id: event.store_id ?? this.deps.storeId,
+      speaker_id: event.speaker_id ?? 'unknown',
+      speaker_role: event.role ?? 'customer',
+      last_user_timestamp: Date.now(),
+    })
+
+    this.speculativeSessions.set(sid, { text: event.text })
+
+    const executionContext = {
+      session_id: sid,
+      store_id: event.store_id ?? this.deps.storeId,
+      speaker_id: event.speaker_id,
+      role: event.role ?? 'customer',
+    }
+
+    try {
+      const result = await this.deps.llm.runWithSession(sid, () =>
+        this.deps.toolRegistry.runWithContext(executionContext, () =>
+          this.deps.interaction.handleSpeechFinal({
+            session_id: sid,
+            text: event.text,
+            speaker_id: event.speaker_id,
+            role: event.role ?? 'customer',
+          }),
+        ),
+      )
+      await this.handleToolResults(sid, result.toolResults)
+    } catch {
+      // Aborted by SPEECH_FINAL text mismatch or BARGE_IN — expected
+    } finally {
+      this.speculativeSessions.delete(sid)
     }
   }
 
