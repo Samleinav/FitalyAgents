@@ -84,6 +84,16 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         text-transform: uppercase;
       }
 
+      .session-eyebrow {
+        flex-wrap: wrap;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .latency-value.good { color: var(--ok); }
+      .latency-value.warn { color: var(--warn); }
+      .latency-value.danger { color: var(--danger); }
+
       .pulse {
         width: 10px;
         height: 10px;
@@ -399,6 +409,23 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         line-height: 1.5;
       }
 
+      .export-button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 12px 14px;
+        border: 1px solid rgba(23, 50, 74, 0.14);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--ink);
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .export-button:hover {
+        background: var(--panel-strong);
+      }
+
       @media (max-width: 1100px) {
         .layout {
           grid-template-columns: 1fr;
@@ -438,6 +465,11 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
             <span id="connection-label">Conectando a /events…</span>
           </div>
           <div class="eyebrow mono">Store: <span id="store-id">${escapeHtml(deps.storeId)}</span></div>
+          <div class="eyebrow mono session-eyebrow">
+            <span id="session-id-label">Sin sesión activa</span>
+            <span id="session-latency-label"></span>
+            <span id="session-status-label"></span>
+          </div>
         </div>
         <div>
           <h1>Store Runtime Console</h1>
@@ -526,6 +558,7 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
             <h2>Timeline</h2>
             <p class="panel-subtitle">Últimos eventos relevantes procesados por la UI externa.</p>
             <div id="event-list" class="event-list"></div>
+            <button type="button" class="export-button" onclick="exportReplay()">Exportar replay</button>
           </article>
         </div>
       </section>
@@ -541,6 +574,9 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         connectionDot: document.getElementById('connection-dot'),
         connectionLabel: document.getElementById('connection-label'),
         storeId: document.getElementById('store-id'),
+        sessionIdLabel: document.getElementById('session-id-label'),
+        sessionLatencyLabel: document.getElementById('session-latency-label'),
+        sessionStatusLabel: document.getElementById('session-status-label'),
         statPrimary: document.getElementById('stat-primary'),
         statQueued: document.getElementById('stat-queued'),
         statTurns: document.getElementById('stat-turns'),
@@ -570,6 +606,7 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
           throw new Error('state request failed');
         }
         app.state = await response.json();
+        window.__dashboardState = app.state;
         render();
         connect();
       }
@@ -589,6 +626,7 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
 
         source.addEventListener('dashboard_state', (event) => {
           app.state = JSON.parse(event.data);
+          window.__dashboardState = app.state;
           render();
         });
       }
@@ -596,6 +634,7 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
       function render() {
         renderConnection();
         renderStats();
+        renderSessionStats();
         renderQueue();
         renderStaffAction();
         renderApprovals();
@@ -623,6 +662,25 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
         elements.statTurns.textContent = String(state.transcript.turns.length);
         elements.statApprovals.textContent = String(state.approvals.pending.length);
         elements.statUpdated.textContent = state.updatedAt ? formatTime(state.updatedAt) : '-';
+      }
+
+      function renderSessionStats() {
+        const stats = app.state?.sessionStats;
+        if (!stats || !stats.activeSessionId) {
+          elements.sessionIdLabel.textContent = 'Sin sesión activa';
+          elements.sessionLatencyLabel.textContent = '';
+          elements.sessionLatencyLabel.className = '';
+          elements.sessionStatusLabel.textContent = '';
+          return;
+        }
+
+        const latency = stats.lastLatencyMs;
+        const latencyClass = latencyClassFor(latency);
+        elements.sessionIdLabel.textContent = 'Sesión: ' + shortSessionId(stats.activeSessionId);
+        elements.sessionLatencyLabel.textContent =
+          'Latencia: ' + (latency == null ? 'sin dato' : latency + 'ms');
+        elements.sessionLatencyLabel.className = latencyClass ? 'latency-value ' + latencyClass : '';
+        elements.sessionStatusLabel.textContent = latency == null ? 'esperando respuesta' : labelLatency(latency);
       }
 
       function renderQueue() {
@@ -815,6 +873,32 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
           .join('');
       }
 
+      function exportReplay() {
+        const state = window.__dashboardState;
+        if (!state) {
+          return;
+        }
+
+        const replay = {
+          exportedAt: new Date().toISOString(),
+          storeId: state.storeId,
+          sessionStats: state.sessionStats,
+          recentEvents: state.recentEvents,
+          transcript: state.transcript.turns,
+        };
+        const blob = new Blob([JSON.stringify(replay, null, 2)], {
+          type: 'application/json',
+        });
+        const activeSessionId = state.sessionStats?.activeSessionId ?? 'unknown';
+        const safeSessionId = String(activeSessionId).replace(/[^a-z0-9_-]/gi, '-');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = \`replay-\${safeSessionId}-\${Date.now()}.json\`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
       function renderChipList(values, fallback) {
         if (!Array.isArray(values) || values.length === 0) {
           return emptyState(fallback);
@@ -873,6 +957,34 @@ export function renderUiDashboardHtml(deps: { storeId: string }): string {
           default:
             return String(method);
         }
+      }
+
+      function shortSessionId(sessionId) {
+        const normalized = String(sessionId);
+        return '#' + normalized.slice(-8);
+      }
+
+      function latencyClassFor(latency) {
+        if (latency == null) {
+          return '';
+        }
+        if (latency < 600) {
+          return 'good';
+        }
+        if (latency <= 1200) {
+          return 'warn';
+        }
+        return 'danger';
+      }
+
+      function labelLatency(latency) {
+        if (latency < 600) {
+          return 'rápida';
+        }
+        if (latency <= 1200) {
+          return 'normal';
+        }
+        return 'lenta';
       }
 
       function formatTime(timestamp) {

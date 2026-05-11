@@ -70,6 +70,13 @@ export interface DashboardStaffAction {
   triggeredAt: number
 }
 
+export interface DashboardSessionStats {
+  activeSessionId: string | null
+  lastSpeechFinalAt: number | null
+  lastResponseStartAt: number | null
+  lastLatencyMs: number | null
+}
+
 export interface StoreDashboardState {
   storeId: string
   updatedAt: number | null
@@ -84,6 +91,7 @@ export interface StoreDashboardState {
     activeTurnId: string | null
     turns: DashboardTranscriptTurn[]
   }
+  sessionStats: DashboardSessionStats
   staffAction: DashboardStaffAction | null
   components: Record<string, DashboardComponentState>
   recentEvents: DashboardEventLogEntry[]
@@ -129,6 +137,7 @@ export function createStoreDashboardState(storeId: string): StoreDashboardState 
       activeTurnId: null,
       turns: [],
     },
+    sessionStats: createEmptySessionStats(),
     staffAction: null,
     components: {},
     recentEvents: [],
@@ -195,6 +204,7 @@ export function applyDashboardBusEvent(
 
     case 'bus:SESSION_ENDED':
       next.staffAction = null
+      next.sessionStats = createEmptySessionStats()
       break
 
     default:
@@ -234,6 +244,7 @@ function applySpeechFinal(
   })
   trimTranscript(state)
   state.transcript.activeSessionId = sessionId
+  state.sessionStats.lastSpeechFinalAt = timestamp
 }
 
 function applyResponseStart(
@@ -249,6 +260,12 @@ function applyResponseStart(
   turn.updatedAt = timestamp
   state.transcript.activeSessionId = sessionId
   state.transcript.activeTurnId = turnId
+  state.sessionStats.activeSessionId = sessionId
+  state.sessionStats.lastResponseStartAt = timestamp
+  state.sessionStats.lastLatencyMs =
+    state.sessionStats.lastSpeechFinalAt == null
+      ? null
+      : timestamp - state.sessionStats.lastSpeechFinalAt
 }
 
 function applyAvatarSpeak(
@@ -654,6 +671,7 @@ function cloneState(state: StoreDashboardState): StoreDashboardState {
       activeTurnId: state.transcript.activeTurnId,
       turns: state.transcript.turns.map((turn) => ({ ...turn })),
     },
+    sessionStats: { ...state.sessionStats },
     staffAction: state.staffAction ? { ...state.staffAction } : null,
     components: Object.fromEntries(
       Object.entries(state.components).map(([key, value]) => [key, { ...value }]),
@@ -664,6 +682,15 @@ function cloneState(state: StoreDashboardState): StoreDashboardState {
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+}
+
+function createEmptySessionStats(): DashboardSessionStats {
+  return {
+    activeSessionId: null,
+    lastSpeechFinalAt: null,
+    lastResponseStartAt: null,
+    lastLatencyMs: null,
+  }
 }
 
 function readTimestamp(event: Record<string, unknown>): number {

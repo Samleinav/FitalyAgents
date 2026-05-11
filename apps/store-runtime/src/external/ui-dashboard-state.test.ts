@@ -168,6 +168,111 @@ describe('ui-dashboard-state', () => {
     expect(state.approvals.timeoutCount).toBe(1)
   })
 
+  it('stores the latest speech final timestamp in session stats', () => {
+    const state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:SPEECH_FINAL',
+      {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-latency',
+        speaker_id: 'speaker-a',
+        text: 'Quiero pagar con tarjeta.',
+        timestamp: 100,
+      },
+    )
+
+    expect(state.sessionStats).toMatchObject({
+      activeSessionId: null,
+      lastSpeechFinalAt: 100,
+      lastResponseStartAt: null,
+      lastLatencyMs: null,
+    })
+  })
+
+  it('calculates speech-to-response latency when response starts after speech final', () => {
+    let state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:SPEECH_FINAL',
+      {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-latency',
+        speaker_id: 'speaker-a',
+        text: 'Quiero pagar con tarjeta.',
+        timestamp: 200,
+      },
+    )
+
+    state = applyDashboardBusEvent(state, 'bus:RESPONSE_START', {
+      event: 'RESPONSE_START',
+      session_id: 'session-latency',
+      speaker_id: 'speaker-a',
+      turn_id: 'turn-latency',
+      timestamp: 775,
+    })
+
+    expect(state.sessionStats).toMatchObject({
+      activeSessionId: 'session-latency',
+      lastSpeechFinalAt: 200,
+      lastResponseStartAt: 775,
+      lastLatencyMs: 575,
+    })
+  })
+
+  it('resets session stats when the session ends', () => {
+    let state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:SPEECH_FINAL',
+      {
+        event: 'SPEECH_FINAL',
+        session_id: 'session-latency',
+        speaker_id: 'speaker-a',
+        text: 'Hasta luego.',
+        timestamp: 300,
+      },
+    )
+    state = applyDashboardBusEvent(state, 'bus:RESPONSE_START', {
+      event: 'RESPONSE_START',
+      session_id: 'session-latency',
+      speaker_id: 'speaker-a',
+      turn_id: 'turn-latency',
+      timestamp: 450,
+    })
+
+    state = applyDashboardBusEvent(state, 'bus:SESSION_ENDED', {
+      event: 'SESSION_ENDED',
+      session_id: 'session-latency',
+      timestamp: 500,
+    })
+
+    expect(state.sessionStats).toEqual({
+      activeSessionId: null,
+      lastSpeechFinalAt: null,
+      lastResponseStartAt: null,
+      lastLatencyMs: null,
+    })
+  })
+
+  it('keeps latency null when response starts without a previous speech final', () => {
+    const state = applyDashboardBusEvent(
+      createStoreDashboardState('store-test'),
+      'bus:RESPONSE_START',
+      {
+        event: 'RESPONSE_START',
+        session_id: 'session-no-speech',
+        speaker_id: 'speaker-a',
+        turn_id: 'turn-no-speech',
+        timestamp: 600,
+      },
+    )
+
+    expect(state.sessionStats).toMatchObject({
+      activeSessionId: 'session-no-speech',
+      lastSpeechFinalAt: null,
+      lastResponseStartAt: 600,
+      lastLatencyMs: null,
+    })
+  })
+
   it('tracks cash payment tool results as staff cash collection actions', () => {
     const state = applyDashboardBusEvent(
       createStoreDashboardState('store-test'),

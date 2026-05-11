@@ -192,6 +192,9 @@ describe('ui-bridge', () => {
       expect(pageResponse.body).toContain('Store Runtime Console')
       expect(pageResponse.body).toContain('Aprobaciones')
       expect(pageResponse.body).toContain('Acción requerida')
+      expect(pageResponse.body).toContain('Sin sesión activa')
+      expect(pageResponse.body).toContain('Exportar replay')
+      expect(pageResponse.body).toContain('window.__dashboardState')
     } finally {
       await service.shutdown()
       await cleanupTempDir(dir)
